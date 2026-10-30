@@ -50,6 +50,23 @@
 - 引擎增量重链（V8 全量首编，`build/engine-build.log`，约 583/1232）。
 - DeepSeek/OpenCode Console 接入探针（子任务），产出 base_url / model / 计费字段。
 
+## 3.1 阈值标定（24 seeds × 16 关 = 384 局，手写策略）
+
+按「胜局回合 P70」重标 `win_within_rounds`（明细 `reports/calibration/thresholds.json`）：
+
+| 关卡 | 旧 | 新 | 关卡 | 旧 | 新 |
+|---|---|---|---|---|---|
+| blanche | 5 | **9** | liusu | 5 | 6 |
+| chefmao | 5 | 7 | shitou | **44** | 6 |
+| ellin | 5 | 7 | timaeus | 5 | 6 |
+| irontonguetian | 5 | 6 | wagner | 5 | **2** |
+| jifang | 5 | 3 | marjorie | 5 | 6 |
+| lan | 6 | 5 | **swan** | （无） | **+5** |
+
+标定后手写策略总三星率 0.487（标定前 0.4375）。
+仍为 0% 的 3 关（`wagner`/`timaeus`/`uncletian`）失分点不是回合数，而是
+`play_equipment_card` / `play_event_cards` —— 这正是技能库要补的**策略**缺口（不是阈值问题）。
+
 ## 4. LLM 接入（2026-10-30 实测）
 
 | 项 | 值 |

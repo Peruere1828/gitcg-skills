@@ -123,6 +123,12 @@
           "type": "win",
           "text": "赢得胜利",
           "verified": true
+        },
+        {
+          "type": "win_within_rounds",
+          "n": 5,
+          "text": "5回合内胜利",
+          "verified": true
         }
       ],
       "strategy": "self-generated（greedy + rotation）；不使用逐关实测序列",
@@ -183,8 +189,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 2,
+          "text": "2回合内胜利",
           "verified": true
         }
       ],
@@ -237,8 +243,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 6,
+          "text": "6回合内胜利",
           "verified": true
         },
         {
@@ -294,8 +300,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 9,
+          "text": "9回合内胜利",
           "verified": true
         },
         {
@@ -363,8 +369,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 6,
+          "text": "6回合内胜利",
           "verified": true
         }
       ],
@@ -482,8 +488,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 7,
+          "text": "7回合内胜利",
           "verified": true
         },
         {
@@ -567,8 +573,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 3,
+          "text": "3回合内胜利",
           "verified": true
         },
         {
@@ -679,8 +685,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 6,
+          "text": "6回合内胜利",
           "verified": true
         },
         {
@@ -739,8 +745,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 44,
-          "text": "44回合内胜利",
+          "n": 6,
+          "text": "6回合内胜利",
           "verified": false,
           "unverified_reason": "eurogamer 原文为 'within 44 Rounds'，疑为笔误（4/14?），待游戏内核实"
         },
@@ -793,8 +799,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 6,
+          "text": "6回合内胜利",
           "verified": true
         },
         {
@@ -848,8 +854,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 5,
-          "text": "5回合内胜利",
+          "n": 7,
+          "text": "7回合内胜利",
           "verified": true
         },
         {
@@ -967,8 +973,8 @@
         },
         {
           "type": "win_within_rounds",
-          "n": 6,
-          "text": "6回合内胜利",
+          "n": 5,
+          "text": "5回合内胜利",
           "verified": true
         },
         {

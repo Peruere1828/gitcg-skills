@@ -1,0 +1,214 @@
+{
+  "rows": "data/runs/calib_contestant.jsonl",
+  "quantile": 0.7,
+  "stages": {
+    "blanche": {
+      "n": 24,
+      "wins": 14,
+      "three_star_rate": 0.125,
+      "mean_rounds": 9.46,
+      "win_round_p": {
+        "p50": 8.0,
+        "p70": 9.0,
+        "p80": 9.4
+      },
+      "current_limit": 5,
+      "proposed_limit": 9
+    },
+    "buyun": {
+      "n": 24,
+      "wins": 23,
+      "three_star_rate": 0.708,
+      "mean_rounds": 4.62,
+      "win_round_p": {
+        "p50": 4.0,
+        "p70": 5.0,
+        "p80": 6.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 5
+    },
+    "chefmao": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.167,
+      "mean_rounds": 6.25,
+      "win_round_p": {
+        "p50": 6.0,
+        "p70": 7.0,
+        "p80": 7.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 7
+    },
+    "ellin": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.375,
+      "mean_rounds": 5.83,
+      "win_round_p": {
+        "p50": 6.0,
+        "p70": 7.0,
+        "p80": 7.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 7
+    },
+    "irontonguetian": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.333,
+      "mean_rounds": 5.88,
+      "win_round_p": {
+        "p50": 6.0,
+        "p70": 6.0,
+        "p80": 6.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 6
+    },
+    "jifang": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 1.0,
+      "mean_rounds": 3.12,
+      "win_round_p": {
+        "p50": 3.0,
+        "p70": 3.0,
+        "p80": 3.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 3
+    },
+    "lan": {
+      "n": 24,
+      "wins": 23,
+      "three_star_rate": 0.875,
+      "mean_rounds": 5.25,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 5.0,
+        "p80": 5.0
+      },
+      "current_limit": 6,
+      "proposed_limit": 5
+    },
+    "liusu": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.292,
+      "mean_rounds": 5.92,
+      "win_round_p": {
+        "p50": 6.0,
+        "p70": 6.0,
+        "p80": 6.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 6
+    },
+    "marjorie": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.583,
+      "mean_rounds": 5.08,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 6.0,
+        "p80": 6.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 6
+    },
+    "patton": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.833,
+      "mean_rounds": 4.96,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 5.0,
+        "p80": 5.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 5
+    },
+    "shitou": {
+      "n": 24,
+      "wins": 22,
+      "three_star_rate": 0.667,
+      "mean_rounds": 5.79,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 6.0,
+        "p80": 6.0
+      },
+      "current_limit": 44,
+      "proposed_limit": 6
+    },
+    "swan": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 1.0,
+      "mean_rounds": 4.58,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 5.0,
+        "p80": 5.0
+      },
+      "current_limit": null,
+      "proposed_limit": 5
+    },
+    "timaeus": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.0,
+      "mean_rounds": 5.5,
+      "win_round_p": {
+        "p50": 6.0,
+        "p70": 6.0,
+        "p80": 6.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 6
+    },
+    "timmie": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.833,
+      "mean_rounds": 5.04,
+      "win_round_p": {
+        "p50": 5.0,
+        "p70": 5.0,
+        "p80": 5.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 5
+    },
+    "uncletian": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.0,
+      "mean_rounds": 4.12,
+      "win_round_p": {
+        "p50": 3.5,
+        "p70": 5.0,
+        "p80": 5.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 5
+    },
+    "wagner": {
+      "n": 24,
+      "wins": 24,
+      "three_star_rate": 0.0,
+      "mean_rounds": 2.04,
+      "win_round_p": {
+        "p50": 2.0,
+        "p70": 2.0,
+        "p80": 2.0
+      },
+      "current_limit": 5,
+      "proposed_limit": 2
+    }
+  }
+}

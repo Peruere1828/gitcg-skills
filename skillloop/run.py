@@ -78,6 +78,7 @@ class RunSpec:
             "rotation": self.rotation,
             "engine_lock": _sha1(Path("configs/engine.lock")),
             "hp_table": _sha1(Path("configs/npc/hp_table.json")),
+            "stages": _sha1(Path("configs/npc/npc_stages_mond_liyue.json")),
         }
 
 
@@ -167,6 +168,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     elapsed = time.perf_counter() - started
     stars = evaluate_stage(stage, record)
     decisions = getattr(policy0, "decisions", []) or []
+    usage = getattr(client, "usage", None)
     return {
         "task_index": payload.get("task_index", 0),
         "stage": stage.name,
@@ -188,6 +190,10 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "llm_errors": sum(1 for d in decisions if d.error),
         "llm_seconds": round(sum(d.latency for d in decisions), 2),
         "cited_skills": sorted({sid for d in decisions for sid in d.used}),
+        "prompt_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+        "cached_tokens": int(getattr(usage, "cached_tokens", 0) or 0),
+        "cost_usd": round(float(getattr(usage, "cost_usd", 0.0) or 0.0), 6),
     }
 
 
@@ -280,6 +286,10 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             sum((r.get("stars") or 0) / max(1, r.get("n_objectives") or 1) for r in valid) / len(valid), 4
         ),
         "llm_calls": sum(int(r.get("llm_calls") or 0) for r in valid),
+        "prompt_tokens": sum(int(r.get("prompt_tokens") or 0) for r in valid),
+        "completion_tokens": sum(int(r.get("completion_tokens") or 0) for r in valid),
+        "cached_tokens": sum(int(r.get("cached_tokens") or 0) for r in valid),
+        "cost_usd": round(sum(float(r.get("cost_usd") or 0.0) for r in valid), 6),
         "per_stage": {
             stage: {
                 "n": bucket["n"],
