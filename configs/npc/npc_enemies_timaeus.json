@@ -1,0 +1,51 @@
+{
+  "source": "GameWith TCG card pages (抓取 2026-10-11)；交叉源 HoYoWiki entry/3364、Fandom Stage/Timaeus",
+  "note": "卡面数值与蒂玛乌斯关卡内一致（HP 已实测确认 3/8/8，2026-10-11）",
+  "enemies": [
+    {
+      "slot": 1,
+      "name": "冰箭丘丘人",
+      "en": "Cryo Hilichurl Shooter",
+      "element": "cryo",
+      "hp_card": 3,
+      "energy": 2,
+      "skills": {
+        "A": { "name": "Ice Arrow", "cost": "Cryo1+Unaligned2", "effect": "造成 1 点冰元素伤害" },
+        "E": null,
+        "Q": { "name": "Multishot", "cost": "Cryo3+Energy2", "effect": "造成 4 点冰元素伤害" }
+      },
+      "passive": { "name": "Hide（躲藏）", "effect": "此角色攻击后，切换到下一个角色。" },
+      "gamewith": "https://gamewith.net/genshin-impact/article/show/70654"
+    },
+    {
+      "slot": 2,
+      "name": "冰盾丘丘暴徒",
+      "en": "Ice Shieldwall Mitachurl",
+      "element": "cryo",
+      "hp_card": 8,
+      "energy": 2,
+      "skills": {
+        "A": { "name": "Plata Plama", "cost": "Cryo1+Unaligned2", "effect": "造成 1 点物理伤害" },
+        "E": { "name": "Da Plama", "cost": "Cryo3", "effect": "造成 3 点物理伤害" },
+        "Q": { "name": "Aba Movo", "cost": "Cryo3+Energy2", "effect": "造成 5 点物理伤害" }
+      },
+      "passive": { "name": "Hoarfrost Greatshield（寒霜大盾）", "effect": "战斗开始时附属：受到伤害 -2；提供 2 次冰元素附着（可被元素反应消耗，耗尽后移除）。" },
+      "gamewith": "https://gamewith.net/genshin-impact/article/show/70663"
+    },
+    {
+      "slot": 3,
+      "name": "炽热斧头丘丘暴徒",
+      "en": "Blazing Axe Mitachurl",
+      "element": "pyro",
+      "hp_card": 8,
+      "energy": 2,
+      "skills": {
+        "A": { "name": "Du Plama", "cost": "Pyro1+Unaligned2", "effect": "造成 2 点物理伤害" },
+        "E": { "name": "Upa", "cost": "Pyro3", "effect": "造成 3 点物理伤害" },
+        "Q": { "name": "Oto Tiga", "cost": "Pyro3+Energy2", "effect": "造成 5 点物理伤害" }
+      },
+      "passive": { "name": "Flowfire Edge（燃火之刃）", "effect": "战斗开始时附属：此角色造成的物理伤害转为火元素伤害（可用次数 3）。" },
+      "gamewith": "https://gamewith.net/genshin-impact/article/show/70652"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# Human-reviewable semantic priors.
+# These values are hand-authored engineering priors, not simulator-native truth.
+# Edit here instead of changing Python constants when reviewing semantics.
+
+[agents.heuristic.priority]
+ACTION_USE_SKILL = 0
+ACTION_PLAY_CARD = 1
+ACTION_ELEMENTAL_TUNING = 2
+ACTION_SWITCH_ACTIVE = 3
+CHOOSE_ACTIVE = 4
+SELECT_CARD = 5
+REROLL_DICE = 6
+SWITCH_HANDS = 7
+ACTION_DECLARE_END = 8
+
+
+[agents.bootstrap.action_priority]
+ACTION_USE_SKILL = 0
+ACTION_PLAY_CARD = 1
+ACTION_ELEMENTAL_TUNING = 2
+ACTION_SWITCH_ACTIVE = 3
+CHOOSE_ACTIVE = 4
+SELECT_CARD = 5
+REROLL_DICE = 6
+SWITCH_HANDS = 7
+ACTION_DECLARE_END = 8
+
+[agents.bootstrap.reroll_high_priority]
+categories = [
+  "keep_active_and_two_backline",
+  "keep_active_and_one_backline",
+  "keep_active_only",
+  "keep_two_backline",
+  "keep_one_backline",
+  "reroll_active_and_two_backline",
+  "reroll_active_and_one_backline",
+  "reroll_active_only",
+  "reroll_two_backline",
+  "reroll_one_backline",
+  "keep_all",
+]
+
+[action_quality]
+productive_non_end_kinds = ["ACTION_USE_SKILL", "ACTION_PLAY_CARD"]
+direct_productive_severity = 1.0
+tuning_productive_severity = 0.5
+max_dice_per_turn = 8.0
+omni_dice = 8
+tuning_skill_followup_min_remaining_dice = 3
+tuning_card_followup_min_remaining_dice = 1

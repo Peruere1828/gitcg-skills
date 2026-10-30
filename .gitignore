@@ -1,0 +1,19 @@
+# data / secrets / build outputs (mirror of the upstream project's rules)
+data/*
+!data/assets/
+!data/assets/*.json
+!data/assets/README.md
+!data/.gitkeep
+!data/deck_corpus/
+!data/deck_corpus/README.md
+!data/web/
+!data/web/README.md
+.env
+*.pt
+*.jsonl
+build/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+reports/raw/

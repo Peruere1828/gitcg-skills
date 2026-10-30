@@ -1,0 +1,14 @@
+# 引擎/卡池版本锁定（D4：每次训练 run 强制引用本文件的拷贝）
+# 迁移到新卡池 = 复制为 engine.lock.vN 并开新 run，旧 run 用旧 lock 可重放。
+[engine]
+repo = "https://github.com/piovium/genius-invokation"
+commit = "FILL_ME_AFTER_FIRST_CLONE"          # git rev-parse HEAD of refs/genius-invokation
+pybinding_version = "FILL_ME"                 # pip show gitcg
+
+[cards]
+data_version = "FILL_ME"                      # packages/data 的版本标识/哈希
+pool_note = "跟随最新卡池；升级按大版本显式迁移，不追中间小版本"
+
+[runtime]
+python = "3.x"
+platform = "linux"                            # 全部产物只在 Linux/POSIX 路径下生成

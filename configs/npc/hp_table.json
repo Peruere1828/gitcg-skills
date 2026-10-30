@@ -1,0 +1,279 @@
+{
+  "rule": "hp<=6 -> 6; else hp+2",
+  "note": "engine HP is authoritative; hp_card/lineup.hp mirror it for display + docs",
+  "enemies": [
+    {
+      "id": "hydroslime",
+      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/hydro_slime.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "electroslime",
+      "file": "engine-overlay/overlay/packages/data/src/characters/electro/electro_slime.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "cryoslime",
+      "file": "engine-overlay/overlay/packages/data/src/characters/cryo/cryo_slime.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "cryohilichurlshooter",
+      "file": "engine-overlay/overlay/packages/data/src/characters/cryo/cryo_hilichurl_shooter.gts",
+      "source": "overlay",
+      "health_before": 3,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "electrohilichurlshooter",
+      "file": "engine-overlay/overlay/packages/data/src/characters/electro/electro_hilichurl_shooter.gts",
+      "source": "overlay",
+      "health_before": 3,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "hilichurlshooter",
+      "file": "engine-overlay/overlay/packages/data/src/characters/physical/hilichurl_shooter.gts",
+      "source": "overlay",
+      "health_before": 3,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "hilichurlfighter",
+      "file": "engine-overlay/overlay/packages/data/src/characters/physical/hilichurl_fighter.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "blazingaxemitachurl",
+      "file": "engine-overlay/overlay/packages/data/src/characters/pyro/blazing_axe_mitachurl.gts",
+      "source": "overlay",
+      "health_before": 8,
+      "health_after": 10,
+      "hp_card_before": 10
+    },
+    {
+      "id": "iceshieldwallmitachurl",
+      "file": "engine-overlay/overlay/packages/data/src/characters/cryo/ice_shieldwall_mitachurl.gts",
+      "source": "overlay",
+      "health_before": 8,
+      "health_after": 10,
+      "hp_card_before": 10
+    },
+    {
+      "id": "cracklingaxemitachurl",
+      "file": "engine-overlay/overlay/packages/data/src/characters/electro/crackling_axe_mitachurl.gts",
+      "source": "overlay",
+      "health_before": 8,
+      "health_after": 10,
+      "hp_card_before": 10
+    },
+    {
+      "id": "anemosamachurl",
+      "file": "engine-overlay/overlay/packages/data/src/characters/anemo/anemo_samachurl.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "dendrosamachurl",
+      "file": "engine-overlay/overlay/packages/data/src/characters/dendro/dendro_samachurl.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "cryoabyssmage",
+      "file": "engine-overlay/overlay/packages/data/src/characters/cryo/cryo_abyss_mage.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "pyroabyssmage",
+      "file": "engine-overlay/overlay/packages/data/src/characters/pyro/pyro_abyss_mage.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "hydroabyssmage",
+      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/hydro_abyss_mage.gts",
+      "source": "overlay",
+      "health_before": 4,
+      "health_after": 6,
+      "hp_card_before": 6
+    },
+    {
+      "id": "fatuiskirmisheranemoboxervanguard",
+      "file": "engine-overlay/overlay/packages/data/src/characters/anemo/fatui_anemoboxer_vanguard.gts",
+      "source": "overlay",
+      "health_before": 10,
+      "health_after": 12,
+      "hp_card_before": 12
+    },
+    {
+      "id": "fatuiskirmisherhydrogunnerlegionnaire",
+      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/fatui_hydrogunner_legionnaire.gts",
+      "source": "overlay",
+      "health_before": 10,
+      "health_after": 12,
+      "hp_card_before": 12
+    },
+    {
+      "id": "fatuipyroagent",
+      "file": "engine-overlay/overlay/packages/data/src/characters/pyro/fatui_pyro_agent.gts",
+      "source": "upstream-override",
+      "health_before": 11,
+      "health_after": 13,
+      "hp_card_before": 13
+    },
+    {
+      "id": "mirrormaiden",
+      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/mirror_maiden.gts",
+      "source": "upstream-override",
+      "health_before": 10,
+      "health_after": 12,
+      "hp_card_before": 12
+    }
+  ],
+  "stages": [
+    {
+      "name": "timmie",
+      "lineup_hp": [
+        8
+      ]
+    },
+    {
+      "name": "swan",
+      "lineup_hp": [
+        3,
+        4
+      ]
+    },
+    {
+      "name": "wagner",
+      "lineup_hp": [
+        4,
+        4
+      ]
+    },
+    {
+      "name": "marjorie",
+      "lineup_hp": [
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "name": "blanche",
+      "lineup_hp": [
+        8,
+        8
+      ]
+    },
+    {
+      "name": "timaeus",
+      "lineup_hp": [
+        3,
+        8,
+        8
+      ]
+    },
+    {
+      "name": "patton",
+      "lineup_hp": [
+        4,
+        8,
+        4
+      ]
+    },
+    {
+      "name": "ellin",
+      "lineup_hp": [
+        3,
+        8,
+        4
+      ]
+    },
+    {
+      "name": "jifang",
+      "lineup_hp": [
+        4,
+        4,
+        3
+      ]
+    },
+    {
+      "name": "buyun",
+      "lineup_hp": [
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "name": "liusu",
+      "lineup_hp": [
+        9,
+        10
+      ]
+    },
+    {
+      "name": "shitou",
+      "lineup_hp": [
+        8,
+        3,
+        8
+      ]
+    },
+    {
+      "name": "irontonguetian",
+      "lineup_hp": [
+        9,
+        10
+      ]
+    },
+    {
+      "name": "chefmao",
+      "lineup_hp": [
+        9,
+        10
+      ]
+    },
+    {
+      "name": "uncletian",
+      "lineup_hp": [
+        4,
+        4
+      ]
+    },
+    {
+      "name": "lan",
+      "lineup_hp": [
+        4,
+        4,
+        3
+      ]
+    }
+  ]
+}

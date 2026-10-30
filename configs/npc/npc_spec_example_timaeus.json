@@ -1,0 +1,48 @@
+{
+  "name": "timaeus",
+  "display": "蒂玛乌斯",
+  "region": "mondstadt",
+  "source": {
+    "lineup": "gamewith/37530; hoyowiki/2547; fandom Stage/Timaeus",
+    "objectives": "观测枢/Fandom Stage 页（待抓取原文）"
+  },
+  "lineup": [
+    { "slot": 1, "name": "冰箭丘丘人", "en": "Cryo Hilichurl Shooter", "hp": 3 },
+    { "slot": 2, "name": "冰盾丘丘暴徒", "en": "Ice Shieldwall Mitachurl", "hp": 8 },
+    { "slot": 3, "name": "炽热斧头丘丘暴徒", "en": "Blazing Axe Mitachurl", "hp": 8 }
+  ],
+  "special_rules": ["artifact_cards_free"],
+  "objectives": [
+    { "type": "win" },
+    { "type": "win_within_rounds", "n": null },
+    { "type": "defeated_less_than", "k": 2 }
+  ],
+  "strategy": "self-generated（greedy + rotation）；不使用逐关实测序列",
+  "reference_log": {
+    "note": "仅供参考，非权威；不用于实现",
+    "rounds": [
+      { "round": 1,  "actions": ["1A", "2E"] },
+      { "round": 2,  "actions": ["2E", "3A"] },
+      { "round": 3,  "actions": ["3E", "1A"] },
+      { "round": 4,  "actions": ["2Q", "3A"] },
+      { "round": 5,  "actions": ["3Q", "1A"] },
+      { "round": 6,  "actions": ["2E", "3A"] },
+      { "round": 7,  "actions": ["3E", "1A"] },
+      { "round": 8,  "actions": ["2E", "3A"] },
+      { "round": 9,  "actions": ["3Q", "1A"] },
+      { "round": 10, "actions": ["2Q", "3A"] },
+      { "round": 11, "actions": ["3E", "1A"] },
+      { "round": 12, "actions": ["2E", "3A"] },
+      { "round": 13, "actions": ["3Q", "1A"] }
+    ]
+  },
+  "notes": {
+    "action_code": "<slot><skill>，slot∈{1,2,3} 对应 lineup 顺序；skill∈{A=普通攻击, E=元素战技, Q=元素爆发}",
+    "facts": [
+      "NPC 无手牌/无骰子/不打行动牌；玩家恒定先手",
+      "敌人数据见 npc_enemies_timaeus.json（技能/被动/HP）",
+      "充能：A/E 各 +1，Q 耗 2，上限 2",
+      "切人由角色被动/脚本强制切人驱动，不计行动"
+    ]
+  }
+}

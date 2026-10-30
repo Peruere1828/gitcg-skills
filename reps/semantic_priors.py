@@ -1,0 +1,42 @@
+# Ported from Rebel_base_RL research/world_model (AGPL-3.0, github.com/.../Rebel_base_RL) by genshin-GITCG.
+# Keep upstream semantics; adapt imports only. See NOTICE.md.
+from __future__ import annotations
+
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # Python <=3.10 (e.g. the cluster): tomli backport
+    import tomli as tomllib  # type: ignore
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from .schema import OptionKind
+
+
+def default_semantic_priors_path() -> Path:
+    return Path(__file__).with_name("semantic_priors.toml")
+
+
+@lru_cache(maxsize=1)
+def load_semantic_priors(path: str | Path | None = None) -> dict[str, Any]:
+    payload_path = Path(path) if path is not None else default_semantic_priors_path()
+    return tomllib.loads(payload_path.read_text(encoding="utf-8"))
+
+
+def option_kind_priority_map(section_path: tuple[str, ...]) -> dict[OptionKind, int]:
+    payload: Any = load_semantic_priors()
+    for key in section_path:
+        payload = payload[key]
+    return {OptionKind[name]: int(priority) for name, priority in payload.items()}
+
+
+def action_quality_config() -> dict[str, Any]:
+    return dict(load_semantic_priors()["action_quality"])
+
+
+def string_sequence(section_path: tuple[str, ...], *, field: str = "categories") -> tuple[str, ...]:
+    payload: Any = load_semantic_priors()
+    for key in section_path:
+        payload = payload[key]
+    values = payload[field]
+    return tuple(str(value) for value in values)

@@ -1,0 +1,45 @@
+# engine-overlay/engine.lock.example — NPC PvE / Web 线的 D4 引擎锁（变体）
+#
+# D4：每个训练 run 复制一份并填实时值。本文件是 **PvE-B0 重建 .so** 对应的
+# 变体锁（与 configs/engine.lock.example 同结构，值已按 engine-overlay 构建填好）。
+# 复制为 engine.lock.npc-v1 并随 run 元数据保存。
+
+[engine]
+repo = "https://github.com/piovium/genius-invokation"
+tag = "v0.21.0"
+commit = "c94826b4611a19f0057d667f7db3b0f9aaf68c7e"
+pybinding_version = "0.21.0"
+
+[v8]
+# 由 tag 的 packages/cbinding/CMakeLists.txt 固定：piovium/v8-cmake（vendor V8 源码，纯 CMake 直编）
+wrapper_repo = "https://github.com/piovium/v8-cmake"
+wrapper_commit = "14d0f7274bb5db2aaf2e312ed0f4bee8418b9b1b"
+version = "11.6.189.4"
+
+[overlay]
+# 我们的引擎改动（engine-overlay/overlay/）内容 hash；B0 为空
+tree_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+[build]
+# 构建镜像与工具链（D20；构建方式见 engine-overlay/README.md）
+base_image = "ubuntu:22.04"
+image_tag = "gitcg-engine-builder:22.04"
+cmake = "3.31.10"
+gnu_cxx = "g++ 11.4.0"
+node = "24.21.0"
+pnpm = "12.8.1"
+ninja = "1.10.1"
+
+[artifact]
+# 产物（linux x64, glibc 2.35 口径）
+path = "build/artifacts/libgitcg.so"
+size = 36583216
+sha256 = "7e8b61cca0d6143fa9f1e68b89cf243b32c8b56677de6d3ff5197b2d626c061f"
+
+[cards]
+data_version = "0.21.0+gi-7-1-0"
+pool_note = "跟随最新卡池；升级按大版本显式迁移，不追中间小版本"
+
+[runtime]
+python = "3.12"
+platform = "linux"

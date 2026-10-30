@@ -1,0 +1,1512 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-10-12",
+  "generator": "scripts/explore/fetch_npc_enemies.py",
+  "scope": "Mondstadt + Liyue NPC 'Adventure Challenge' enemy types",
+  "source": "genshin-db (theBowja/genshin-db), generated from in-game data + Fandom; cross-checked with GameWith card pages where available",
+  "field_notes": {
+    "cost": "e.g. 'Cryo1+Unaligned2' / 'Cryo3+Energy2'",
+    "effect": "official Chinese description (in-game text)",
+    "hp_card": "card HP; equals the HP used by the PvE stages (confirmed for Timaeus 3/8/8)",
+    "energy": "Elemental Burst energy cost cap (A/E each +1, Q consumes it)",
+    "charge_rule": "A/E each grant +1 energy; Q consumes it; cap = energy"
+  },
+  "discrepancies_with_timaeus_file": {
+    "note": "npc_enemies_timaeus.json 保持不变；下列差异以本文件（genshin-db 游戏数据）为准。",
+    "count": 4,
+    "diffs": [
+      {
+        "en": "Cryo Hilichurl Shooter",
+        "field": "passive.name",
+        "timaeus_file": "Hide（躲藏）",
+        "npc_enemies_all": "Hide（躲起来）"
+      },
+      {
+        "en": "Ice Shieldwall Mitachurl",
+        "field": "passive.name",
+        "timaeus_file": "Hoarfrost Greatshield（寒霜大盾）",
+        "npc_enemies_all": "Hoarfrost Greatshield（寒冰大盾）"
+      },
+      {
+        "en": "Blazing Axe Mitachurl",
+        "field": "name",
+        "timaeus_file": "炽热斧头丘丘暴徒",
+        "npc_enemies_all": "火斧丘丘暴徒"
+      },
+      {
+        "en": "Blazing Axe Mitachurl",
+        "field": "passive.name",
+        "timaeus_file": "Flowfire Edge（燃火之刃）",
+        "npc_enemies_all": "Flowfire Edge（流焰磨刃）"
+      }
+    ]
+  },
+  "enemies": [
+    {
+      "id": "hydroslime",
+      "name": "水史莱姆",
+      "en": "Hydro Slime",
+      "aliases": [
+        "水史莱姆"
+      ],
+      "element": "hydro",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [
+        "wagner",
+        "jifang"
+      ],
+      "skills": {
+        "A": {
+          "name": "Bounce",
+          "name_cn": "弹跳",
+          "cost": "Hydro1+Unaligned2",
+          "effect": "造成1点水元素伤害。",
+          "effect_en": "Deals 1 Hydro DMG.",
+          "damage": 1,
+          "damage_element": "hydro"
+        },
+        "E": null,
+        "Q": {
+          "name": "Slam",
+          "name_cn": "重重下落",
+          "cost": "Hydro3+Energy2",
+          "effect": "造成4点水元素伤害。",
+          "effect_en": "Deals 4 Hydro DMG.",
+          "damage": 4,
+          "damage_element": "hydro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Elemental Sedimentation: Hydro（元素沉积·水）",
+        "name_cn": "元素沉积·水",
+        "name_en": "Elemental Sedimentation: Hydro",
+        "effect": "【被动】战斗开始时，初始附属元素生命·水。",
+        "effect_en": "(Passive) When the battle begins, this character gains Elemental Lifeform: Hydro.",
+        "detail_effect": "角色总是附着水元素，并且免疫水元素伤害。\n持续回合：2",
+        "detail_effect_en": "This character always has Hydro applied, and it is immune to Hydro DMG.\nDuration (Rounds): 2"
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "元素生命·水",
+          "name_en": "Elemental Lifeform: Hydro",
+          "effect": "角色总是附着水元素，并且免疫水元素伤害。\n持续回合：2",
+          "effect_en": "This character always has Hydro applied, and it is immune to Hydro DMG.\nDuration (Rounds): 2",
+          "source": "genshin-db tcgstatuseffects/elementallifeformhydro"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/hydroslime",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/hydroslime.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "electroslime",
+      "name": "雷史莱姆",
+      "en": "Electro Slime",
+      "aliases": [
+        "雷史莱姆"
+      ],
+      "element": "electro",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [
+        "ellin",
+        "buyun"
+      ],
+      "skills": {
+        "A": {
+          "name": "Bounce",
+          "name_cn": "弹跳",
+          "cost": "Electro1+Unaligned2",
+          "effect": "造成1点雷元素伤害。",
+          "effect_en": "Deals 1 Electro DMG.",
+          "damage": 1,
+          "damage_element": "electro"
+        },
+        "E": null,
+        "Q": {
+          "name": "Slam",
+          "name_cn": "重重下落",
+          "cost": "Electro3+Energy2",
+          "effect": "造成4点雷元素伤害。",
+          "effect_en": "Deals 4 Electro DMG.",
+          "damage": 4,
+          "damage_element": "electro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Elemental Sedimentation: Electro（元素沉积·雷）",
+        "name_cn": "元素沉积·雷",
+        "name_en": "Elemental Sedimentation: Electro",
+        "effect": "【被动】战斗开始时，初始附属元素生命·雷。",
+        "effect_en": "(Passive) When the battle begins, this character gains Elemental Lifeform: Electro.",
+        "detail_effect": "角色总是附着雷元素，并且免疫雷元素伤害。",
+        "detail_effect_en": "This character always has Electro applied, and it is immune to Electro DMG."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "元素生命·雷",
+          "name_en": "Elemental Lifeform: Electro",
+          "effect": "角色总是附着雷元素，并且免疫雷元素伤害。",
+          "effect_en": "This character always has Electro applied, and it is immune to Electro DMG.",
+          "source": "genshin-db tcgstatuseffects/elementallifeformelectro"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/electroslime",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/electroslime.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "cryoslime",
+      "name": "冰史莱姆",
+      "en": "Cryo Slime",
+      "aliases": [
+        "冰史莱姆"
+      ],
+      "element": "cryo",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [],
+      "skills": {
+        "A": {
+          "name": "Ram",
+          "name_cn": "冲撞",
+          "cost": "Cryo1+Unaligned2",
+          "effect": "造成1点冰元素伤害。",
+          "effect_en": "Deals 1 Cryo DMG.",
+          "damage": 1,
+          "damage_element": "cryo"
+        },
+        "E": null,
+        "Q": {
+          "name": "Jumping Slam",
+          "name_cn": "跳跃冲击",
+          "cost": "Cryo3+Energy2",
+          "effect": "造成4点冰元素伤害。",
+          "effect_en": "Deals 4 Cryo DMG.",
+          "damage": 4,
+          "damage_element": "cryo"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Elemental Sedimentation: Cryo（元素沉积·冰）",
+        "name_cn": "元素沉积·冰",
+        "name_en": "Elemental Sedimentation: Cryo",
+        "effect": "【被动】战斗开始时，初始附属元素生命·冰。",
+        "effect_en": "(Passive) When the battle begins, this character gains Elemental Lifeform: Cryo.",
+        "detail_effect": "角色总是附着冰元素，并且免疫冰元素伤害和冻结。",
+        "detail_effect_en": "This character always has Cryo applied, and it is immune to Cryo DMG and Frozen."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "元素生命·冰",
+          "name_en": "Elemental Lifeform: Cryo",
+          "effect": "角色总是附着冰元素，并且免疫冰元素伤害和冻结。",
+          "effect_en": "This character always has Cryo applied, and it is immune to Cryo DMG and Frozen.",
+          "source": "genshin-db tcgstatuseffects/elementallifeformcryo"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/cryoslime",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/cryoslime.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "cryohilichurlshooter",
+      "name": "冰箭丘丘人",
+      "en": "Cryo Hilichurl Shooter",
+      "aliases": [
+        "冰箭丘丘人"
+      ],
+      "element": "cryo",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "marjorie",
+        "timaeus",
+        "ellin",
+        "shitou",
+        "jifang"
+      ],
+      "skills": {
+        "A": {
+          "name": "Ice Arrow",
+          "name_cn": "冰箭",
+          "cost": "Cryo1+Unaligned2",
+          "effect": "造成1点冰元素伤害。",
+          "effect_en": "Deals 1 Cryo DMG.",
+          "damage": 1,
+          "damage_element": "cryo"
+        },
+        "E": null,
+        "Q": {
+          "name": "Multishot",
+          "name_cn": "几支一起",
+          "cost": "Cryo3+Energy2",
+          "effect": "造成4点冰元素伤害。",
+          "effect_en": "Deals 4 Cryo DMG.",
+          "damage": 4,
+          "damage_element": "cryo"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Hide（躲起来）",
+        "name_cn": "躲起来",
+        "name_en": "Hide",
+        "effect": "【被动】此角色出招后，自动切换到下一个角色。",
+        "effect_en": "(Passive) Switches to the next character after this character attacks."
+      },
+      "referenced_effects": [],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/cryohilichurlshooter",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/cryohilichurlshooter.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70654"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70654"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "electrohilichurlshooter",
+      "name": "雷箭丘丘人",
+      "en": "Electro Hilichurl Shooter",
+      "aliases": [
+        "雷箭丘丘人"
+      ],
+      "element": "electro",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "wagner",
+        "marjorie",
+        "jifang",
+        "lan"
+      ],
+      "skills": {
+        "A": {
+          "name": "Thunder Arrow",
+          "name_cn": "雷箭",
+          "cost": "Electro1+Unaligned2",
+          "effect": "造成1点雷元素伤害。",
+          "effect_en": "Deals 1 Electro DMG.",
+          "damage": 1,
+          "damage_element": "electro"
+        },
+        "E": null,
+        "Q": {
+          "name": "Multishot",
+          "name_cn": "几支一起",
+          "cost": "Electro3+Energy2",
+          "effect": "造成4点雷元素伤害。",
+          "effect_en": "Deals 4 Electro DMG.",
+          "damage": 4,
+          "damage_element": "electro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Hide（躲起来）",
+        "name_cn": "躲起来",
+        "name_en": "Hide",
+        "effect": "【被动】此角色出招后，自动切换到下一个角色。",
+        "effect_en": "(Passive) Switches to the next character after this character attacks."
+      },
+      "referenced_effects": [],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/electrohilichurlshooter",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/electrohilichurlshooter.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70656"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70656"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "hilichurlshooter",
+      "name": "射手丘丘人",
+      "en": "Hilichurl Shooter",
+      "aliases": [
+        "丘丘人射手"
+      ],
+      "element": "physical",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "swan",
+        "marjorie"
+      ],
+      "skills": {
+        "A": {
+          "name": "Shooting",
+          "name_cn": "射击",
+          "cost": "Unaligned2",
+          "effect": "造成1点物理伤害。",
+          "effect_en": "Deals 1 Physical DMG.",
+          "damage": 1,
+          "damage_element": "physical"
+        },
+        "E": null,
+        "Q": {
+          "name": "Multishot",
+          "name_cn": "几支一起",
+          "cost": "Same3+Energy2",
+          "effect": "造成5点物理伤害。",
+          "effect_en": "Deals 5 Physical DMG.",
+          "damage": 5,
+          "damage_element": "physical"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Hide（躲起来）",
+        "name_cn": "躲起来",
+        "name_en": "Hide",
+        "effect": "【被动】此角色使用技能后，自动切换到下一个角色。",
+        "effect_en": "(Passive) Switches to the next character after this character uses a Skill."
+      },
+      "referenced_effects": [],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/hilichurlshooter",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/hilichurlshooter.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70661"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70661"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "hilichurlfighter",
+      "name": "打手丘丘人",
+      "en": "Hilichurl Fighter",
+      "aliases": [
+        "丘丘人斗士"
+      ],
+      "element": "physical",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "swan"
+      ],
+      "skills": {
+        "A": {
+          "name": "Hit",
+          "name_cn": "打",
+          "cost": "Unaligned2",
+          "effect": "造成1点物理伤害。",
+          "effect_en": "Deals 1 Physical DMG.",
+          "damage": 1,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Jump and Hit",
+          "name_cn": "跳起打",
+          "cost": "Unaligned3",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "Q": {
+          "name": "Swing That Club",
+          "name_cn": "挥来挥去",
+          "cost": "Same3+Energy2",
+          "effect": "造成4点物理伤害。",
+          "effect_en": "Deals 4 Physical DMG.",
+          "damage": 4,
+          "damage_element": "physical"
+        }
+      },
+      "extra_skills": [],
+      "passive": null,
+      "referenced_effects": [],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/hilichurlfighter",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/hilichurlfighter.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70660"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70660"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "blazingaxemitachurl",
+      "name": "火斧丘丘暴徒",
+      "en": "Blazing Axe Mitachurl",
+      "aliases": [
+        "炽热斧头丘丘暴徒",
+        "火斧丘丘暴徒"
+      ],
+      "element": "pyro",
+      "hp_card": 10,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "timmie",
+        "blanche",
+        "timaeus",
+        "patton",
+        "ellin",
+        "shitou"
+      ],
+      "skills": {
+        "A": {
+          "name": "Du Plama",
+          "name_cn": "Du Plama",
+          "cost": "Pyro1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Upa",
+          "name_cn": "Upa",
+          "cost": "Pyro3",
+          "effect": "造成3点物理伤害。",
+          "effect_en": "Deals 3 Physical DMG.",
+          "damage": 3,
+          "damage_element": "physical"
+        },
+        "Q": {
+          "name": "Oto Tiga",
+          "name_cn": "Oto Tiga",
+          "cost": "Pyro3+Energy2",
+          "effect": "造成5点物理伤害。",
+          "effect_en": "Deals 5 Physical DMG.",
+          "damage": 5,
+          "damage_element": "physical"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Flowfire Edge（流焰磨刃）",
+        "name_cn": "流焰磨刃",
+        "name_en": "Flowfire Edge",
+        "effect": "【被动】战斗开始时，初始附属流焰磨刃。",
+        "effect_en": "(Passive) When the battle begins, this character gains Flowfire Edge.",
+        "detail_effect": "角色造成的物理伤害变为火元素伤害\n可用次数：3",
+        "detail_effect_en": "The Physical DMG this character deals is converted to Pyro DMG.\nUsage(s): 3"
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "流焰磨刃",
+          "name_en": "Flowfire Edge",
+          "effect": "角色造成的物理伤害变为火元素伤害\n可用次数：3",
+          "effect_en": "The Physical DMG this character deals is converted to Pyro DMG.\nUsage(s): 3",
+          "source": "genshin-db tcgstatuseffects/flowfireedge"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/blazingaxemitachurl",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/blazingaxemitachurl.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70652"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70652"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "iceshieldwallmitachurl",
+      "name": "冰盾丘丘暴徒",
+      "en": "Ice Shieldwall Mitachurl",
+      "aliases": [
+        "冰盾丘丘暴徒"
+      ],
+      "element": "cryo",
+      "hp_card": 10,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "blanche",
+        "timaeus"
+      ],
+      "skills": {
+        "A": {
+          "name": "Plata Plama",
+          "name_cn": "Plata Plama",
+          "cost": "Cryo1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Da Plama",
+          "name_cn": "Da Plama",
+          "cost": "Cryo3",
+          "effect": "造成3点物理伤害。",
+          "effect_en": "Deals 3 Physical DMG.",
+          "damage": 3,
+          "damage_element": "physical"
+        },
+        "Q": {
+          "name": "Aba Movo",
+          "name_cn": "Aba Movo",
+          "cost": "Cryo3+Energy2",
+          "effect": "造成5点物理伤害。",
+          "effect_en": "Deals 5 Physical DMG.",
+          "damage": 5,
+          "damage_element": "physical"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Hoarfrost Greatshield（寒冰大盾）",
+        "name_cn": "寒冰大盾",
+        "name_en": "Hoarfrost Greatshield",
+        "effect": "【被动】战斗开始时，初始附属寒冰大盾。",
+        "effect_en": "(Passive) When the battle begins, this character gains Hoarfrost Greatshield.",
+        "detail_effect": "所附属角色所受伤害-2。\n此状态会提供2次冰元素附着（可被元素反应消耗）：耗尽后移除此状态。",
+        "detail_effect_en": "The character to which this is attached takes -2 DMG.\nThis status will provide 2 instances of Cryo Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "寒冰大盾",
+          "name_en": "Hoarfrost Greatshield",
+          "effect": "所附属角色所受伤害-2。\n此状态会提供2次冰元素附着（可被元素反应消耗）：耗尽后移除此状态。",
+          "effect_en": "The character to which this is attached takes -2 DMG.\nThis status will provide 2 instances of Cryo Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed.",
+          "source": "genshin-db tcgstatuseffects/hoarfrostgreatshield"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/iceshieldwallmitachurl",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/iceshieldwallmitachurl.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70663"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70663"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "cracklingaxemitachurl",
+      "name": "雷斧丘丘暴徒",
+      "en": "Crackling Axe Mitachurl",
+      "aliases": [
+        "雷斧丘丘暴徒"
+      ],
+      "element": "electro",
+      "hp_card": 10,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "shitou"
+      ],
+      "skills": {
+        "A": {
+          "name": "Du Plama",
+          "name_cn": "Du Plama",
+          "cost": "Electro1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Upa",
+          "name_cn": "Upa",
+          "cost": "Electro3",
+          "effect": "造成3点物理伤害。",
+          "effect_en": "Deals 3 Physical DMG.",
+          "damage": 3,
+          "damage_element": "physical"
+        },
+        "Q": {
+          "name": "Oto Tiga",
+          "name_cn": "Oto Tiga",
+          "cost": "Electro3+Energy2",
+          "effect": "造成5点物理伤害。",
+          "effect_en": "Deals 5 Physical DMG.",
+          "damage": 5,
+          "damage_element": "physical"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Ripple Electro Edge（流煌磨刃）",
+        "name_cn": "流煌磨刃",
+        "name_en": "Ripple Electro Edge",
+        "effect": "【被动】战斗开始时，初始附属流煌磨刃。",
+        "effect_en": "(Passive) When the battle begins, this character gains Ripple Electro Edge.",
+        "detail_effect": "角色造成的物理伤害变为雷元素伤害\n可用次数：3",
+        "detail_effect_en": "The Physical DMG this character deals is converted to Electro DMG.\nUsage(s): 3"
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "流煌磨刃",
+          "name_en": "Ripple Electro Edge",
+          "effect": "角色造成的物理伤害变为雷元素伤害\n可用次数：3",
+          "effect_en": "The Physical DMG this character deals is converted to Electro DMG.\nUsage(s): 3",
+          "source": "genshin-db tcgstatuseffects/rippleelectroedge"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/cracklingaxemitachurl",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/cracklingaxemitachurl.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70653"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70653"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "anemosamachurl",
+      "name": "风丘丘萨满",
+      "en": "Anemo Samachurl",
+      "aliases": [
+        "风丘丘萨满"
+      ],
+      "element": "anemo",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "wagner",
+        "patton",
+        "buyun",
+        "jifang"
+      ],
+      "skills": {
+        "A": {
+          "name": "Staff Strike",
+          "name_cn": "杖击",
+          "cost": "Unaligned2",
+          "effect": "造成1点物理伤害。",
+          "effect_en": "Deals 1 Physical DMG.",
+          "damage": 1,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Prayer to the Winds",
+          "name_cn": "祈风术",
+          "cost": "Anemo3",
+          "effect": "造成2点风元素伤害，召唤旋风。",
+          "effect_en": "Deals 2 Anemo DMG, summons 1 Whirlwind.",
+          "damage": 2,
+          "damage_element": "anemo"
+        },
+        "Q": {
+          "name": "Galeforce Shock",
+          "name_cn": "风波冲击",
+          "cost": "Anemo3+Energy2",
+          "effect": "造成5点风元素伤害。",
+          "effect_en": "Deals 5 Anemo DMG.",
+          "damage": 5,
+          "damage_element": "anemo"
+        }
+      },
+      "extra_skills": [],
+      "passive": null,
+      "referenced_effects": [
+        {
+          "kind": "summon",
+          "linked_to": "skill:E",
+          "name": "旋风",
+          "name_en": "Whirlwind",
+          "effect": "结束阶段：造成1点风元素伤害。\n可用次数：2",
+          "effect_en": "End Phase: Deal 1 Anemo DMG.\nUsage(s): 2",
+          "source": "genshin-db tcgsummons/whirlwind"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/anemosamachurl",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/anemosamachurl.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70651"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70651"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "dendrosamachurl",
+      "name": "草丘丘萨满",
+      "en": "Dendro Samachurl",
+      "aliases": [
+        "草丘丘萨满"
+      ],
+      "element": "dendro",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster",
+        "hilichurl"
+      ],
+      "appears_in": [
+        "patton",
+        "jifang",
+        "lan"
+      ],
+      "skills": {
+        "A": {
+          "name": "Staff Strike",
+          "name_cn": "杖击",
+          "cost": "Unaligned2",
+          "effect": "造成1点物理伤害。",
+          "effect_en": "Deals 1 Physical DMG.",
+          "damage": 1,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Venomous Vines",
+          "name_cn": "毒藤蔓生",
+          "cost": "Dendro3",
+          "effect": "造成1点草元素伤害，在对方场上生成藤蔓。",
+          "effect_en": "Deals 1 Dendro DMG, creates 1 Vines at the opponent's play area.",
+          "damage": 1,
+          "damage_element": "dendro"
+        },
+        "Q": {
+          "name": "Dendro Field",
+          "name_cn": "草之域",
+          "cost": "Dendro3+Energy2",
+          "effect": "造成5点草元素伤害。",
+          "effect_en": "Deals 5 Dendro DMG.",
+          "damage": 5,
+          "damage_element": "dendro"
+        }
+      },
+      "extra_skills": [],
+      "passive": null,
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "skill:E",
+          "name": "藤蔓",
+          "name_en": "Vines",
+          "effect": "所在阵营切换角色后：对切换到的角色造成1点草元素伤害。\n可用次数：2",
+          "effect_en": "After a character switch takes place in this play area: Deal 1 Dendro DMG to the character activated.\nUsage(s): 2",
+          "source": "genshin-db tcgstatuseffects/vines"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/dendrosamachurl",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/dendrosamachurl.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/70655"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/70655"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "cryoabyssmage",
+      "name": "冰深渊法师",
+      "en": "Cryo Abyss Mage",
+      "aliases": [
+        "冰深渊法师"
+      ],
+      "element": "cryo",
+      "hp_card": 6,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [
+        "buyun",
+        "uncletian"
+      ],
+      "skills": {
+        "A": {
+          "name": "Cryo Thorns",
+          "name_cn": "冰刺",
+          "cost": "Cryo1+Unaligned2",
+          "effect": "造成1点冰元素伤害。",
+          "effect_en": "Deals 1 Cryo DMG.",
+          "damage": 1,
+          "damage_element": "cryo"
+        },
+        "E": {
+          "name": "Frostdrift Offering",
+          "name_cn": "凝华的祭法",
+          "cost": "Cryo3",
+          "effect": "造成3点冰元素伤害。",
+          "effect_en": "Deals 3 Cryo DMG.",
+          "damage": 3,
+          "damage_element": "cryo"
+        },
+        "Q": {
+          "name": "Rimestorm Rite",
+          "name_cn": "霜寒迂旋之仪",
+          "cost": "Cryo3+Energy2",
+          "effect": "造成5点冰元素伤害。",
+          "effect_en": "Deals 5 Cryo DMG.",
+          "damage": 5,
+          "damage_element": "cryo"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Cryo Ward（冰元素护罩）",
+        "name_cn": "冰元素护罩",
+        "name_en": "Cryo Ward",
+        "effect": "【被动】战斗开始时，初始附属冰元素护罩。",
+        "effect_en": "(Passive) When the battle begins, this character gains Cryo Ward.",
+        "detail_effect": "所附属角色免疫所有伤害，并且不会被冻结。\n此状态提供2次冰元素附着（可被元素反应消耗）：耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+        "detail_effect_en": "The character to which this is attached takes no DMG and cannot be Frozen.\nThis status will provide 2 instances of Cryo Infusion (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "冰元素护罩",
+          "name_en": "Cryo Ward",
+          "effect": "所附属角色免疫所有伤害，并且不会被冻结。\n此状态提供2次冰元素附着（可被元素反应消耗）：耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+          "effect_en": "The character to which this is attached takes no DMG and cannot be Frozen.\nThis status will provide 2 instances of Cryo Infusion (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round.",
+          "source": "genshin-db tcgstatuseffects/cryoward"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/cryoabyssmage",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/cryoabyssmage.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "pyroabyssmage",
+      "name": "火深渊法师",
+      "en": "Pyro Abyss Mage",
+      "aliases": [
+        "火深渊法师"
+      ],
+      "element": "pyro",
+      "hp_card": 6,
+      "energy": 3,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [
+        "uncletian",
+        "lan"
+      ],
+      "skills": {
+        "A": {
+          "name": "Flamewave",
+          "name_cn": "炎波",
+          "cost": "Pyro1+Unaligned2",
+          "effect": "造成1点火元素伤害。",
+          "effect_en": "Deals 1 Pyro DMG.",
+          "damage": 1,
+          "damage_element": "pyro"
+        },
+        "E": {
+          "name": "Blazing Visage",
+          "name_cn": "灼面的祭法",
+          "cost": "Pyro3",
+          "effect": "造成3点火元素伤害。",
+          "effect_en": "Deals 3 Pyro DMG.",
+          "damage": 3,
+          "damage_element": "pyro"
+        },
+        "Q": {
+          "name": "Rite of the Molten Eruption",
+          "name_cn": "熔焰地涌之仪",
+          "cost": "Pyro4+Energy3",
+          "effect": "造成7点火元素伤害。",
+          "effect_en": "Deals 7 Pyro DMG.",
+          "damage": 7,
+          "damage_element": "pyro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Pyro Ward（火元素护罩）",
+        "name_cn": "火元素护罩",
+        "name_en": "Pyro Ward",
+        "effect": "【被动】战斗开始时，初始附属火元素护罩。",
+        "effect_en": "(Passive) When the battle begins, this character gains Pyro Ward.",
+        "detail_effect": "所附属角色免疫所有伤害。\n此状态提供2次火元素附着（可被元素反应消耗）：耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+        "detail_effect_en": "The character to which this is attached takes no DMG.\nThis status will provide 2 instances of Pyro Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "火元素护罩",
+          "name_en": "Pyro Ward",
+          "effect": "所附属角色免疫所有伤害。\n此状态提供2次火元素附着（可被元素反应消耗）：耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+          "effect_en": "The character to which this is attached takes no DMG.\nThis status will provide 2 instances of Pyro Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round.",
+          "source": "genshin-db tcgstatuseffects/pyroward"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/pyroabyssmage",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/pyroabyssmage.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "hydroabyssmage",
+      "name": "水深渊法师",
+      "en": "Hydro Abyss Mage",
+      "aliases": [
+        "水深渊法师"
+      ],
+      "element": "hydro",
+      "hp_card": 6,
+      "energy": 3,
+      "weapon": "Other weapons",
+      "camp": [
+        "monster"
+      ],
+      "appears_in": [],
+      "skills": {
+        "A": {
+          "name": "Water Ball",
+          "name_cn": "水弹",
+          "cost": "Hydro1+Unaligned2",
+          "effect": "造成1点水元素伤害。",
+          "effect_en": "Deals 1 Hydro DMG.",
+          "damage": 1,
+          "damage_element": "hydro"
+        },
+        "E": {
+          "name": "Bubbling Offering",
+          "name_cn": "泡影的祭法",
+          "cost": "Hydro3",
+          "effect": "造成1点水元素伤害，目标角色附属水泡。",
+          "effect_en": "Deals 1 Hydro DMG. The target character receives Mist Bubble.",
+          "damage": 1,
+          "damage_element": "hydro"
+        },
+        "Q": {
+          "name": "Rite of Mortal Water",
+          "name_cn": "浮幻生灭之仪",
+          "cost": "Hydro4+Energy3",
+          "effect": "造成4点水元素伤害，目标角色附属水泡。",
+          "effect_en": "Deals 4 Hydro DMG. The target character receives Mist Bubble.",
+          "damage": 4,
+          "damage_element": "hydro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Hydro Ward（水元素护罩）",
+        "name_cn": "水元素护罩",
+        "name_en": "Hydro Ward",
+        "effect": "【被动】战斗开始时，初始附属水元素护罩。",
+        "effect_en": "(Passive) When the battle begins, this character gains Hydro Ward.",
+        "detail_effect": "所附属角色免疫所有伤害。\n此状态会提供2次水元素附着（可被元素反应消耗），耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+        "detail_effect_en": "The character to which this is attached takes no DMG.\nThis status will provide 2 instances of Hydro Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "水元素护罩",
+          "name_en": "Hydro Ward",
+          "effect": "所附属角色免疫所有伤害。\n此状态会提供2次水元素附着（可被元素反应消耗），耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+          "effect_en": "The character to which this is attached takes no DMG.\nThis status will provide 2 instances of Hydro Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round.",
+          "source": "genshin-db tcgstatuseffects/hydroward"
+        },
+        {
+          "kind": "status",
+          "linked_to": "skill:E",
+          "name": "咕噜水泡",
+          "name_en": "Gurgling Bubble",
+          "effect": "角色无法使用技能。（持续到回合结束）",
+          "effect_en": "Character cannot use Skills. (Lasts until the end of this Round)",
+          "source": "genshin-db tcgstatuseffects/gurglingbubble"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/hydroabyssmage",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/hydroabyssmage.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "fatuiskirmisheranemoboxervanguard",
+      "name": "愚人众先遣队·风拳前锋军",
+      "en": "Fatui Skirmisher - Anemoboxer Vanguard",
+      "aliases": [
+        "愚人众先遣队·风拳前锋军",
+        "愚人众·先锋军"
+      ],
+      "element": "anemo",
+      "hp_card": 12,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "fatui"
+      ],
+      "appears_in": [
+        "liusu"
+      ],
+      "skills": {
+        "A": {
+          "name": "Hurricane Jab",
+          "name_cn": "疾风刺拳",
+          "cost": "Anemo1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Gathering the Winds",
+          "name_cn": "聚风蓄力",
+          "cost": "Anemo3",
+          "effect": "本角色附属聚风屏障并准备技能：逆风奉还拳。",
+          "effect_en": "This character gains a Stormwind Barrier. Prepare Skill: Avenging Squall."
+        },
+        "Q": {
+          "name": "Galeforce Agitation",
+          "name_cn": "激风鼓动",
+          "cost": "Anemo3+Energy2",
+          "effect": "造成3点风元素伤害，其他我方「愚人众」角色获得1点充能。",
+          "effect_en": "Deals 3 Anemo DMG. All of your other Fatui characters gain 1 Energy.",
+          "damage": 3,
+          "damage_element": "anemo"
+        }
+      },
+      "extra_skills": [
+        {
+          "name": "Avenging Squall",
+          "name_cn": "逆风奉还拳",
+          "cost": "-",
+          "effect": "（需准备1个行动轮）\n造成2点物理伤害。",
+          "effect_en": "(Prepare for 1 turn)\nDeals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        }
+      ],
+      "passive": null,
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "skill:E",
+          "name": "聚风屏障",
+          "name_en": "Stormwind Barrier",
+          "effect": "本角色将在下次行动时，直接使用技能：逆风奉还拳。\n准备逆风奉还拳期间：提供2点护盾，保护所附属角色；如果所附属角色受到了水/火/冰/雷元素伤害，就使所准备的逆风奉还拳造成的伤害+1，并且转换为对应的元素类型。",
+          "effect_en": "The next time this character acts, they will immediately use the Skill Avenging Squall.\nWhile preparing this Skill: Grant the character to which this is attached 2 Shield points. Meanwhile, if the character takes Hydro/Pyro/Cryo/Electro DMG, Avenging Squall will deal +1 DMG and its DMG type will be converted to the corresponding Element as well.",
+          "source": "genshin-db tcgstatuseffects/stormwindbarrier"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/fatuiskirmisheranemoboxervanguard",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/fatuiskirmisheranemoboxervanguard.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "fatuiskirmisherhydrogunnerlegionnaire",
+      "name": "愚人众先遣队·水铳重卫士",
+      "en": "Fatui Skirmisher - Hydrogunner Legionnaire",
+      "aliases": [
+        "愚人众先遣队·水铳重卫士",
+        "愚人众·水铳游击兵"
+      ],
+      "element": "hydro",
+      "hp_card": 12,
+      "energy": 3,
+      "weapon": "Other weapons",
+      "camp": [
+        "fatui"
+      ],
+      "appears_in": [
+        "irontonguetian"
+      ],
+      "skills": {
+        "A": {
+          "name": "Skilled Charge",
+          "name_cn": "战术冲撞",
+          "cost": "Hydro1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Curative Bullet",
+          "name_cn": "疗愈弹",
+          "cost": "Hydro3",
+          "effect": "造成2点水元素伤害，治疗2个我方后台角色1点。",
+          "effect_en": "Deals 2 Hydro DMG, heals 2 of friendly characters on standby for 1 HP.",
+          "damage": 2,
+          "damage_element": "hydro"
+        },
+        "Q": {
+          "name": "Elemental Buff: Hydro",
+          "name_cn": "元素增幅·水",
+          "cost": "Hydro3+Energy3",
+          "effect": "造成3点水元素伤害，本角色附属元素武装·水。",
+          "effect_en": "Deals 3 Hydro DMG. This character gains Hydro Elemental Equipment.",
+          "damage": 3,
+          "damage_element": "hydro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Combat Resupply（战备补给）",
+        "name_cn": "战备补给",
+        "name_en": "Combat Resupply",
+        "effect": "【被动】战斗开始时，本角色获得2点充能。",
+        "effect_en": "(Passive) When the battle begins, this character gains 2 Energy."
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "skill:Q",
+          "name": "元素武装·水",
+          "name_en": "Hydro Elemental Equipment",
+          "effect": "所附属角色所受伤害-1，造成的治疗+1。\n此状态会提供2次水元素附着（可被元素反应消耗），耗尽后移除此状态，并使所附属角色直到本回合结束前无法使用技能。",
+          "effect_en": "The character to which this is attached takes -1 DMG and deals +1 Healing.\nThis status will provide 2 instances of Hydro Application (Can be depleted using Elemental Reactions): Once the instances are depleted, this status will be removed, and the character to which this is attached will be unable to use Skills until the end of this Round.",
+          "source": "genshin-db tcgstatuseffects/hydroelementalequipment"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/fatuiskirmisherhydrogunnerlegionnaire",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/fatuiskirmisherhydrogunnerlegionnaire.json"
+        }
+      ],
+      "cross_check": null,
+      "confidence": "high (game data)"
+    },
+    {
+      "id": "fatuipyroagent",
+      "name": "愚人众·火之债务处理人",
+      "en": "Fatui Pyro Agent",
+      "aliases": [
+        "愚人众·火之债务处理人"
+      ],
+      "element": "pyro",
+      "hp_card": 13,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "fatui"
+      ],
+      "appears_in": [
+        "liusu",
+        "irontonguetian",
+        "chefmao"
+      ],
+      "skills": {
+        "A": {
+          "name": "Thrust",
+          "name_cn": "突刺",
+          "cost": "Pyro1+Unaligned2",
+          "effect": "造成2点物理伤害。",
+          "effect_en": "Deals 2 Physical DMG.",
+          "damage": 2,
+          "damage_element": "physical"
+        },
+        "E": {
+          "name": "Prowl",
+          "name_cn": "伺机而动",
+          "cost": "Pyro3",
+          "effect": "造成1点火元素伤害，本角色附属潜行。",
+          "effect_en": "Deals 1 Pyro DMG. This character gains Stealth.",
+          "damage": 1,
+          "damage_element": "pyro"
+        },
+        "Q": {
+          "name": "Blade Ablaze",
+          "name_cn": "焚毁之锋",
+          "cost": "Pyro3+Energy2",
+          "effect": "造成5点火元素伤害。",
+          "effect_en": "Deals 5 Pyro DMG.",
+          "damage": 5,
+          "damage_element": "pyro"
+        }
+      },
+      "extra_skills": [],
+      "passive": {
+        "name": "Stealth Master（潜行大师）",
+        "name_cn": "潜行大师",
+        "name_en": "Stealth Master",
+        "effect": "【被动】战斗开始时，初始附属潜行。",
+        "effect_en": "(Passive) When the battle begins, this character gains Stealth.",
+        "detail_effect": "所附属角色受到的伤害-1，造成的伤害+1。\n可用次数：2",
+        "detail_effect_en": "The character to which this is attached takes -1 DMG and deals +1 DMG.\nUsage(s): 2"
+      },
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "passive",
+          "name": "潜行",
+          "name_en": "Stealth",
+          "effect": "所附属角色受到的伤害-1，造成的伤害+1。\n可用次数：2",
+          "effect_en": "The character to which this is attached takes -1 DMG and deals +1 DMG.\nUsage(s): 2",
+          "source": "genshin-db tcgstatuseffects/stealth"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/fatuipyroagent",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/fatuipyroagent.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/37644"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/37644"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "mirrormaiden",
+      "name": "愚人众·藏镜仕女",
+      "en": "Mirror Maiden",
+      "aliases": [
+        "愚人众·藏镜仕女",
+        "藏镜仕女"
+      ],
+      "element": "hydro",
+      "hp_card": 12,
+      "energy": 2,
+      "weapon": "Other weapons",
+      "camp": [
+        "fatui"
+      ],
+      "appears_in": [
+        "chefmao"
+      ],
+      "skills": {
+        "A": {
+          "name": "Water Ball",
+          "name_cn": "水弹",
+          "cost": "Hydro1+Unaligned2",
+          "effect": "造成1点水元素伤害。",
+          "effect_en": "Deals 1 Hydro DMG.",
+          "damage": 1,
+          "damage_element": "hydro"
+        },
+        "E": {
+          "name": "Influx Blast",
+          "name_cn": "潋波绽破",
+          "cost": "Hydro3",
+          "effect": "造成3点水元素伤害，目标角色附属水光破镜。",
+          "effect_en": "Deals 3 Hydro DMG. The target character receives Refraction.",
+          "damage": 3,
+          "damage_element": "hydro"
+        },
+        "Q": {
+          "name": "Rippled Reflection",
+          "name_cn": "粼镜折光",
+          "cost": "Hydro3+Energy2",
+          "effect": "造成5点水元素伤害。",
+          "effect_en": "Deals 5 Hydro DMG.",
+          "damage": 5,
+          "damage_element": "hydro"
+        }
+      },
+      "extra_skills": [],
+      "passive": null,
+      "referenced_effects": [
+        {
+          "kind": "status",
+          "linked_to": "skill:E",
+          "name": "水光破镜",
+          "name_en": "Refraction",
+          "effect": "所附属角色切换到其他角色时：需要多花费1个元素骰。\n持续回合：2\n（同一方场上最多存在一个此状态）",
+          "effect_en": "When the character to which this card is attached switches to another character: Elemental Dice Cost +1.\nDuration (Rounds): 2\n(Only one such status can be applied on the same side at a time)",
+          "source": "genshin-db tcgstatuseffects/refraction"
+        }
+      ],
+      "sources": [
+        {
+          "type": "game_data",
+          "ref": "genshin-db main: tcgenemycards/mirrormaiden",
+          "url": "https://cdn.jsdelivr.net/gh/theBowja/genshin-db@main/src/data/English/tcgenemycards/mirrormaiden.json"
+        },
+        {
+          "type": "gamewith",
+          "url": "https://gamewith.net/genshin-impact/article/show/37647"
+        }
+      ],
+      "cross_check": {
+        "checked": true,
+        "source": "gamewith",
+        "url": "https://gamewith.net/genshin-impact/article/show/37647"
+      },
+      "confidence": "high"
+    }
+  ]
+}

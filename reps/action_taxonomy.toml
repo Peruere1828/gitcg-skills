@@ -1,0 +1,148 @@
+# Human-reviewable hierarchical action taxonomy.
+# Only `active_taxonomy` is consumed at runtime. The other taxonomy blocks are
+# kept here so category names/boundaries can be reviewed and revised later
+# without changing the main code structure.
+
+active_taxonomy = "mixed_v1"
+
+[intent_v1.ACTION]
+categories = [
+  "chip_frontline_hp",
+  "chip_backline_hp",
+  "force_frontline_lethal",
+  "fortify_frontline",
+  "fortify_team",
+  "switch_character",
+  "cycle_for_cards",
+  "yield_initiative",
+  "burst_setup",
+  "invest_tech",
+  "invest_delayed_damage",
+  "invest_engine_card",
+  "elemental_tuning",
+  "other_action",
+]
+
+[intent_v1.REROLL_DICE]
+categories = [
+  "keep_all",
+  "keep_active_and_two_backline",
+  "keep_active_and_one_backline",
+  "keep_active_only",
+  "keep_two_backline",
+  "keep_one_backline",
+  "reroll_active_and_two_backline",
+  "reroll_active_and_one_backline",
+  "reroll_active_only",
+  "reroll_two_backline",
+  "reroll_one_backline",
+]
+
+[intent_v1.CHOOSE_ACTIVE]
+categories = [
+  "choose_attack",
+  "choose_defense",
+  "choose_heal",
+  "choose_absorb",
+  "choose_support",
+  "choose_other",
+]
+
+[intent_v1.SELECT_CARD]
+categories = [
+  "select_resource",
+  "select_draw_search",
+  "select_defense_heal",
+  "select_buff_equip",
+  "select_board_setup",
+  "select_engine_card",
+  "select_damage_pressure",
+  "select_core",
+  "select_other",
+]
+
+[intent_v1.SWITCH_HANDS]
+categories = [
+  "switch_keep_all",
+  "switch_resource",
+  "switch_draw_search",
+  "switch_defense_heal",
+  "switch_buff_equip",
+  "switch_board_setup",
+  "switch_engine_card",
+  "switch_damage_pressure",
+  "switch_core",
+  "switch_mixed",
+  "switch_other",
+]
+
+[mixed_v1.ACTION]
+categories = [
+  "chip_frontline_hp",
+  "chip_backline_hp",
+  "force_frontline_lethal",
+  "fortify_frontline",
+  "fortify_team",
+  "switch_character",
+  "cycle_for_cards",
+  "yield_initiative",
+  "burst_setup",
+  "invest_tech",
+  "invest_delayed_damage",
+  "invest_engine_card",
+  "elemental_tuning",
+  "other_action",
+]
+
+[mixed_v1.REROLL_DICE]
+categories = [
+  "keep_all",
+  "keep_active_and_two_backline",
+  "keep_active_and_one_backline",
+  "keep_active_only",
+  "keep_two_backline",
+  "keep_one_backline",
+  "reroll_active_and_two_backline",
+  "reroll_active_and_one_backline",
+  "reroll_active_only",
+  "reroll_two_backline",
+  "reroll_one_backline",
+]
+
+[mixed_v1.CHOOSE_ACTIVE]
+categories = [
+  "choose_attack",
+  "choose_defense",
+  "choose_heal",
+  "choose_absorb",
+  "choose_support",
+  "choose_other",
+]
+
+[mixed_v1.SELECT_CARD]
+categories = [
+  "select_resource",
+  "select_draw_search",
+  "select_defense_heal",
+  "select_buff_equip",
+  "select_board_setup",
+  "select_engine_card",
+  "select_damage_pressure",
+  "select_core",
+  "select_other",
+]
+
+[mixed_v1.SWITCH_HANDS]
+categories = [
+  "switch_keep_all",
+  "switch_resource",
+  "switch_draw_search",
+  "switch_defense_heal",
+  "switch_buff_equip",
+  "switch_board_setup",
+  "switch_engine_card",
+  "switch_damage_pressure",
+  "switch_core",
+  "switch_mixed",
+  "switch_other",
+]
