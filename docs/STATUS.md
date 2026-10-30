@@ -117,6 +117,9 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 
 ## 4. LLM 接入（2026-10-30 实测）
 
+**思考档位分工（D8 细化）**：对局决策 `effort=low`（每局 20–30 次调用，8–36 s/次）；
+技能提取/反思 `effort=high` + `max_tokens=8192`（每轮只跑一次，值得用贵档）。
+
 | 项 | 值 |
 |---|---|
 | 端点 | `https://opencode.ai/inference/go/openai/v1`（OpenAI 兼容） |
