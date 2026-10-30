@@ -63,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         display=stage.display or stage.name,
         objectives=tuple(obj.text for obj in stage.objectives),
         deck=args.deck,
+        objective_types=tuple(obj.type for obj in stage.objectives),
     )
     contestant = deck_spec(args.deck)
     if args.pvp_opponent:

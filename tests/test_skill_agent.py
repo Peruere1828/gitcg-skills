@@ -8,7 +8,7 @@ from reps.schema import DecisionContext, DecisionType, LowLevelActionSpec, Optio
 from skillloop.agent import AgentConfig, SkillAgentPolicy, parse_choice
 from skillloop.library import SkillLibrary
 from skillloop.render import StateRenderer, TaskSpec
-from skillloop.schema import Skill
+from skillloop.schema import Skill, SkillConditions
 
 
 # -- fakes -------------------------------------------------------------------
@@ -165,3 +165,32 @@ def test_call_budget_is_enforced():
     agent.choose(_built(3))
     agent.choose(_built(3))
     assert len(client.calls) == 1
+
+
+def test_retrieval_matches_machine_objective_types_not_prompt_text():
+    lib = SkillLibrary.from_skills([
+        Skill(
+            skill_id="speed",
+            skill_name="速攻别拖",
+            description="速攻关卡不要拖到后期",
+            conditions=SkillConditions(objective_types=("win_within_rounds",)),
+            layer="strategy",
+        )
+    ])
+    client = _FakeClient('{"choice": 0}')
+
+    def agent_for(types):
+        task = TaskSpec(stage="wagner", display="瓦格纳", objectives=("5回合内胜利",),
+                        deck="x", objective_types=types)
+        return SkillAgentPolicy(_Base(), client, renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+                                task=task, library=lib, config=AgentConfig(top_k=3))
+
+    agent_for(("win_within_rounds",)).choose(_built(3))
+    assert "speed" in client.calls[0][0]["content"]
+
+    other = _FakeClient('{"choice": 0}')
+    task = TaskSpec(stage="wagner", display="瓦格纳", objectives=("赢得胜利",), deck="x",
+                    objective_types=("win",))
+    SkillAgentPolicy(_Base(), other, renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+                     task=task, library=lib, config=AgentConfig(top_k=3)).choose(_built(3))
+    assert "speed" not in other.calls[0][0]["content"]

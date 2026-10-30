@@ -99,6 +99,7 @@ def task_spec(stage: NpcStage, deck: str) -> TaskSpec:
         display=stage.display or stage.name,
         objectives=tuple(obj.text for obj in stage.objectives),
         deck=deck,
+        objective_types=tuple(obj.type for obj in stage.objectives),
     )
 
 

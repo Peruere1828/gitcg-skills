@@ -51,8 +51,9 @@ class TaskSpec:
 
     stage: str
     display: str
-    objectives: tuple[str, ...]
+    objectives: tuple[str, ...]          # human-readable objective texts (prompt)
     deck: str
+    objective_types: tuple[str, ...] = ()  # machine types (retrieval conditions)
 
     def describe(self) -> str:
         goals = "；".join(self.objectives) if self.objectives else "赢得胜利"

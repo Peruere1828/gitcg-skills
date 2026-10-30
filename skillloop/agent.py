@@ -134,7 +134,8 @@ class SkillAgentPolicy:
 
     def _context_dict(self, context: Any) -> dict[str, Any]:
         stage = self.task.stage
-        objectives = tuple(self.task.objectives)
+        # retrieval matches machine types (``win_within_rounds``), not the prompt text
+        objectives = tuple(self.task.objective_types) or tuple(self.task.objectives)
         round_number = None
         if context.player_view is not None:
             round_number = int(context.player_view.round_number)
