@@ -22,7 +22,18 @@
 - 待办：增量重链 `libgitcg.so` → 装进 `gitcg-skill` → 用 `contestant` 跑 24 seeds → 重标
   `win_within_rounds`（P70）→ 记录新基线。
 
-## 3. 基线（10 seeds × 16 关 = 160 局）
+## 3. 基线（10 seeds × 16 关 = 160 局；**阈值统一 5**、LLM 思考模式 low）
+
+| 组 | 三星率 | 胜率 | 说明 |
+|---|---|---|---|
+| scripted | **0.3812** | 0.944 | 纯脚本 |
+| contestant | **0.4062** | 0.950 | 手写目标注入（仅 irontonguetian/liusu +0.20） |
+
+> 阈值改回 5 后（D7），两组都明显下降，`blanche`/`timaeus`/`uncletian`/`wagner` 归零 ——
+> 回合与目标两项都要"主动争取"，正是技能库要解决的问题。旧标定结果（P70=6–9）留档在
+> `reports/calibration/thresholds.json`，仅作难度画像。
+
+## 3.0 早期基线（**已废弃**：阈值按 P70 放宽到 6–9 时的数字，留作对照）
 
 | 组 | 策略 | 三星率 | 胜率 | 备注 |
 |---|---|---|---|---|

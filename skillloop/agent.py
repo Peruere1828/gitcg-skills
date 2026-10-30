@@ -32,12 +32,15 @@ from skillloop.schema import Skill
 @dataclass(frozen=True)
 class AgentConfig:
     model: str | None = None            # None -> whatever the client/config says
-    max_tokens: int = 48                # output is JSON only; output tokens are 200x input
+    # JSON-only output, but hidden reasoning is billed as completion tokens: with the
+    # provider's thinking mode on ("effort: low"), 48 tokens truncates to an empty
+    # string, so the budget must cover reasoning + the tiny JSON answer.
+    max_tokens: int = 4096
     temperature: float = 0.0            # determinism is what makes paired seeds valid
     max_calls_per_game: int = 80
     request_types: tuple[str, ...] = ("action", "switch_hands", "choose_active")
     candidate_cap: int = 16
-    top_k: int = 3                      # skill retrieval depth (the course's "Top-k" factor)
+    top_k: int = 5                      # skill retrieval depth (the course's "Top-k" factor)
 
 
 @dataclass

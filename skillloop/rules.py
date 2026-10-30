@@ -47,6 +47,32 @@ GLOBAL_RULES: tuple[tuple[str, str, str], ...] = (
      "每轮开始抽 2 张牌；手牌上限为 10 张，超出会弃牌。手牌少时优先考虑过牌手段。"),
 )
 
+# Hand-written **simple card-playing strategies** (the static arm is "rules + simple
+# strategy", per the course brief). Deliberately generic: no learned data, no stage
+# tuning -- that is what the dynamic arm adds on top.
+SIMPLE_STRATEGY: tuple[tuple[str, str, str], ...] = (
+    ("strat_dice_economy", "骰子经济",
+     "每轮先用最少的骰子完成本轮目标：优先支付关键技能/卡牌，避免为了低价值动作花掉最后一个骰子；同色骰不足时优先元素调和而不是放弃关键动作。"),
+    ("strat_mulligan", "起手保留低费与目标相关牌",
+     "起手换牌保留 1-2 费的技能/事件/装备牌；换掉当前用不上的高费牌；若关卡目标是装备或事件牌，优先保留对应类别的牌。"),
+    ("strat_focus_fire", "集火残血角色",
+     "优先攻击对方血量最低的角色以尽快减少对方行动数；对方有护盾/免疫时先用低费手段消耗或绕开，再打伤害。"),
+    ("strat_reaction", "先附着再补元素",
+     "需要触发元素反应时，先给目标附着一种元素，再用另一种元素攻击；注意不要给已附着同元素的角色重复附着，避免浪费一次行动。"),
+    ("strat_burst_timing", "爆发留给斩杀窗口",
+     "元素爆发伤害最高但需要能量与骰子：能量满后先确认对方角色血量是否进入斩杀线，不是斩杀窗口时优先用普通技能创造窗口。"),
+    ("strat_switch_cost", "换人只在必要时",
+     "主动换人花费 1 个骰子，只在能规避被击倒或收掉残血人头时使用；被击倒时的强制换人不花骰子，不要提前浪费主动换人。"),
+    ("strat_end_round", "没收益就结束回合",
+     "当本轮已无收益动作（无法击杀、无法完成目标、没有需要保留的骰子）时，尽早宣布结束回合抢下一轮先手；但关卡目标未完成时不要提前结束。"),
+    ("strat_equipment_timing", "装备前两轮打",
+     "装备牌只有在前两轮打出才有回本空间；后期为了完成装备目标时可以打，但不要因此放弃当回合的击杀机会。"),
+    ("strat_protect_low_hp", "低血量角色保护",
+     "出战角色血量偏低时优先治疗、换下或用减伤手段，而不是继续对拼；一次阵亡的节奏损失远大于一次换人。"),
+    ("strat_card_draw", "手牌少时优先过牌",
+     "手牌 ≤2 张时优先使用过牌/抽牌手段补充资源；手牌接近上限（10 张）时先打掉会溢出的牌，避免弃牌。"),
+)
+
 # Objective type -> the rule that explains what the objective is asking for.
 OBJECTIVE_RULES: dict[str, tuple[str, str]] = {
     "win": ("规则_目标_胜利", "目标「赢得胜利」：把对方所有角色击倒。"),
@@ -83,7 +109,12 @@ class RuleLibraryOptions:
     include_globals: bool = True
 
 
-def rule_skills(objective_types: Iterable[str] = (), *, include_globals: bool = True) -> list[Skill]:
+def rule_skills(
+    objective_types: Iterable[str] = (),
+    *,
+    include_globals: bool = True,
+    include_strategy: bool = True,
+) -> list[Skill]:
     """Rules layer as ``Skill`` objects (``layer="rule"``, no evidence required)."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     skills: list[Skill] = []
@@ -96,6 +127,19 @@ def rule_skills(objective_types: Iterable[str] = (), *, include_globals: bool = 
                     description=text,
                     conditions=SkillConditions(),
                     layer="rule",
+                    created_at=stamp,
+                    updated_at=stamp,
+                )
+            )
+    if include_strategy:
+        for skill_id, name, text in SIMPLE_STRATEGY:
+            skills.append(
+                Skill(
+                    skill_id=skill_id,
+                    skill_name=name,
+                    description=text,
+                    conditions=SkillConditions(),
+                    layer="strategy",
                     created_at=stamp,
                     updated_at=stamp,
                 )
@@ -119,9 +163,14 @@ def rule_skills(objective_types: Iterable[str] = (), *, include_globals: bool = 
     return skills
 
 
-def build_rules_library(objective_types: Iterable[str] = (), *, version: int = 1) -> SkillLibrary:
-    """Group ②'s library: rules only, no strategy, no learned evidence."""
-    skills = rule_skills(objective_types)
+def build_rules_library(
+    objective_types: Iterable[str] = (),
+    *,
+    version: int = 1,
+    include_strategy: bool = True,
+) -> SkillLibrary:
+    """Group ②'s library: game rules + hand-written simple strategy (no learned content)."""
+    skills = rule_skills(objective_types, include_strategy=include_strategy)
     return SkillLibrary.from_skills(
         skills,
         version=version,

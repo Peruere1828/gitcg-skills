@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     for index in range(args.repeats):
         started = time.perf_counter()
-        raw = client.chat(messages, max_tokens=48, temperature=0.0,
+        raw = client.chat(messages, max_tokens=1024, temperature=0.0,
                           response_format_json=True, model=args.model)
         elapsed = time.perf_counter() - started
         text = redact(raw or "")

@@ -54,7 +54,7 @@ class RunSpec:
     deck: str
     workers: int = 1
     library_root: str | None = None
-    top_k: int = 3
+    top_k: int = 5
     model: str | None = None
     max_calls: int = 80
     rotation: str | None = None
@@ -314,7 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deck", default="superconduct_aggro")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--library", default=None, help="skill library directory (static/dynamic)")
-    parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-calls", type=int, default=80)
     parser.add_argument("--rotation", default=None)
