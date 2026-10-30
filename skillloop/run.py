@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import multiprocessing as mp
 import os
 import sys
 import time
@@ -245,7 +246,11 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
                 if progress:
                     _print_row(row)
         else:
-            with ProcessPoolExecutor(max_workers=spec.workers) as pool:
+            # ``spawn`` (not fork): the parent has already imported the engine, and
+            # forking a process with a live V8 isolate deadlocks the child on its first
+            # engine call. Spawn costs ~2 s per worker and is safe.
+            context = mp.get_context("spawn")
+            with ProcessPoolExecutor(max_workers=spec.workers, mp_context=context) as pool:
                 futures = {pool.submit(play_one, item): item for item in pending}
                 for future in as_completed(futures):
                     row = future.result()

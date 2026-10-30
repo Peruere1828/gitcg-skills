@@ -67,6 +67,18 @@
 仍为 0% 的 3 关（`wagner`/`timaeus`/`uncletian`）失分点不是回合数，而是
 `play_equipment_card` / `play_event_cards` —— 这正是技能库要补的**策略**缺口（不是阈值问题）。
 
+## 3.2 标定后 10-seed 复测（新任务集）
+
+| 组 | 三星率 | 说明 |
+|---|---|---|
+| scripted | **0.5625** | 纯脚本（无目标意识） |
+| contestant | **0.6250** | 手写目标注入；配对 Δ=+0.062，CI [−0.020,+0.145] |
+
+**剩余失分画像（scripted，10 局/关）**：`play_equipment_card` 10/10 失败（timaeus、wagner）、
+`play_event_cards` 10/10（uncletian）、`use_elemental_burst` 3–6/10（blanche、irontonguetian、liusu）、
+`trigger_elemental_reactions` 5/10（shitou），其余主要是 `win_within_rounds`（约 30%）。
+→ 任务集现在**未饱和**（0.56），且失分集中在可被"指令遵循"解决的具体行为上。
+
 ## 4. LLM 接入（2026-10-30 实测）
 
 | 项 | 值 |

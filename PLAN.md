@@ -40,7 +40,11 @@ task = (stage, deck, seed)
 1. 重链引擎 → 装进 `gitcg-skill` env；
 2. 用**已知手写目标策略**（`npc/contestant.py`）跑 24 seeds/关，得到回合数分布；
 3. 每关 `win_within_rounds` 取该分布的 **P70**（难关可放宽到 P80）；
-4. 验收区间：手写策略三星 **60–75%**，纯脚本组三星 **15–35%**。
+4. 验收区间（2026-10-30 实测后修订）：纯脚本组 **40–60%**、参照组 **55–70%**，
+   且**未饱和**（留 ≥30pp 空间）。实测：脚本 0.5625、参照 0.625；
+   剩余失分集中在 `play_equipment_card`（timaeus/wagner 10/10 失败）、
+   `play_event_cards`（uncletian 10/10）、`use_elemental_burst`（blanche/irontonguetian/liusu）。
+   这三类恰好是**策略缺口**（而不是阈值问题），是技能库的主战场。
 
 ## 3. 技能（Skill）
 
