@@ -63,15 +63,33 @@ class TaskSpec:
 class StateRenderer:
     """Compact public-state and candidate rendering (names come from the asset pack)."""
 
-    def __init__(self, assets: Any, *, opponent_name: str = "对手") -> None:
+    def __init__(self, assets: Any, *, opponent_name: str = "对手",
+                 npc_names: dict[int, str] | None = None) -> None:
         self.assets = assets
         self.opponent_name = opponent_name
+        self._npc_names = npc_names
+
+    def _npc_name_map(self) -> dict[int, str]:
+        """Overlay enemies are not in the official asset dump; their names live in
+        ``configs/npc`` (``NpcEnemy.engine_id`` -> name), so fall back to that."""
+        if self._npc_names is None:
+            try:
+                from npc.spec import load_enemies
+
+                self._npc_names = {
+                    int(enemy.engine_id): str(enemy.name)
+                    for enemy in load_enemies().values()
+                    if int(enemy.engine_id or 0)
+                }
+            except Exception:
+                self._npc_names = {}
+        return self._npc_names
 
     def _char(self, definition_id: int) -> str:
         try:
             return str(self.assets.character(int(definition_id)).name)
         except Exception:
-            return f"角色#{definition_id}"
+            return self._npc_name_map().get(int(definition_id)) or f"角色#{definition_id}"
 
     def _card(self, definition_id: int) -> str:
         try:
@@ -117,6 +135,26 @@ class StateRenderer:
         ])
 
     # -- candidates --------------------------------------------------------
+    def _targets_text(self, context: DecisionContext, spec: LowLevelActionSpec) -> str:
+        """Render target slots, mapping character slots to names.
+
+        Equipment/event cards differ only by *which character* they target, so
+        omitting targets makes several candidates look identical to the model.
+        """
+        if not spec.target_slots:
+            return ""
+        state = context.player_view
+        parts: list[str] = []
+        for target in spec.target_slots:
+            side = "我方" if target.owner == "self" else "对方"
+            if state is not None and target.zone in ("character", "combat_status"):
+                player = state.players[context.acting_player if target.owner == "self" else 1 - context.acting_player]
+                if 0 <= target.index < len(player.characters):
+                    parts.append(f"{side}·{self._char(player.characters[target.index].definition_id)}")
+                    continue
+            parts.append(f"{side}:{target.zone}[{target.index}]")
+        return " → " + "，".join(parts)
+
     def describe_candidate(self, context: DecisionContext, spec: LowLevelActionSpec, index: int) -> str:
         kind = spec.kind
         hand = []
@@ -154,7 +192,7 @@ class StateRenderer:
         else:
             dice = ""
         body = f"{_kind_label(kind)}：{subject}" if subject else _kind_label(kind)
-        return f"[{index}] {body}{dice}"
+        return f"[{index}] {body}{self._targets_text(context, spec)}{dice}"
 
     # -- prompt ------------------------------------------------------------
     def system_message(self, *, task: TaskSpec, skills: Sequence[Skill], rules_note: str = "") -> dict[str, str]:

@@ -22,13 +22,18 @@
 - 待办：增量重链 `libgitcg.so` → 装进 `gitcg-skill` → 用 `contestant` 跑 24 seeds → 重标
   `win_within_rounds`（P70）→ 记录新基线。
 
-## 3. 基线（待填）
+## 3. 基线（10 seeds × 16 关 = 160 局）
 
-| 组 | 策略 | 三星率 | 备注 |
-|---|---|---|---|
-| 脚本 | `expert:<deck>` | TBD | 无目标注入 |
-| 参照 | `contestant`（上游手写目标策略） | 上游旧血量 74.7% | 新血量下待测 |
-| LLM 空库 | TBD | TBD | 等 DeepSeek 接入 |
+| 组 | 策略 | 三星率 | 胜率 | 备注 |
+|---|---|---|---|---|
+| 脚本 | `expert:superconduct_aggro` | **0.4125** | ~96% | 无目标注入；新血量下 |
+| 参照 | `contestant` | 运行中 | — | 上游旧血量 74.7% |
+| LLM 空库 | `deepseek-v4.1-flash` | 待跑 | — | 端点已接通（见 §5） |
+
+脚本组逐关（新血量）：`jifang`/`swan` 1.00，`patton`/`lan` 0.90，`timmie`/`buyun` 0.80，
+`shitou` 0.50，`marjorie` 0.40，`ellin` 0.20，`chefmao` 0.10，
+`wagner`/`timaeus`/`liusu`/`irontonguetian`/`uncletian`/`blanche` **0.00**。
+→ 血量补丁只压三星、几乎不影响胜负（胜率仍 ~96%），符合 D4 的预期。
 
 ## 4. 已完成 / 进行中
 
@@ -44,6 +49,21 @@
 进行中：
 - 引擎增量重链（V8 全量首编，`build/engine-build.log`，约 583/1232）。
 - DeepSeek/OpenCode Console 接入探针（子任务），产出 base_url / model / 计费字段。
+
+## 4. LLM 接入（2026-10-30 实测）
+
+| 项 | 值 |
+|---|---|
+| 端点 | `https://opencode.ai/inference/go/openai/v1`（OpenAI 兼容） |
+| 模型 | `deepseek-v4.1-flash`（1M 上下文；本仓库实测 2.6–4.9 s/次） |
+| 认证 | `Authorization: Bearer $SKKEY` + **`x-opencode-session`（必填）** + 自定义 `User-Agent` |
+| 关闭思考 | `reasoning_effort="none"`（否则小 `max_tokens` 返回空串） |
+| 缓存 | 短 prompt（~170 tokens）实测 **0%** 命中；长前缀（>4k）才命中 |
+| 成本 | 3 次真实调用 = **$0.00009**；按 800 局/轮估算 <$5 |
+| 并发 | 128 并发实测全绿；256 起出现 429（有 `Retry-After`） |
+
+`common/llm.py` 已改为：读 `SKKEY`、发 session/UA 头、空内容判失败、429 按 `Retry-After` 重试、
+usage 记录 `cached_tokens` 与 `cost_usd`。探针：`python -m scripts.probe_llm`。
 
 ## 5. 已知风险
 
