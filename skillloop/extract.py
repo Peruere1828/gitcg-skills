@@ -157,10 +157,16 @@ def propose_candidates(
     *,
     model: str | None = None,
     rules_note: str = "",
-    max_tokens: int = 400,
+    max_tokens: int = 8192,
+    effort: str | None = "high",
     min_failure_rate: float = 0.15,
 ) -> list[Skill]:
-    """One LLM call per stage that actually loses stars; returns candidate skills."""
+    """One LLM call per stage that actually loses stars; returns candidate skills.
+
+    Extraction runs **once per evolution round**, not per decision, so it gets the
+    expensive setting (``effort="high"``, 8k output budget) while in-game decisions
+    stay cheap (``effort="low"``). Reflection is where quality compounds.
+    """
     candidates: list[Skill] = []
     for profile in profiles:
         if profile.three_star_rate >= 1.0:
@@ -175,6 +181,7 @@ def propose_candidates(
             max_tokens=max_tokens,
             temperature=0.0,
             model=model,
+            reasoning_effort=effort,
         )
         candidates.extend(parse_skills(raw, stage=profile.stage))
     # de-duplicate while keeping the first occurrence

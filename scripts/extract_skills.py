@@ -45,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="data/skills/dyn_v1")
     ap.add_argument("--model", default=None)
     ap.add_argument("--min-failure-rate", type=float, default=0.15)
+    ap.add_argument("--effort", default="high", help="thinking effort for extraction (default high)")
+    ap.add_argument("--max-tokens", type=int, default=8192)
     ap.add_argument("--dry-run", action="store_true", help="print candidates, do not write")
     args = ap.parse_args(argv)
 
@@ -69,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     candidates = propose_candidates(
         client, profiles, model=args.model, rules_note=rules_note,
         min_failure_rate=args.min_failure_rate,
+        effort=args.effort, max_tokens=args.max_tokens,
     )
     print(f"[extract] {len(profiles)} stage profiles -> {len(candidates)} candidates "
           f"({client.usage.calls} calls, ${client.usage.cost_usd:.4f})")

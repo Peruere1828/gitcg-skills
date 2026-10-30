@@ -174,6 +174,7 @@ class LLMClient:
         temperature: float | None = None,
         response_format_json: bool = False,
         model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> str | None:
         payload: dict[str, Any] = {
             "model": model or self.config.model,
@@ -187,8 +188,9 @@ class LLMClient:
             payload["response_format"] = {"type": "json_object"}
         # OpenCode's DeepSeek spends completion tokens on hidden reasoning; with a
         # small max_tokens that yields an EMPTY content string (not an error).
-        if self.config.reasoning_effort:
-            payload["reasoning_effort"] = self.config.reasoning_effort
+        effort = reasoning_effort if reasoning_effort is not None else self.config.reasoning_effort
+        if effort:
+            payload["reasoning_effort"] = effort
 
         headers = {
             "Content-Type": "application/json",

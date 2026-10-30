@@ -134,3 +134,19 @@ def test_config_reads_skkey_from_env_file(tmp_path, monkeypatch):
     assert config.api_key == "oc_sk_from_file"
     assert config.model == "deepseek-v4.1-flash"
     assert config.reasoning_effort == "none"
+
+
+def test_per_call_reasoning_effort_override(monkeypatch):
+    seen: list = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append(json.loads(request.data.decode()))
+        return _body('{"choice": 0}')
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
+    client = LLMClient(_config(reasoning_effort="low"))
+    client.chat([{"role": "user", "content": "hi"}])
+    client.chat([{"role": "user", "content": "hi"}], reasoning_effort="high", max_tokens=8192)
+    assert seen[0]["reasoning_effort"] == "low"      # config default (in-game)
+    assert seen[1]["reasoning_effort"] == "high"     # extraction override
+    assert seen[1]["max_tokens"] == 8192
