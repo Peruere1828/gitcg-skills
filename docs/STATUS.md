@@ -30,11 +30,20 @@
 | 参照 | `contestant`（上游手写目标策略） | 上游旧血量 74.7% | 新血量下待测 |
 | LLM 空库 | TBD | TBD | 等 DeepSeek 接入 |
 
-## 4. 进行中
+## 4. 已完成 / 进行中
 
-- 引擎增量重链（`build/engine-build.log`）。
+已完成：
+- 仓库快照 + 裁剪 + 文档骨架 + 课程要求入库（首个 commit）。
+- `gitcg-skill` env（gitcg 0.21.0 / numpy / pytest，无 torch）。
+- 血量补丁（19 敌人 / 16 关）+ 审计 `configs/npc/hp_table.json`。
+- `skillloop/` 六个模块：`schema`（技能表示）、`library`（分层检索/激活/版本快照）、
+  `render`（稳定前缀 + 编号候选，真实对局实测 system 211 字符 / user 506 字符）、
+  `agent`（LLM 直选 + 回退 + 逐决策日志）、`gate`（按关配对 t 检验）、`extract`（失败画像 → 候选技能）。
+- 34 个 engine-free 单测全绿；`scripts/probe_render.py` 可在真实对局上检查 prompt。
+
+进行中：
+- 引擎增量重链（V8 全量首编，`build/engine-build.log`，约 583/1232）。
 - DeepSeek/OpenCode Console 接入探针（子任务），产出 base_url / model / 计费字段。
-- `skillloop/` 骨架（library / retrieve / render / agent / gate / extract）。
 
 ## 5. 已知风险
 

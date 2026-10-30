@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 LAYERS = ("rule", "strategy", "stage_specific")
-STATUSES = ("active", "degraded", "retired")
+STATUSES = ("candidate", "active", "degraded", "retired")
 
 
 @dataclass(frozen=True)
