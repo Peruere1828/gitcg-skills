@@ -6,6 +6,8 @@ data/*
 !data/.gitkeep
 !data/deck_corpus/
 !data/deck_corpus/README.md
+!data/skills/
+!data/skills/**
 !data/web/
 !data/web/README.md
 .env

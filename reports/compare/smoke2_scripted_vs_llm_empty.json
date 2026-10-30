@@ -1,0 +1,36 @@
+{
+  "a": {
+    "path": "data/runs/smoke2_scripted.jsonl",
+    "label": "scripted"
+  },
+  "b": {
+    "path": "data/runs/smoke2_llm_empty.jsonl",
+    "label": "llm_empty"
+  },
+  "value": "three_star",
+  "gate": {
+    "mean_delta": 0.0,
+    "ci_low": -6.353,
+    "ci_high": 6.353,
+    "n_stages": 2,
+    "n_pairs": 16,
+    "dropped_pairs": 144,
+    "accept": false,
+    "per_stage": [
+      {
+        "stage": "blanche",
+        "n": 10,
+        "rate_a": 0.2,
+        "rate_b": 0.7,
+        "delta": 0.5
+      },
+      {
+        "stage": "buyun",
+        "n": 6,
+        "rate_a": 0.6667,
+        "rate_b": 0.1667,
+        "delta": -0.5
+      }
+    ]
+  }
+}
