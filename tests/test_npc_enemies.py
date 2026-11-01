@@ -14,6 +14,9 @@ uses the *enemy* lineup.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from gitcg import Game
@@ -31,8 +34,20 @@ BLAZING_AXE_MITACHURL = 3302
 HOARFROST_GREATSHIELD = 131011
 FLOWFIRE_EDGE = 133021
 
-SHOOTER_HP = 3
-MITACHURL_HP = 8
+# Post-D4 engine HP, read from the patch audit instead of hardcoding pre-patch
+# numbers: ``scripts/patch_npc_hp.py`` rewrites this table whenever the
+# difficulty rule (``hp <= 6 -> 6; else hp + 2``) is re-applied.
+_HP_TABLE = json.loads(
+    (Path(__file__).resolve().parents[1] / "configs/npc/hp_table.json").read_text(
+        encoding="utf-8"
+    )
+)
+HP_AFTER = {entry["id"]: int(entry["health_after"]) for entry in _HP_TABLE["enemies"]}
+
+SHOOTER_HP = HP_AFTER["cryohilichurlshooter"]
+ICE_SHIELDWALL_HP = HP_AFTER["iceshieldwallmitachurl"]
+BLAZING_AXE_HP = HP_AFTER["blazingaxemitachurl"]
+CRYO_ABYSS_MAGE_HP = HP_AFTER["cryoabyssmage"]
 
 
 # --------------------------------------------------------------------------- #
@@ -160,8 +175,8 @@ def test_timaeus_characters_present_with_authoritative_stats():
         BLAZING_AXE_MITACHURL,
     }
     assert chars[CRYO_HILICHURL_SHOOTER].max_health == SHOOTER_HP
-    assert chars[ICE_SHIELDWALL_MITACHURL].max_health == MITACHURL_HP
-    assert chars[BLAZING_AXE_MITACHURL].max_health == MITACHURL_HP
+    assert chars[ICE_SHIELDWALL_MITACHURL].max_health == ICE_SHIELDWALL_HP
+    assert chars[BLAZING_AXE_MITACHURL].max_health == BLAZING_AXE_HP
     for char in chars.values():
         assert char.max_energy == 2
 
@@ -352,5 +367,5 @@ def test_cryo_ward_blocks_all_damage_until_depleted():
 
     usages = [u for _, u in trace]
     assert 2 in usages and 1 in usages and None in usages
-    assert all(hp == 4 for hp, u in trace if u is not None), trace
-    assert any(hp < 4 for hp, u in trace if u is None), trace
+    assert all(hp == CRYO_ABYSS_MAGE_HP for hp, u in trace if u is not None), trace
+    assert any(hp < CRYO_ABYSS_MAGE_HP for hp, u in trace if u is None), trace

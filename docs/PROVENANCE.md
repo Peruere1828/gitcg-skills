@@ -27,6 +27,7 @@
 | `engine-overlay/**/characters/*.gts` | 敌人 `health` 按 D4 规则上调（≤6→6，其余 +2） | 难度标定，让三星率有区分度 |
 | `configs/npc/*.json` | `hp_card` / `lineup[].hp` 同步；`swan` 补目标；`shitou` 修 `win_within_rounds(44)` | 数据一致性 + 任务可判定 |
 | 删除 | `train/`、`kaggle/`、`scripts/` 训练相关脚本、搜索/分叉模块 | 交付物只保留课程项目需要的部分 |
+| 删除 | 26 个上游遗留测试模块 + `tests/test_belief_root.py` 中 7 个 fork-search 用例 | 这些测试只覆盖已删除的 `train/`、`envs/fork_*`、`envs/cfr_search`、`scripts/*`；留着会让 `pytest -m "not slow"` 收集失败 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 

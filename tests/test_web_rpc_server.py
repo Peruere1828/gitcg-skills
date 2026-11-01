@@ -945,7 +945,11 @@ def test_choose_deck_returns_counter_pick():
         assert status == 200
         assert pick["session"] == "g1"
         assert pick["method"] in {"matrix-proxy", "matrix-strength", "decklab-rule"}
-        assert pick["policy"] == f"expert:{pick['slug']}"
+        if pick["method"] == "decklab-rule":
+            # 没有 reports/arena 矩阵时的 decklab 兜底牌组没有配套脚本 → heuristic。
+            assert pick["policy"] == "heuristic"
+        else:
+            assert pick["policy"] == f"expert:{pick['slug']}"
         assert pick["policy_applied"] is True  # base 是 expert:* → 会按牌组改派
         assert pick["reason"]
         # 反选结果记进会话，供 /session 校验（优先于 --ai-deck）

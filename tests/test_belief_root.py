@@ -1,25 +1,19 @@
-"""M3-CPU S-A: public-belief rooting for fork search (PLAN.md §4.3, gaps G1+G3).
+"""M3-CPU S-A: public-belief rooting (PLAN.md §4.3, gaps G1+G3).
 
-The practical resolver forked the *live* boundary snapshot, whose hidden state is
-the single true determinization (charter §5.2 violation). These tests pin the
+The old resolver forked the *live* boundary snapshot, whose hidden state is the
+single true determinization (charter §5.2 violation). These tests pin the
 replacement: roots are built from the player-masked public state + a sampled
 particle, and are **invariant to the scaffold's hidden truth**.
 
-Two layers:
-
-* fast, engine-free tests on hand-built ``store``/``$`` state JSON: the patcher
-  rewrites hidden zones and inline dice, public ranges depend only on public
-  fields, and reconstruction is byte-identical for two scaffolds that share a
-  public view but differ in hidden truth.
-* slow engine tests: determinized roots load/fork/play out, and a belief-rooted
-  search match runs clean with the expected number of roots per decision.
+Engine-free tests on hand-built ``store``/``$`` state JSON: the patcher rewrites
+hidden zones and inline dice, public ranges depend only on public fields, and
+reconstruction is byte-identical for two scaffolds that share a public view but
+differ in hidden truth.
 """
 
 from __future__ import annotations
 
 import json
-
-import pytest
 
 from reps.belief import (
     _StatePatcher,
@@ -29,8 +23,6 @@ from reps.belief import (
 )
 from reps.public_state import mask_state_for_player
 from reps.snapshot import snapshot_state
-
-DECK_A, DECK_B = "superconduct_aggro", "natlan_battleship"
 
 
 # --------------------------------------------------------------------------- #
@@ -229,238 +221,3 @@ def test_state_patcher_inline_dice_fallback():
     owner = {"dice": [1, 2, 3]}
     patcher.patch_primitive_zone(owner, "dice", (7, 7))
     assert owner["dice"] == [7, 7]
-
-
-# --------------------------------------------------------------------------- #
-# fork-search integration (fast, no engine)
-# --------------------------------------------------------------------------- #
-def test_belief_roots_for_empty_decklist_falls_back_to_live_snapshot():
-    from envs.fork_search import SearchContext
-
-    context = SearchContext(
-        bridge=None,
-        game_attrs={},
-        rollout_specs=(None, None),
-        base_seed=0,
-        belief_root=True,
-        deck_cards=((), ()),
-    )
-    assert context.belief_roots_for(snapshot="SNAPSHOT", acting_player=0) == ["SNAPSHOT"]
-
-
-def test_observe_public_record_tracks_opponent_reveals():
-    from envs.fork_search import _observe_public_record
-    from reps.public_state import PublicStateTracker
-    from reps.schema import DecisionType, OptionKind
-
-    class _Spec:
-        request_type = DecisionType.ACTION
-        kind = OptionKind.ACTION_PLAY_CARD
-        subject_definition_id = 42
-        select_card_definition_id = 0
-        discarded_card_definition_id = 0
-        target_slots = ()
-        used_dice = (1, 2)
-        auto_selected_dice = ()
-        choose_active_slot = 0
-        switch_hand_slot_mask = 0
-        reroll_dice_mask = 0
-        discarded_hand_slot = 0
-        target_dice = 0
-
-    class _Context:
-        legal_low_level_codes = (7,)
-        legal_low_level_specs = (_Spec(),)
-        request_type = DecisionType.ACTION
-        player_view = None
-
-    class _Built:
-        context = _Context()
-
-    tracker = PublicStateTracker(player_id=0)
-    _observe_public_record(tracker, player=1, built=_Built(), code=7)
-    assert tracker.revealed_opponent_card_definition_ids() == (42,)
-    # The acting player's own plays are not counted as opponent reveals.
-    _observe_public_record(tracker, player=0, built=_Built(), code=7)
-    assert tracker.revealed_opponent_card_definition_ids() == (42,)
-
-
-def test_observe_public_record_marks_own_decision_payload_known():
-    from envs.fork_search import _observe_public_record
-    from reps.public_state import PublicStateTracker
-    from reps.schema import DecisionType
-
-    class _Context:
-        legal_low_level_codes = ()
-        legal_low_level_specs = ()
-        request_type = DecisionType.REROLL_DICE  # hidden by request type
-        player_view = None
-
-    class _Built:
-        context = _Context()
-
-    own = PublicStateTracker(player_id=0)
-    other = PublicStateTracker(player_id=1)
-    _observe_public_record(own, player=0, built=_Built(), code=0)
-    _observe_public_record(other, player=0, built=_Built(), code=0)
-    assert own.public_history()[-1].known_payload is True   # own decision
-    assert other.public_history()[-1].known_payload is False  # hidden reroll
-
-
-def test_observe_public_record_spec_less_uses_code_lookup(monkeypatch):
-    import reps.action_hierarchy as action_hierarchy
-
-    from envs.fork_search import _observe_public_record
-    from reps.public_state import PublicStateTracker
-    from reps.schema import DecisionType
-
-    monkeypatch.setattr(
-        action_hierarchy, "try_semantic_action_key_for_code",
-        lambda code: (("card_definition_id", 77),),
-    )
-    monkeypatch.setattr(action_hierarchy, "try_public_spent_dice_for_code", lambda code: 3)
-
-    class _Context:
-        legal_low_level_codes = ()
-        legal_low_level_specs = ()
-        request_type = DecisionType.ACTION
-        player_view = None
-
-    class _Built:
-        context = _Context()
-
-    tracker = PublicStateTracker(player_id=0)
-    _observe_public_record(tracker, player=1, built=_Built(), code=5)
-    record = tracker.public_history()[-1]
-    # No matching spec -> fall back to the canonical code lookup (as observe_step does).
-    assert dict(record.semantic_key)["card_definition_id"] == 77
-    assert record.used_dice_count == 3
-    assert tracker.revealed_opponent_card_definition_ids() == (77,)
-
-
-# --------------------------------------------------------------------------- #
-# slow engine tests
-# --------------------------------------------------------------------------- #
-@pytest.fixture(scope="module")
-def live_boundary():
-    from common.seeding import derive_seed
-    from envs.decks import deck_spec
-    from envs.match import PolicyPlayer, _build_create_param
-    from envs.policy import expert_policy
-    from envs.snapshot import capture_snapshot
-    from gitcg import Game, low_level
-
-    seed = 3
-    game = Game(create_param=_build_create_param(deck_spec(DECK_A), deck_spec(DECK_B), seed=seed))
-    game.set_attr(low_level.ATTR_PLAYER_ALWAYS_OMNI_0, 1)
-    game.set_attr(low_level.ATTR_PLAYER_ALWAYS_OMNI_1, 1)
-    game.set_player(0, PolicyPlayer(0, expert_policy(DECK_A, seed=derive_seed(seed, "p0"))))
-    game.set_player(1, PolicyPlayer(1, expert_policy(DECK_B, seed=derive_seed(seed, "p1"))))
-    game.start()
-    snap = None
-    for steps in range(120):
-        if game.is_resumable() and steps > 45:
-            snap = capture_snapshot(game)
-            break
-        game.step()
-    assert snap is not None
-    return snap
-
-
-@pytest.mark.slow
-def test_determinized_roots_fork_and_play_out(live_boundary):
-    from envs.decks import deck_spec
-    from envs.fork_bridge import ForkTask, run_fork_task
-    from gitcg import low_level
-
-    game_attrs = {
-        low_level.ATTR_PLAYER_ALWAYS_OMNI_0: 1,
-        low_level.ATTR_PLAYER_ALWAYS_OMNI_1: 1,
-    }
-    roots = sample_belief_roots(
-        live_boundary, root_player=0, opponent_deck_cards=deck_spec(DECK_B).cards, samples=2
-    )
-    for index, root in enumerate(roots):
-        task = ForkTask(
-            index=index,
-            snapshot=root,
-            game_attrs=game_attrs,
-            deck0=DECK_A,
-            deck1=DECK_B,
-            prefix0=(),
-            prefix1=(),
-            inject_player=0,
-            inject_ordinal=1,
-            inject_option=0,
-            rollout0=f"expert:{DECK_A}",
-            rollout1=f"expert:{DECK_B}",
-            rollout_seed=1000 + index,
-            max_steps=5000,
-        )
-        result = run_fork_task(task)
-        assert result["error"] is None, result["error"]
-        assert result["winner"] in (0, 1)
-
-
-@pytest.mark.slow
-def test_belief_roots_invariant_to_live_hidden_truth(live_boundary):
-    from envs.decks import deck_spec
-    from reps.belief import _sample_branch_random
-
-    deck = deck_spec(DECK_B).cards
-    state = snapshot_state(None, live_boundary)
-    public = mask_state_for_player(state, perspective_player=0)
-    belief = build_public_belief_state(
-        public_state=public,
-        root_player=0,
-        opponent_deck_cards=deck,
-        belief_samples=3,
-        opponent_dice_count=len(state.players[1].dice),
-    )
-    self_hyp = belief.self_range.hypotheses[0]
-    alt = belief.opponent_range.hypotheses[-1]
-    alt_scaffold = reconstruct_state_json(
-        live_boundary,
-        public_belief=belief,
-        self_hypothesis=self_hyp,
-        opponent_hypothesis=alt,
-        branch_random=_sample_branch_random(
-            public_belief=belief,
-            self_hypothesis=self_hyp,
-            opponent_hypothesis=alt,
-            reconstruction_counter=999,
-        ),
-    )
-    roots_a = sample_belief_roots(live_boundary, root_player=0, opponent_deck_cards=deck, samples=4)
-    roots_b = sample_belief_roots(alt_scaffold, root_player=0, opponent_deck_cards=deck, samples=4)
-    assert roots_a == roots_b
-
-
-@pytest.mark.slow
-def test_belief_root_search_runs_clean():
-    from envs.fork_bridge import ForkBridge
-    from envs.fork_search import run_search_match
-    from gitcg import low_level
-
-    game_attrs = {
-        low_level.ATTR_PLAYER_ALWAYS_OMNI_0: 1,
-        low_level.ATTR_PLAYER_ALWAYS_OMNI_1: 1,
-    }
-    with ForkBridge(workers=2) as bridge:
-        result = run_search_match(
-            DECK_A,
-            DECK_B,
-            bridge=bridge,
-            seed=5,
-            search_players=(0,),
-            rollouts=1,
-            top_k=2,
-            max_searches=3,
-            rollout_specs=(f"expert:{DECK_A}", f"expert:{DECK_B}"),
-            game_attrs=game_attrs,
-            belief_root=True,
-            belief_samples=3,
-        )
-    assert result.record.error is None
-    assert result.searches, "expected at least one searched decision"
-    assert all(s.belief_roots >= 2 for s in result.searches)
