@@ -1,0 +1,134 @@
+{
+  "a": {
+    "path": "data/runs/t5_scripted.jsonl",
+    "label": "scripted"
+  },
+  "b": {
+    "path": "data/runs/t5b_static.jsonl",
+    "label": "static"
+  },
+  "value": "three_star",
+  "gate": {
+    "mean_delta": -0.0813,
+    "ci_low": -0.231,
+    "ci_high": 0.0685,
+    "n_stages": 16,
+    "n_pairs": 160,
+    "dropped_pairs": 0,
+    "accept": false,
+    "per_stage": [
+      {
+        "stage": "blanche",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "buyun",
+        "n": 10,
+        "rate_a": 0.8,
+        "rate_b": 0.4,
+        "delta": -0.4
+      },
+      {
+        "stage": "chefmao",
+        "n": 10,
+        "rate_a": 0.1,
+        "rate_b": 0.2,
+        "delta": 0.1
+      },
+      {
+        "stage": "ellin",
+        "n": 10,
+        "rate_a": 0.2,
+        "rate_b": 0.2,
+        "delta": 0.0
+      },
+      {
+        "stage": "irontonguetian",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.1,
+        "delta": 0.1
+      },
+      {
+        "stage": "jifang",
+        "n": 10,
+        "rate_a": 1.0,
+        "rate_b": 0.9,
+        "delta": -0.1
+      },
+      {
+        "stage": "lan",
+        "n": 10,
+        "rate_a": 0.7,
+        "rate_b": 0.4,
+        "delta": -0.3
+      },
+      {
+        "stage": "liusu",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.1,
+        "delta": 0.1
+      },
+      {
+        "stage": "marjorie",
+        "n": 10,
+        "rate_a": 0.4,
+        "rate_b": 0.7,
+        "delta": 0.3
+      },
+      {
+        "stage": "patton",
+        "n": 10,
+        "rate_a": 0.9,
+        "rate_b": 0.0,
+        "delta": -0.9
+      },
+      {
+        "stage": "shitou",
+        "n": 10,
+        "rate_a": 0.3,
+        "rate_b": 0.0,
+        "delta": -0.3
+      },
+      {
+        "stage": "swan",
+        "n": 10,
+        "rate_a": 0.9,
+        "rate_b": 1.0,
+        "delta": 0.1
+      },
+      {
+        "stage": "timaeus",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "timmie",
+        "n": 10,
+        "rate_a": 0.8,
+        "rate_b": 0.8,
+        "delta": 0.0
+      },
+      {
+        "stage": "uncletian",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "wagner",
+        "n": 10,
+        "rate_a": 0.0,
+        "rate_b": 0.0,
+        "delta": 0.0
+      }
+    ]
+  }
+}

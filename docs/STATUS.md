@@ -92,7 +92,7 @@
 
 ## 3.3 四组 10-seed 结果（阶段性，640 局；effort=none）
 
-> 这是目前**最后可引用**的 LLM 结果（commit `f79868f`）。
+> 本节是 t5b 之前的可引用结果（commit `f79868f`）；**当前可引用**见 §3.6。
 
 | 组 | 三星率 | 胜率 | 调用/局 | prompt tokens/局 | 缓存命中 | 成本/局 |
 |---|---|---|---|---|---|---|
@@ -129,7 +129,7 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 - **当前配置**：对局 `reasoning_effort=none` + `max_tokens=64`（D10）；思考只用于技能提取/反思（`effort=high`, 8192）。
 - t5 于 **2026-10-31 因额度耗尽中止**：`static` 82/160 行、`llm_empty` 90/160 行；这两个部分 run **不可引用**（复盘见 [`failures/thinking-in-game-cost-blowup.md`](./failures/thinking-in-game-cost-blowup.md)）。
 - 当日日志总花费 **$7.93**，其中 t5 占 **$6.64**；按实测外推，全量 4 组 10 seeds（3 个 LLM 组）约 **$19**，50 seeds/关约 **$96**。
-- 最后可引用结果仍是 §3.3 的 640 局（commit `f79868f`，effort=none）。
+- 最后可引用结果是 §3.6 的 t5b 五组（2026-11-01）；§3.3 的 640 局降为历史对照。
 
 ## 3.5 吞吐：parked scheduler（可用，未规模化验证）
 
@@ -150,6 +150,41 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 要对比需先把同步侧也限制为 `request_types=("action",)`（测试即如此构造）。
 
 **未验证**：parked 路径在真实 API 下的规模化吞吐与单位时间成本（429 退避继承 `common.llm`，未在该路径压测）；目前只有离线单测/探针证据。
+
+## 3.6 t5b：effort=none 的五组结果（2026-11-01）
+
+**这是当前可引用的主结果**（明细、逐关表、复现命令：[`../reports/t5b_summary.md`](../reports/t5b_summary.md)）。
+口径：16 关 × seeds **0–9** = 160 局/组，`top_k=5`，deck `superconduct_aggro`，
+engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
+一条命令 `bash data/run_t5b.sh` 跑完（16:32–17:04 UTC），`scripted`/`contestant` 复用 t5 链。
+
+| 组 | 三星率 | 胜率 | 成本/局 |
+|---|---:|---:|---:|
+| scripted | 0.3812 | 0.9437 | 0 |
+| contestant（参照） | 0.4062 | 0.9500 | 0 |
+| llm_empty | 0.3563 | 0.9625 | $0.0023 |
+| static（`static_v1`，v1，27 技能） | 0.3000 | 0.9437 | $0.0021 |
+| dynamic（`dyn_v1`，v2，42 技能） | **0.4250** | 0.9437 | $0.0024 |
+
+- **门禁（按关配对 t，6 对）**：只有 **static→dynamic 过线**（+0.1250，CI [+0.0075, +0.2425]）；
+  其余 5 对全跨 0 —— llm_empty→dynamic +0.0687 [−0.0507,+0.1882]、scripted→dynamic +0.0437、
+  scripted→static −0.0813、scripted→llm_empty −0.0250、scripted→contestant +0.0250 → 均不采纳。
+- **逐关**：最大涨幅 `ellin` 0.2→0.8、`chefmao` 0.2→0.7、`irontonguetian` 0.1→0.5、`liusu` 0.1→0.4；
+  下降只有 `marjorie` 0.7→0.5、`swan` 1.0→0.9。`blanche`/`timaeus`/`uncletian`/`wagner` 五组全 0。
+- **库**：`data/skills/dyn_v1` = v2，42 条（17 rule + 25 strategy），父库 `static_v1`，
+  `source_rows=data/runs/t5b_static.jsonl`，本轮新增 15 条全部 `[strategy]`、按关卡命名。
+- **成本**：三个 LLM 组 $1.0890；提取一次 14 次调用 $0.0105。
+
+> **泄漏嫌疑（未解决，勿删）**：`dyn_v1` 的 15 条候选技能是从 `data/runs/t5b_static.jsonl` 提取的，
+> 而这个 run 用的就是 seeds 0–9 —— 与 dynamic 组随后评测的 10 个种子完全相同。
+> `scripts/extract_skills.py` 的设计口径是「在 run A 上提取 → 在未见过的种子上做门禁」，
+> 本链路没有留出种子：提取时模型已经看到这 160 局里哪些关卡失败、失败在哪类目标上。
+> 因此 static→dynamic 的 **+0.1250（CI [+0.0075, +0.2425]，accept=True）在 seeds 10–19 的
+> 留出门禁复现之前一律标为 leakage-suspect**，不能作为「技能库提分」的证据。
+
+**下一步**：用冻结的 `dyn_v1` 在 **seeds 10–19** 上重跑 static 与 dynamic
+（`--seeds 10,11,12,13,14,15,16,17,18,19`，约 $0.7），只有那里的 CI 下界 > 0 才能解除上面这条标注。
+t5 的 effort=low 部分 run（§3.4）仍**不可引用**。
 
 ## 4. LLM 接入（2026-10-30 实测）
 
