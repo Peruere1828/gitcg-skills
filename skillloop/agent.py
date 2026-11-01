@@ -32,10 +32,12 @@ from skillloop.schema import Skill
 @dataclass(frozen=True)
 class AgentConfig:
     model: str | None = None            # None -> whatever the client/config says
-    # JSON-only output, but hidden reasoning is billed as completion tokens: with the
-    # provider's thinking mode on ("effort: low"), 48 tokens truncates to an empty
-    # string, so the budget must cover reasoning + the tiny JSON answer.
-    max_tokens: int = 4096
+    # In-game decisions run with ``reasoning_effort="none"``, so the reply is a bare
+    # ``{"choice": i, "used": [...]}`` JSON object (~10-20 tokens); 64 leaves margin.
+    # Raising this without re-measuring is how hidden reasoning once inflated
+    # completion tokens and cost per game ~10x.
+    reasoning_effort: str | None = "none"
+    max_tokens: int = 64
     temperature: float = 0.0            # determinism is what makes paired seeds valid
     max_calls_per_game: int = 80
     request_types: tuple[str, ...] = ("action", "switch_hands", "choose_active")
@@ -165,6 +167,7 @@ class SkillAgentPolicy:
             temperature=self.config.temperature,
             response_format_json=True,
             model=self.config.model,
+            reasoning_effort=self.config.reasoning_effort,
         )
         latency = time.perf_counter() - started
         self.calls += 1

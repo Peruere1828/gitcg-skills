@@ -27,7 +27,7 @@ import multiprocessing as mp
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -87,6 +87,25 @@ def _sha1(path: Path) -> str:
     if not path.exists():
         return "missing"
     return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+
+
+def budget_from_env() -> float | None:
+    """Read the optional ``GITCG_LLM_BUDGET_USD`` cap for this invocation."""
+    raw = os.environ.get("GITCG_LLM_BUDGET_USD", "").strip()
+    if not raw:
+        return None
+    try:
+        budget = float(raw)
+    except ValueError as exc:
+        raise SystemExit(f"GITCG_LLM_BUDGET_USD must be a number, got {raw!r}") from exc
+    if budget < 0:
+        raise SystemExit("GITCG_LLM_BUDGET_USD must be >= 0")
+    return budget
+
+
+def budget_exhausted(spent: float, budget: float | None) -> bool:
+    """True once a set budget has been reached; the guard used before new games."""
+    return budget is not None and spent >= budget
 
 
 def _assets():
@@ -235,14 +254,21 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
         print(f"[run] {len(pending)} pending / {len(done)} done -> {out}", flush=True)
 
     rows: list[dict[str, Any]] = []
+    budget = budget_from_env()
+    spent = 0.0
+    aborted: str | None = None
     started = time.perf_counter()
     with out.open("a", encoding="utf-8") as handle:
         if spec.workers <= 1:
             for item in pending:
+                if budget_exhausted(spent, budget):
+                    aborted = "budget"
+                    break
                 row = play_one(item)
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
                 handle.flush()
                 rows.append(row)
+                spent += float(row.get("cost_usd") or 0.0)
                 if progress:
                     _print_row(row)
         else:
@@ -251,18 +277,52 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
             # engine call. Spawn costs ~2 s per worker and is safe.
             context = mp.get_context("spawn")
             with ProcessPoolExecutor(max_workers=spec.workers, mp_context=context) as pool:
-                futures = {pool.submit(play_one, item): item for item in pending}
-                for future in as_completed(futures):
-                    row = future.result()
-                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-                    handle.flush()
-                    rows.append(row)
-                    if progress:
-                        _print_row(row)
+                # Sliding window: keep ``workers`` games in flight and refill a slot
+                # whenever one finishes. A slow game must not hold back the next
+                # pending game (no batch barrier); rows come out in completion order.
+                pending_iter = iter(pending)
+                waiting = next(pending_iter, None)
+                in_flight: set[Future] = set()
+
+                def submit_next() -> bool:
+                    nonlocal waiting, aborted
+                    if waiting is None:
+                        return False
+                    if budget_exhausted(spent, budget):
+                        aborted = "budget"
+                        return False
+                    in_flight.add(pool.submit(play_one, waiting))
+                    waiting = next(pending_iter, None)
+                    return True
+
+                while len(in_flight) < spec.workers and submit_next():
+                    pass
+                while in_flight:
+                    done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        in_flight.discard(future)
+                        row = future.result()
+                        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+                        handle.flush()
+                        rows.append(row)
+                        spent += float(row.get("cost_usd") or 0.0)
+                        if progress:
+                            _print_row(row)
+                    while len(in_flight) < spec.workers and submit_next():
+                        pass
+
+    if aborted and progress:
+        print(f"[run] budget ${budget:.4f} reached (${round(spent, 6):.4f}); "
+              f"stopped launching new games", flush=True)
 
     summary = summarize(rows)
     summary["seconds"] = round(time.perf_counter() - started, 1)
     summary["out"] = str(out)
+    if budget is not None:
+        summary["budget_usd"] = budget
+        summary["spent_usd"] = round(spent, 6)
+    if aborted:
+        summary["aborted"] = aborted
     return summary
 
 

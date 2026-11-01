@@ -165,7 +165,7 @@ def propose_candidates(
 
     Extraction runs **once per evolution round**, not per decision, so it gets the
     expensive setting (``effort="high"``, 8k output budget) while in-game decisions
-    stay cheap (``effort="low"``). Reflection is where quality compounds.
+    stay cheap (``effort="none"``). Reflection is where quality compounds.
     """
     candidates: list[Skill] = []
     for profile in profiles:

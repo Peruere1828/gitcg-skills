@@ -32,9 +32,11 @@ class _FakeClient:
     def __init__(self, reply: str | None = '{"choice": 1}') -> None:
         self.reply = reply
         self.calls: list[list[dict[str, str]]] = []
+        self.kwargs: list[dict[str, Any]] = []
 
-    def chat(self, messages, **_kwargs) -> str | None:
+    def chat(self, messages, **kwargs) -> str | None:
         self.calls.append(messages)
+        self.kwargs.append(kwargs)
         return self.reply
 
 
@@ -115,6 +117,16 @@ def test_agent_maps_choice_index_to_action_code():
     assert code == 102                      # third candidate
     assert len(client.calls) == 1
     assert agent.decisions[0].n_candidates == 3
+
+
+def test_agent_sends_no_thinking_and_small_json_budget():
+    client = _FakeClient('{"choice": 1}')
+    agent = _agent(client)
+    agent.choose(_built(3))
+    kwargs = client.kwargs[0]
+    assert kwargs["reasoning_effort"] == "none"   # in-game decisions never think
+    assert kwargs["max_tokens"] == 64             # pure JSON reply, no reasoning budget
+    assert AgentConfig().max_tokens == 64
 
 
 def test_agent_falls_back_on_unparseable_reply():
