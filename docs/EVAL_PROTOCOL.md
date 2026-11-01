@@ -47,4 +47,18 @@
 
 - 每局记录 `stage / seed / deck / group / library_version / model / prompt_hash`；
 - 原始逐局 JSONL 落 `data/`（gitignore），聚合摘要落 `reports/`（入库）；
-- LLM 温度 0；若供应商不保证确定性，则以 50 seeds 的统计而非单局复现为准。
+- LLM 温度 0；但本端点实测 `temperature=0` **不是字节级可复现**（只降低采样方差）。复现以 50 seeds 的统计而非单局复现为准。
+
+## 6. 成本门禁（任何调用模型的 run）
+
+上全量网格**之前**必须完成四步：
+
+1. **小样本标定**：跑 1 关 × 1 种子（或 ≥20 次决策），测出 `completion_tokens/次`、`calls/局`、`$/局`；
+2. **外推**：用已有 run 的逐局 JSONL 算出全量成本（无需联网/引擎）：
+   `"$PY" -m scripts.estimate_cost --rows data/runs/smoke2_static.jsonl --per-stage-seeds 50 --stages 16`
+   （或 `--games N`）；输出实测 `$/局`、`calls/局`、`completion tokens/次` 与 projected total；
+3. **设上限**：写明本次预算上限并在运行环境设 `GITCG_LLM_BUDGET_USD`，由运行器在启动新局前检查累计 `cost_usd`（D11；普通 `skillloop.run` 与 `scripts/run_parked` 共用同一守卫）。
+   触顶只停止启动新局，已在飞的局会跑完；因此超额最多是当时在飞局（含刚越过阈值的那一局）的成本，不随网格规模放大；
+4. **写口径**：把 `completion_tokens/次`、`$/局`、预算上限三项写进该 run 的 meta 与报告。
+
+> 没做标定的配置不得上全量。模型、`max_tokens`、`reasoning_effort`、并发任一变更都算**新配置**，需重新标定。

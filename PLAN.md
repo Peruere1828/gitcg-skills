@@ -17,6 +17,8 @@
 | D7 | 2026-10-30 | `win_within_rounds` **统一保持 5**（不用 P70 标定值） | 标定显示脚本/参照策略的胜局回合 P70 普遍 >5（blanche 9、chefmao/ellin 7），但**这正说明 5 回合是一个「技能目标」而不是阈值伪影**；把它调松等于取消这项考试。记录标定结果备查，阈值改回 5 |
 | D8 | 2026-10-30 | LLM 开启思考模式 `reasoning_effort=low`、`max_tokens=4096` | 用户要求不计 token 成本换质量；`low` 下单次约 8–14 s、约 450 completion tokens（含思考） |
 | D9 | 2026-10-30 | 「静态 skill」= **游戏规则 + 手写的简单打牌策略**；「动态 skill」= 同一底座 + 可增删的策略 | 课程要求的分组定义；静态组可复现、不含学到的内容 |
+| D10 | 2026-11-01 | 对局决策回退到 `reasoning_effort=none`（`max_tokens=64`）；思考只用于技能提取/反思（`effort=high`, `max_tokens=8192`） | **暂时回退**：off 时 15 completion tokens/次、$0.004/局；on(low) 时 1215 tokens/次、$0.040/局，成本 10× 而无质量证据。重新开启必须以成对 A/B 证明收益 |
+| D11 | 2026-11-01 | 运行器提供 `GITCG_LLM_BUDGET_USD` 硬上限：滑动窗口维持 `workers` 局在飞，每完成一局即检查累计 `cost_usd`，触顶后不再启动新局；已在飞的局跑完、已完成的行照常落盘，有预算时 summary 记 `budget_usd` / `spent_usd`，触顶时加 `aborted: "budget"`。上限只对**本次调用**生效：resume / 重跑时 `spent` 从 0 重计，不跨调用累计。`scripts/estimate_cost.py --rows <run>.jsonl` 加 `--games N` 或 `--per-stage-seeds N --stages 16`，从实测逐局成本外推全量 | t5 烧到额度耗尽才停（当日 $7.93）；成本约束必须是运行时门禁而非文档约定 |
 
 ## 1. 任务定义
 

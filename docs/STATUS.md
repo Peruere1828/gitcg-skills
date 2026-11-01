@@ -1,4 +1,4 @@
-# STATUS — 当前状态（2026-10-30）
+# STATUS — 当前状态（2026-11-01）
 
 > 只写「现在有效」的事实；历史进 `reports/`，负结果进 `docs/failures/`。
 > 任务与验收见 [`../PLAN.md`](../PLAN.md)，统计口径见 [`EVAL_PROTOCOL.md`](./EVAL_PROTOCOL.md)。
@@ -22,7 +22,7 @@
 - 待办：增量重链 `libgitcg.so` → 装进 `gitcg-skill` → 用 `contestant` 跑 24 seeds → 重标
   `win_within_rounds`（P70）→ 记录新基线。
 
-## 3. 基线（10 seeds × 16 关 = 160 局；**阈值统一 5**、LLM 思考模式 low）
+## 3. 基线（10 seeds × 16 关 = 160 局；**阈值统一 5**）
 
 | 组 | 三星率 | 胜率 | 说明 |
 |---|---|---|---|
@@ -90,7 +90,9 @@
 `trigger_elemental_reactions` 5/10（shitou），其余主要是 `win_within_rounds`（约 30%）。
 → 任务集现在**未饱和**（0.56），且失分集中在可被"指令遵循"解决的具体行为上。
 
-## 3.3 四组 10-seed 结果（阶段性，640 局）
+## 3.3 四组 10-seed 结果（阶段性，640 局；effort=none）
+
+> 这是目前**最后可引用**的 LLM 结果（commit `f79868f`）。
 
 | 组 | 三星率 | 胜率 | 调用/局 | prompt tokens/局 | 缓存命中 | 成本/局 |
 |---|---|---|---|---|---|---|
@@ -115,19 +117,54 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 **结论 3：3 关对所有组都是 0%**（timaeus / uncletian / wagner，装备/事件目标 + 严回合），
 占总局数 19%；`wagner` 的 2 回合上限是标定过紧（P70=2），后续按 P80 复核。
 
+## 3.4 成本标定（2026-10-30/31 实测）
+
+| group | $/局 | calls/局 | completion tokens/次 |
+|---|---:|---:|---:|
+| smoke2_static (effort=none) | 0.0038 | 25.4 | 15 |
+| smoke2_llm_empty (effort=none) | 0.0042 | 27.1 | 15 |
+| t5_static (effort=low) | 0.0400 | 25.5 | 1215 |
+| t5_llm_empty (effort=low) | 0.0374 | 24.7 | 1167 |
+
+- **当前配置**：对局 `reasoning_effort=none` + `max_tokens=64`（D10）；思考只用于技能提取/反思（`effort=high`, 8192）。
+- t5 于 **2026-10-31 因额度耗尽中止**：`static` 82/160 行、`llm_empty` 90/160 行；这两个部分 run **不可引用**（复盘见 [`failures/thinking-in-game-cost-blowup.md`](./failures/thinking-in-game-cost-blowup.md)）。
+- 当日日志总花费 **$7.93**，其中 t5 占 **$6.64**；按实测外推，全量 4 组 10 seeds（3 个 LLM 组）约 **$19**，50 seeds/关约 **$96**。
+- 最后可引用结果仍是 §3.3 的 640 局（commit `f79868f`，effort=none）。
+
+## 3.5 吞吐：parked scheduler（可用，未规模化验证）
+
+`game.step()` 同步调用策略，一进程一局时墙钟主要耗在模型往返。`skillloop/parked.py` 在
+`action` 决策点快照引擎状态、丢弃当前 live game，把 prompt 交给线程池，答案到达后从快照恢复；
+一个进程可同时保持多局在飞，引擎仍单线程。入口：`scripts/run_parked.py`（行格式与 `skillloop.run` 相同）。
+
+**已离线证明**（可复跑）：
+
+- `PYTHONPATH=. "$PY" scripts/probe_resume.py --sweep` → `parked=30 identical=30/30`：
+  PvP 4 seeds × 3 occurrences + 3 关 × 2 seeds × 3 occurrences，parked+resumed 的终局 JSON 与不中断对局字节相同。
+- `tests/test_parked.py` 全绿；其中 `test_parked_rows_match_synchronous_runner` 在 2 关 × 2 seeds 上
+  用 stub client 对比 `skillloop.run.play_one` 与 `ParkedRunner`，行字段集合、决策/事件序列（按语义字段）一致。
+
+**硬限制**：只有 `action` 请求可 park（`PARKABLE_REQUESTS = ("action",)`）。`switch_hands` 恢复后终局不一致
+（`choose_active` 在样本内偶然一致，保守排除；`reroll_dice` / `select_card` 未验证），因此换牌 / 首发角色
+仍由 expert 回答。也正因如此，parked run 与普通 `skillloop.run` 的决策流不同，**不能直接按同一口径对比**；
+要对比需先把同步侧也限制为 `request_types=("action",)`（测试即如此构造）。
+
+**未验证**：parked 路径在真实 API 下的规模化吞吐与单位时间成本（429 退避继承 `common.llm`，未在该路径压测）；目前只有离线单测/探针证据。
+
 ## 4. LLM 接入（2026-10-30 实测）
 
-**思考档位分工（D8 细化）**：对局决策 `effort=low`（每局 20–30 次调用，8–36 s/次）；
+**思考档位分工（D10）**：对局决策 `reasoning_effort=none` + `max_tokens=64`（实测约 15 completion tokens/次）；
 技能提取/反思 `effort=high` + `max_tokens=8192`（每轮只跑一次，值得用贵档）。
+t5 的 `low` 档实测 1215 tokens/次、$0.04/局，成本 10× 且无质量证据，已暂时回退。
 
 | 项 | 值 |
 |---|---|
 | 端点 | `https://opencode.ai/inference/go/openai/v1`（OpenAI 兼容） |
 | 模型 | `deepseek-v4.1-flash`（1M 上下文；本仓库实测 2.6–4.9 s/次） |
 | 认证 | `Authorization: Bearer $SKKEY` + **`x-opencode-session`（必填）** + 自定义 `User-Agent` |
-| 关闭思考 | `reasoning_effort="none"`（否则小 `max_tokens` 返回空串） |
+| 对局思考 | `reasoning_effort="none"` + `max_tokens=64`（D10；开启思考时小 `max_tokens` 会返回空串） |
 | 缓存 | 短 prompt（~170 tokens）实测 **0%** 命中；长前缀（>4k）才命中 |
-| 成本 | 3 次真实调用 = **$0.00009**；按 800 局/轮估算 <$5 |
+| 成本 | 对局 `none` 实测 **$0.0038–0.0042/局**；`low` 实测 **$0.0374–0.0400/局**（约 10×）；见 §3.4 |
 | 并发 | 128 并发实测全绿；256 起出现 429（有 `Retry-After`） |
 
 `common/llm.py` 已改为：读 `SKKEY`、发 session/UA 头、空内容判失败、429 按 `Retry-After` 重试、
@@ -139,3 +176,5 @@ usage 记录 `cached_tokens` 与 `cost_usd`。探针：`python -m scripts.probe_
 2. **与上游共享机器**：本机 6C/12T，实验限 6–8 worker，`OMP_NUM_THREADS=1`。
 3. **llm 成本口径**：缓存命中价差 50×，prompt 必须「稳定前缀 + 动态尾」。
 4. **关卡数据**：`swan` 只有 `win` 一个目标（三星恒真）、`shitou` 的 `win_within_rounds(44)` 疑似错误，待修。
+5. **LLM 成本随配置跳变**：对局思考 `low` 实测 $0.04/局（10×），并发还会放大烧钱速率；
+   任何调模型的 run 必须走 `EVAL_PROTOCOL.md §6` 的门禁（见 `docs/failures/thinking-in-game-cost-blowup.md`）。
