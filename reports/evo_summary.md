@@ -1,5 +1,9 @@
 # evo：三轮进化 + 留出种子转移测试（2026-11-02）
 
+> **2026-11-02 更正**：`record_decisions=False` 的判定 bug 已修复；本文中所有「装备/事件目标恒为 false」的结论是**测量假象**，不是行为。受影响关卡的数值待重跑。
+>
+> 修复后同 seeds 免费重放：`scripted` 0.3812 → **0.4250**（68/160）、`contestant` 0.4062 → **0.4813**（77/160）。`timaeus` 装备 scripted 0/10 → 2/10、contestant 0/10 → 10/10；`uncletian` 事件 scripted 0/10 → 8/10、contestant 0/10 → 10/10；`wagner` 仍 0/10（牌组无武器）。本文所有 LLM 组 run 仍是旧判定，需重跑后重算。
+
 > **生成命令**：`bash data/run_evo.sh`（2026-11-02 04:10:06 → 04:54:57 UTC，44m51s，compare failures=0，无 resume）。
 > **数据来源**：`data/logs_evo.log`、`data/logs_evo_{r2,r3}_{extract,dynamic}.log`、
 > `data/logs_evo_hold_{static,dynamic,llm_empty}.log`、`data/runs/evo_*.jsonl{,.meta.json}`、
@@ -21,6 +25,8 @@
 | 提取 | `reasoning_effort=high` + `max_tokens=8192`，每轮一次 |
 | 并发 | 训练 24 workers/组；转移 16 workers/组 × 3 组并行（48 进程） |
 | 预算 | `GITCG_LLM_BUDGET_USD=1.50`/调用 × 7 次调用，名义上限 **$10.50**；`scripts.extract_skills` 不读该变量，两次提取的预算标记为「set-but-unenforced」 |
+
+**判定口径**：本文汇总的 7 个 run（5 个新 run + 2 个复用 r1 run；另引用 `t5b_llm_empty` 作空库基线）都由修复前的 `skillloop.run` 产出（`record_decisions=False`），`timaeus`/`uncletian` 的装备/事件目标恒为 false；三星率与门禁需用修复后的 runner 重跑。
 
 **链路**（每轮的提取来源与评测对局）：
 
@@ -50,6 +56,8 @@
 > （同 seeds 0–9、同 top_k / deck / engine lock；static 与 dynamic 经 `run_evo.sh` 的 preflight
 > 校验 fingerprint，llm_empty 的 `.meta.json` 另行核对）；`dyn_v2` / `dyn_v3` 是本次新跑。
 
+表中三星率都是旧判定结果；修复后免费基线已变化（0.4250/0.4813），库间比较需重跑后再读。
+
 ## 3. 门禁（六对，按关配对 t；Δ = b − a）
 
 口径同 `docs/EVAL_PROTOCOL.md` §4：每关先算 `Δ_s = rate_b(s) − rate_a(s)`（同 seeds），
@@ -66,6 +74,7 @@
 
 > accept 规则只看 CI 下界是否 > 0，不看 pooled 差；`reports/compare/evo_*.json` 里
 > `n_pairs=160`、`dropped_pairs=0`。训练三行只有 static→dyn_v3 过线；转移三行全部 accept=False。
+> 表中所有 Δ 都基于旧判定 run；`timaeus`/`uncletian` 的装备/事件判定修正后需重算。
 
 ## 4. 转移结果（seeds 10–19，冻结 `dyn_v3`）
 
@@ -77,6 +86,7 @@
 
 > `Δ vs static（pooled）` 是表中三星率之差；门禁表用按关配对的 Δ。`llm_empty` 行因舍入为
 > 0.0437（pooled 0.0438），其余一致。
+> 表中三星率是旧判定；`timaeus`/`uncletian` 的 0 待重跑，`wagner` 的 0 是牌组结构（无武器）。
 
 ### 4.1 逐关三星率（每关 n=10）
 
@@ -104,9 +114,12 @@
   `shitou` +0.2、`swan` +0.1；跌的是 `chefmao` −0.1、`irontonguetian` −0.1、`marjorie` −0.1。
 - 对 llm_empty：`timmie` +0.4、`ellin` +0.3 是主要正项，`buyun` −0.3、`liusu` −0.3 抵消掉大半，
   总体只剩 +0.0188。
-- `blanche` / `timaeus` / `uncletian` / `wagner` 在三个转移组里仍然是 0；其中 `timaeus` / `wagner`
-  （装备）和 `uncletian`（事件牌）从 r1 起就有对应技能，但三个组的 `play_equipment_card` 仍是
-  **20/20 失败**、`play_event_cards` 仍是 **10/10 失败**，行为没有变化。
+- 旧判定的三个转移组里，`blanche` / `timaeus` / `uncletian` / `wagner` 都是 0，但原因不同：
+  `timaeus` / `uncletian` 的 0 是旧判定（`record_decisions=False`）造成的**测量假象**，修复后同
+  seeds 免费重放已能达成（`timaeus` 装备 scripted 2/10、contestant 10/10；`uncletian` 事件
+  scripted 8/10、contestant 10/10）；`wagner` 仍是 0，因为 `superconduct_aggro` 没有武器牌，
+  装备目标由牌组结构封死。因此不能说「从 r1 起就有对应技能，但行为没有变化」——LLM 组是否遵循
+  技能，需用修复后的 runner 重跑后才能判断。`blanche` 是另一类问题（回合/阈值），与装备/事件判定无关。
 - 单关 n=10，±0.1 就是 1 局；逐关数字只能当画像，不能当逐关结论。
 
 ## 5. 三条结论
@@ -124,7 +137,7 @@ accept=True），留出 seeds 10–19 只有 **+0.0625**（CI [−0.0220, +0.147
 更硬的读法：dynamic 相对 **空库** 的配对 Δ 只有 +0.0188（CI [−0.0750, +0.1125]），所以相对
 static 的 +0.0625 主要是把 static 的负作用抹平，而不是证明演进库超过了空库。机制上，dynamic 的
 `win_within_rounds` 失败是 **70/160**，低于 static 的 82/160 和空库的 77/160；这与技能库主要在
-写「回合预算」一致，但仍不足以把总体差异推过门禁。
+写「回合预算」一致，但仍不足以把总体差异推过门禁。以上都是旧判定口径；修复后「正好一半」这个比例需重跑再确认。
 
 ### 5.2 多轮进化不单调：dyn_v2 见顶，dyn_v3 在同一批种子上回落
 
@@ -151,7 +164,8 @@ static 的 +0.0625 主要是把 static 的负作用抹平，而不是证明演�
 
 所以这是目前最稳的**方向性**发现，不是显著结论；它足够支持一个工程决定：**后续提分应以
 `llm_empty` 为基线，不要拿 static 当基线**。static 的负作用会把「相对 static 的提升」放大成
-假象——本次训练集 +0.1250 的过线就有这个成分。
+假象——本次训练集 +0.1250 的过线就有这个成分。本节的 static/empty 对比同样来自旧判定 run；
+`timaeus`/`uncletian` 修正后可能改变数值，重跑后复核。
 
 ## 6. 成本
 
@@ -234,14 +248,13 @@ PY
    需要更多留出种子（按 `EVAL_PROTOCOL` §3 的 50 seeds/关口径），而不是再加一轮提取。
 2. **按轮门禁，而不是每轮都接受提取**：r2→r3 在训练集上是 −0.0188；如果只保留过线的库版本，
    `dyn_v3` 根本不会成为候选。下一步应把「提取 → 门禁 → 晋级」拆开，未过线的库只进档案。
-3. **检索挤占只是观测**：`cited_skills` 是聚合字段，不能还原每次决策的候选列表；要确认
-   `top_k=5` 是否被 44 条库挤占，需要记录逐决策的候选/激活（`record_decisions=True` 或专门的
-   检索探针），而不是继续用聚合引用数推断。
-4. **四个全零关**（`blanche` / `timaeus` / `uncletian` / `wagner`）跨组不变：四关在库里都有对应
-   技能（`skill_blanche` / `skill_timaeus` / `skill_uncletian` / `skill_wagner`），但装备/事件目标
-   仍是 100% 失败，`blanche` 的 `win_within_rounds` 是 10/10 失败，`wagner` 的
-   `win_within_rounds` 也是 0/10 成功。更像「知道但没照做」（动作级遵循 / 检索激活）或
-   阈值/关卡标定问题，不是继续加技能能解决的。
+3. **检索挤占只是观测**：`cited_skills` 是聚合字段，不能还原每次决策的候选列表。
+   `record_decisions=True` 已在 2026-11-02 的判定修复中打开；重跑后可用逐决策记录复核候选/激活，
+   但这仍不是本轮数据能回答的。
+4. **四个全零关**（`blanche` / `timaeus` / `uncletian` / `wagner`）在旧判定下跨组不变：其中 `timaeus` /
+   `uncletian` 的 0 是旧判定造成的测量假象，不是行为；`wagner` 仍不可达（牌组无武器），
+   `blanche` 的 `win_within_rounds` 10/10 失败是真实的回合问题。原来说的「知道但没照做」不能由
+   本轮数据支持；要用修复后的 runner 重跑三组 LLM 再判断。
 5. 两次提取的 `GITCG_LLM_BUDGET_USD` 不生效（脚本注释已标明）；本轮的提取花费很小（$0.0181），
    但预算口径不能按「7 × $1.50 硬上限」理解。
 6. 本次新生成的 `data/skills/dyn_v2`、`data/skills/dyn_v3` 和 `reports/compare/evo_*.json` 目前是

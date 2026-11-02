@@ -6,6 +6,7 @@
 | # | 主题 | 结论 | 状态 | 重开条件 |
 |---|---|---|---|---|
 | 001 | [对局内思考模式成本 10×](./thinking-in-game-cost-blowup.md) | 无质量证据、成本约 10×，t5 中止且部分结果作废 | negative | 成对 A/B 质量 Δ 的 CI 下界 > 0，并通过成本门禁 |
+| 002 | [判定看不到出牌：3 关恒为 0](./record-decisions-judge-blind.md) | `record_decisions=False` 让装备/事件目标恒 false；修复后 scripted 0.3812→0.4250、contestant 0.4062→0.4813 | invalid（2026-11-02 已修复，待重跑） | 用修复后的 runner 重跑全链，且 `timaeus`/`uncletian` 至少一组出现非零目标 |
 
 ## 沿用的上游教训（只作设计约束，不作为本项目结论）
 

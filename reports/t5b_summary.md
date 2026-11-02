@@ -1,5 +1,9 @@
 # t5b：effort=none 的五组 10-seed 结果（2026-11-01）
 
+> **2026-11-02 更正**：`record_decisions=False` 的判定 bug 已修复；本文中所有「装备/事件目标恒为 false」的结论是**测量假象**，不是行为。受影响关卡的数值待重跑。
+>
+> 修复后同 seeds 免费重放：`scripted` 0.3812 → **0.4250**（68/160）、`contestant` 0.4062 → **0.4813**（77/160）；scripted +7 局、contestant +12 局翻正，0 局翻负。`timaeus` 装备已可达成（scripted 2/10、contestant 10/10），`uncletian` 事件已可达成（scripted 8/10、contestant 10/10）；`wagner` 仍 0/10（`superconduct_aggro` 无武器牌，牌组不可达）。本文 LLM 三组仍是旧判定，需重跑。
+
 > **生成命令**：`bash data/run_t5b.sh`（2026-11-01 16:32:13 → 17:04:47 UTC，单次跑完，无 resume）。
 > 本文数字全部取自该脚本产物：`data/logs_t5b.log`、`data/runs/t5b_*.jsonl{,.meta.json}`、
 > `data/logs_t5b_{llm_empty,static,dynamic,extract,compare}.log`、`reports/compare/t5b_*.json`；
@@ -47,10 +51,12 @@
 | static（规则库 v1） | **0.3000** | 48/160 | 0.9437 | 25.0 | 39.1k | 70.1% | $0.0021 | $0.3402 |
 | dynamic（演进库 v2） | **0.4250** | 68/160 | 0.9437 | 25.0 | 47.5k | 72.5% | $0.0024 | $0.3814 |
 
+**旧判定数值**：`scripted` 0.3812 / `contestant` 0.4062 是 `record_decisions=False` 下的结果；修复后同 seeds 免费重放为 **0.4250**（68/160）与 **0.4813**（77/160）。三个 LLM 组尚未重跑。本节及 §4/§5 的跨组 Δ 需在重跑后重算。
+
 - 三个 LLM 组合计 **$1.0890**；再做一次技能提取 **$0.0105**（14 次调用）→ 本轮全链 **$1.0995**。
 - 成本与 t5（effort=low，$0.037–0.040/局）相比降了一个数量级，effort=none 生效。
 - 开销从高到低：dynamic > llm_empty > static（dynamic 的 prompt 最长，47.5k tokens/局，缓存命中 72.5% 抵消了一部分）。
-- `static` 的三星率（0.3000）**低于** `llm_empty`（0.3563）：规则库在阈值 5 下反而更差，与 `docs/STATUS.md` §3.3 的方向一致（那里 static vs llm_empty 是 −0.012，跨 0）。
+- `static` 的三星率（0.3000）**低于** `llm_empty`（0.3563）：规则库在阈值 5 下反而更差，与 `docs/STATUS.md` §3.3 的方向一致（那里 static vs llm_empty 是 −0.012，跨 0）。两行都是旧判定；重跑后复核。
 - 胜率五组都在 0.94–0.96：三星期差主要来自目标项，不是输赢。
 
 ## 4. 门禁（按关配对 t，Δ = b − a）
@@ -98,9 +104,11 @@ df=15、t=2.131；**accept ⇔ CI 下界 > 0**（`docs/EVAL_PROTOCOL.md` §4，`
 | wagner | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0 |
 | **总体** | **0.3812** | **0.4062** | **0.3563** | **0.3000** | **0.4250** | **+0.1250** |
 
+**旧判定总体**：`scripted` 0.3812、`contestant` 0.4062；修复后同 seeds 为 **0.4250 / 0.4813**。表中 LLM 三列仍待重跑。
+
 - 最大涨幅：`ellin` +0.6（0.2→0.8）、`chefmao` +0.5（0.2→0.7）、`irontonguetian` +0.4（0.1→0.5）、`liusu` +0.3（0.1→0.4）。
 - 只有两关下降：`marjorie` −0.2（0.7→0.5）、`swan` −0.1（1.0→0.9）。
-- **四关在五组里全是 0**：`blanche`、`timaeus`、`uncletian`、`wagner`（占 25% 的格子）。
+- **四关在五组里全是 0**（旧判定）：`blanche`、`timaeus`、`uncletian`、`wagner`。修复后 `timaeus` / `uncletian` 不再恒零：免费基线 scripted 三星为 `timaeus` 1/10、`uncletian` 6/10（contestant 4/10、8/10）；`blanche` 与 `wagner` 仍为 0（`wagner` 无武器牌，牌组不可达）。LLM 三组待重跑。
 - 单个 Δ 只是 10 局伯努利样本：±0.1 就是 1 局，所以上表的逐关数字只能当画像，不能当逐关结论。
 
 ## 6. 演进库 `dyn_v1` 与诊断
@@ -125,18 +133,25 @@ df=15、t=2.131；**accept ⇔ CI 下界 > 0**（`docs/EVAL_PROTOCOL.md` §4，`
 | `win_within_rounds` | 75/160 (0.47) | 83/160 (0.52) | **66/160 (0.41)** |
 | `trigger_elemental_reactions` | 13/40 | 21/40 | 16/40 |
 | `use_elemental_burst` | 3/30 | 2/30 | 3/30 |
-| `play_equipment_card` | **20/20** | **20/20** | **20/20** |
-| `play_event_cards` | **10/10** | **10/10** | **10/10** |
+| `play_equipment_card` † | 20/20（旧判定） | 20/20（旧判定） | 20/20（旧判定） |
+| `play_event_cards` † | 10/10（旧判定） | 10/10（旧判定） | 10/10（旧判定） |
 | `defeated_less_than` | 0/50 | 3/50 | 2/50 |
+
+† 旧判定（`record_decisions=False`）看不到出牌，这两行是恒定的假象，不是行为。修复后免费重放：`timaeus` 装备 scripted 2/10、contestant 10/10 达成；`uncletian` 事件 scripted 8/10、contestant 10/10；`wagner` 仍 0/10（牌组无武器）。LLM 三组必须重跑后重算。
 
 - 提升几乎全部来自 `win_within_rounds`（失败 83→66）：这正是 15 条候选里绝大多数在讲的事
   （「回合预算」「目标动作前置」）。
 - `play_equipment_card`（`timaeus` + `wagner`，20 局）与 `play_event_cards`（`uncletian`，10 局）
-  在**三组里都是 100% 失败**——`dyn_v1` 明明为这三关各写了技能（`skill_timaeus` / `skill_wagner` /
-  `skill_uncletian`），行为却一点没变。所以这三关的瓶颈更像「知道但没照做」（动作级遵循 / 检索激活），
-  而不是「缺知识」。`blanche` 同理：爆发目标 0/30 失败（三组各 10 局），但 `win_within_rounds`
-  10/10 失败，实际回合 6–11，而阈值是 5。
-- 这条画像对下一轮比 +0.125 这个总数更有信息量，但它也只是观察，不是因果结论。
+  在**旧判定的三组里都是 100% 失败**，但这是**测量假象**：旧 runner 用 `record_decisions=False`，目标判定
+  看不到任何出牌。修复后免费重放已经能达成这些目标（`timaeus` 装备目标 scripted 2/10、
+  contestant 10/10；`uncletian` 事件目标 scripted 8/10、contestant 10/10）。因此不能再说
+  `dyn_v1`「写了技能但行为没变」，也不能据此推断「知道但没照做」；LLM 组是否遵循技能，
+  必须用修复后的 runner 重跑再判断。
+  `wagner` 是唯一仍然不可达的：`superconduct_aggro` 有 0 张武器牌，该装备目标由牌组结构封死，
+  与策略/判定无关。`blanche` 则是另一种情况：爆发目标 0/30 失败（三组各 10 局），但
+  `win_within_rounds` 10/10 失败，实际回合 6–11，而阈值是 5。
+- 这条画像对下一轮比 +0.125 这个总数更有信息量，但装备/事件部分作废后，剩下的主要是回合预算画像，
+  而且它也只是观察，不是因果结论。
 
 ## 7. 复现 / 复核命令
 
@@ -210,9 +225,11 @@ PY
    预计成本：两组 × 160 局 × 约 $0.0022 ≈ **$0.7**（按本次 $/局 外推）。
 2. 提取的 $0.0105 只出现在 `data/logs_t5b_extract.log`，没有写进任何 run 的 `.meta.json`；
    按 run 汇总成本时别漏掉它。
-3. 本次 run 的 `record_decisions=False`，逐决策的 `prompt_hash` 没有落盘（只有 `cited_skills` 聚合）。
-   因此 prompt 级别的复核只能依赖库版本 + 引擎锁 + `temperature=0`，不能按 prompt 逐条重放。
+3. 本次 run 的 `record_decisions=False`（**这就是 2026-11-02 修复的判定 bug**），逐决策的 `prompt_hash`
+   没有落盘（只有 `cited_skills` 聚合），且装备/事件目标恒为 false。修复后 `play_one` 已记录 decisions；
+   本文数据仍来自旧 runner，需重跑才能得到逐决策复核与正确的装备/事件数值。
 4. 每关 10 个种子：单关 Δ 的噪声约 ±0.2（1–2 局），任何逐关结论都要 50 seeds/关再确认。
-5. 四关（`blanche` / `timaeus` / `uncletian` / `wagner`）在五组里全 0；其中三关已有对应技能却 100% 失败，
-   说明下一步该查「技能有没有被检索到 / 模型有没有照做」，而不是继续加技能。
-   另外 `wagner` 的 2 回合上限仍被列为可能标定过紧（`docs/STATUS.md` §5.4）。
+5. 四关全 0 的旧结论已部分作废：`timaeus` / `uncletian` 的 0 来自判定 bug，修复后免费基线已能拿星；
+   `wagner` 的装备目标因牌组无武器而不可达，`blanche` 仍需单独查回合阈值/打法。
+   下一步不是继续加技能，而是用修复后的 runner 重跑三组 LLM，确认装备/事件目标是否真的被遵循。
+   `wagner` 的 2 回合上限仍被列为可能标定过紧（`docs/STATUS.md` §5.4）。

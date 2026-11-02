@@ -37,6 +37,8 @@ t5 在 2026-10-31 因额度耗尽中止：`static` 只完成 82/160 行、`llm_e
 - **D11**：运行器加 `GITCG_LLM_BUDGET_USD` 硬上限（契约，代码并行落地），触顶后不再启动新局，summary 记 `aborted: budget`。
 - **EVAL_PROTOCOL §6**：任何调用模型的 run 先做 ≥20 次决策标定，再用 `scripts/estimate_cost.py` 外推、写预算、写口径。
 - t5 的部分结果**作废**，不进入任何表格或结论；最后可引用仍是 `f79868f` 的 640 局（`effort=none`）。
+  （2026-11-02 注：这 640 局同样由 `record_decisions=False` 的 runner 产出，`timaeus`/`uncletian`
+  判定失真；见 [`002`](./record-decisions-judge-blind.md)。）
 
 ## 教训
 

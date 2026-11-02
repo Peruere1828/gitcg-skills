@@ -1,5 +1,9 @@
 # STATUS — 当前状态（2026-11-02）
 
+> **2026-11-02 更正**：`record_decisions=False` 的判定 bug 已修复；本文中所有「装备/事件目标恒为 false」的结论是**测量假象**，不是行为。受影响关卡的数值待重跑。
+>
+> 免费基线（`scripted` / `contestant`，同 seeds，不调模型）已重放：**0.4250**（68/160）、**0.4813**（77/160）；LLM 组（§3.3/§3.6/§3.7）尚未重跑，数字暂不可引用。
+
 > 只写「现在有效」的事实；历史进 `reports/`，负结果进 `docs/failures/`。
 > 任务与验收见 [`../PLAN.md`](../PLAN.md)，统计口径见 [`EVAL_PROTOCOL.md`](./EVAL_PROTOCOL.md)。
 
@@ -26,11 +30,12 @@
 
 | 组 | 三星率 | 胜率 | 说明 |
 |---|---|---|---|
-| scripted | **0.3812** | 0.944 | 纯脚本 |
-| contestant | **0.4062** | 0.950 | 手写目标注入（仅 irontonguetian/liusu +0.20） |
+| scripted | **0.4250** | 0.944 | 纯脚本；修复判定后 68/160（旧 0.3812） |
+| contestant | **0.4813** | 0.950 | 手写目标注入（仅 irontonguetian/liusu +0.20）；修复判定后 77/160（旧 0.4062） |
 
-> 阈值改回 5 后（D7），两组都明显下降，`blanche`/`timaeus`/`uncletian`/`wagner` 归零 ——
-> 回合与目标两项都要"主动争取"，正是技能库要解决的问题。旧标定结果（P70=6–9）留档在
+> 阈值改回 5 后（D7），旧判定下两组为 0.3812 / 0.4062；修复判定后同 seeds 免费重放为
+> **0.4250 / 0.4813**（+7 / +12 局，0 局下降）。`blanche`/`wagner` 仍为 0；`timaeus`/`uncletian`
+> 的 0 是判定假象，已随修复消失。旧标定结果（P70=6–9）留档在
 > `reports/calibration/thresholds.json`，仅作难度画像。
 
 ## 3.0 早期基线（**已废弃**：阈值按 P70 放宽到 6–9 时的数字，留作对照）
@@ -74,9 +79,12 @@
 | jifang | 5 | 3 | marjorie | 5 | 6 |
 | lan | 6 | 5 | **swan** | （无） | **+5** |
 
-标定后手写策略总三星率 0.487（标定前 0.4375）。
-仍为 0% 的 3 关（`wagner`/`timaeus`/`uncletian`）失分点不是回合数，而是
-`play_equipment_card` / `play_event_cards` —— 这正是技能库要补的**策略**缺口（不是阈值问题）。
+标定后手写策略总三星率 0.487（标定前 0.4375；旧判定口径，装备/事件目标当时恒 false，故偏低）。
+旧判定下 3 关 0%（`wagner`/`timaeus`/`uncletian`）；其中 `timaeus` / `uncletian` 的 0 曾被读成
+`play_equipment_card` / `play_event_cards` 的策略缺口，但这是**测量假象**：`record_decisions=False`
+让这两个目标恒为 false。`wagner` 的 0 则是牌组结构（无武器牌），不是策略缺口。修复后在统一阈值 5
+的当前任务集上，免费基线已能达成这些目标（`timaeus` scripted 2/10、`uncletian` 8/10；
+`wagner` 仍 0/10）；§3.1/§3.2 的标定任务集需重跑后再判断策略缺口。
 
 ## 3.2 标定后 10-seed 复测（新任务集）
 
@@ -85,15 +93,18 @@
 | scripted | **0.5625** | 纯脚本（无目标意识） |
 | contestant | **0.6250** | 手写目标注入；配对 Δ=+0.062，CI [−0.020,+0.145] |
 
-**剩余失分画像（scripted，10 局/关）**：`play_equipment_card` 10/10 失败（timaeus、wagner）、
-`play_event_cards` 10/10（uncletian）、`use_elemental_burst` 3–6/10（blanche、irontonguetian、liusu）、
-`trigger_elemental_reactions` 5/10（shitou），其余主要是 `win_within_rounds`（约 30%）。
-→ 任务集现在**未饱和**（0.56），且失分集中在可被"指令遵循"解决的具体行为上。
+表中三星率是旧判定结果；`timaeus`/`uncletian` 修正后需重跑，`wagner` 仍受牌组限制。
+
+**剩余失分画像（scripted，10 局/关；旧判定）**：`play_equipment_card` / `play_event_cards` 的
+10/10 是测量假象（判定看不到出牌），不能作为「指令遵循」缺口的证据。修复后在统一阈值 5 的任务集上，
+`timaeus` 装备 scripted 2/10、`uncletian` 事件 8/10 已达成（`wagner` 仍 0/10，牌组无武器）。
+其余失分（`use_elemental_burst` 3–6/10、`trigger_elemental_reactions` 5/10、`win_within_rounds`
+约 30%）仍是真实画像；§3.2 的标定任务集需用修复后的 runner 重跑后再下结论。
 
 ## 3.3 四组 10-seed 结果（阶段性，640 局；effort=none）
 
-> 本节是 t5b 之前的可引用结果（commit `f79868f`）；**当前可引用**见 §3.7，
-> §3.6 是泄漏嫌疑的轮 1 结果。
+> 本节是 t5b 之前的阶段性结果（commit `f79868f`，旧判定口径）；**当前状态**见 §3.7
+> （LLM 组待重跑），§3.6 是泄漏嫌疑的轮 1 结果。
 
 | 组 | 三星率 | 胜率 | 调用/局 | prompt tokens/局 | 缓存命中 | 成本/局 |
 |---|---|---|---|---|---|---|
@@ -101,6 +112,8 @@
 | contestant（参照） | **0.6250** | 0.950 | 0 | 0 | — | 0 |
 | llm_empty | **0.4938** | 0.963 | 27.1 | 13.7k | 2.5% | $0.0042 |
 | static（规则库） | **0.4813** | 0.938 | 25.4 | 32.2k | **66.3%** | $0.0038 |
+
+本节四组 run 都是旧判定；LLM 组数值待重跑，`timaeus`/`uncletian` 的逐关 0 不作行为证据。
 
 **结论 1：规则注入没有帮助，但被缓存吸收了成本。**
 static vs llm_empty 配对 Δ = **−0.012**，CI [−0.103,+0.078]（跨 0）。
@@ -115,8 +128,11 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 | LLM 更好（会按目标做事） | blanche +0.50、liusu +0.50、irontonguetian +0.30 | 目标型（爆发/回合） |
 | LLM 更差（对局质量弱） | patton −0.70、buyun −0.50、jifang −0.50、lan −0.30 | 节奏/骰子/反应 |
 
-**结论 3：3 关对所有组都是 0%**（timaeus / uncletian / wagner，装备/事件目标 + 严回合），
-占总局数 19%；`wagner` 的 2 回合上限是标定过紧（P70=2），后续按 P80 复核。
+**结论 3（已部分作废）：旧判定下 3 关对所有组都是 0%**（`timaeus` / `uncletian` / `wagner`）。
+其中 `timaeus` / `uncletian` 是 `record_decisions=False` 的测量假象，不是行为；修复后免费基线已能
+达成装备/事件目标。仍成立的是 `wagner`：`superconduct_aggro` 无武器牌，装备目标由牌组封死；
+其 2 回合上限也被列为可能标定过紧（P70=2），后续按 P80 复核。修复后不再按 19% 计算「三关全零」——
+只有 `wagner` 的 10/160 = 6.25% 是结构性的。
 
 ## 3.4 成本标定（2026-10-30/31 实测）
 
@@ -130,8 +146,9 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 - **当前配置**：对局 `reasoning_effort=none` + `max_tokens=64`（D10）；思考只用于技能提取/反思（`effort=high`, 8192）。
 - t5 于 **2026-10-31 因额度耗尽中止**：`static` 82/160 行、`llm_empty` 90/160 行；这两个部分 run **不可引用**（复盘见 [`failures/thinking-in-game-cost-blowup.md`](./failures/thinking-in-game-cost-blowup.md)）。
 - 当日日志总花费 **$7.93**，其中 t5 占 **$6.64**；按实测外推，全量 4 组 10 seeds（3 个 LLM 组）约 **$19**，50 seeds/关约 **$96**。
-- 最后可引用结果是 §3.7 的三轮进化 + 转移测试（2026-11-02）；§3.6 的 t5b 五组降为
-  泄漏嫌疑的轮 1 历史对照，§3.3 的 640 局仍是历史对照。
+- 最后可引用结果原为 §3.7 的三轮进化 + 转移测试（2026-11-02）；但 §3.3/§3.6/§3.7 的 LLM 组都由
+  旧判定 runner 产出，**修复后尚未重跑，LLM 组数值暂不可引用**。§3 的免费基线已按修复后的重放更新
+  （0.4250/0.4813）；§3.6 的 t5b 五组继续作泄漏嫌疑的轮 1 历史对照，§3.3 的 640 局仍是历史对照。
 
 ## 3.5 吞吐：parked scheduler（可用，未规模化验证）
 
@@ -159,6 +176,8 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 不再是当前可引用结果。** §3.7 用演进链末端的 `dyn_v3` 做了留出测试；r1 的 `dyn_v1`
 本身没有单独做转移复现（明细、逐关表、复现命令：
 [`../reports/t5b_summary.md`](../reports/t5b_summary.md)）。
+**旧判定**：本节 run 为 `record_decisions=False`，`timaeus`/`uncletian` 的装备/事件目标恒为 false；
+三星率与逐关表待重跑。
 口径：16 关 × seeds **0–9** = 160 局/组，`top_k=5`，deck `superconduct_aggro`，
 engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
 一条命令 `bash data/run_t5b.sh` 跑完（16:32–17:04 UTC），`scripted`/`contestant` 复用 t5 链。
@@ -196,8 +215,10 @@ static / dynamic / llm_empty；结果见 §3.7，static→dynamic 的 CI 仍跨 
 
 ## 3.7 三轮进化 + 转移测试（2026-11-02）
 
-**当前可引用的主结果**（明细、六行门禁、逐关表、成本：
+**阶段性主结果（LLM 组待重跑）**（明细、六行门禁、逐关表、成本：
 [`../reports/evo_summary.md`](../reports/evo_summary.md)）。
+**注意**：表中 LLM 组仍由旧判定 runner 产出；2026-11-02 修复后尚未重跑，数值暂不可引用；
+免费基线已更新为 0.4250/0.4813。
 口径：16 关 × seeds **0–9**（训练）/ **10–19**（留出），`top_k=5`，deck `superconduct_aggro`，
 engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
 `bash data/run_evo.sh`，2026-11-02 04:10–04:55 UTC，44m51s。
@@ -212,8 +233,9 @@ engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（t
 
 （表内为三星率，每组 160 局。转移胜率：static 0.9750 / llm_empty 0.9875 / dyn_v3 0.9812。）
 
-> **一句话判决**：训练集 +0.1250 显著（static→dyn_v3，CI [+0.0176,+0.2324]，accept=True），
+> **一句话判决（旧判定口径）**：训练集 +0.1250 显著（static→dyn_v3，CI [+0.0176,+0.2324]，accept=True），
 > 转移到 seeds 10–19 只有 +0.0625（CI [−0.0220,+0.1470]，accept=False）→ **尚未成立**。
+> 判定修复后需重跑整条链再确认。
 
 1. **训练增益没有在留出集上复现。** +0.1250 → +0.0625，正好一半；CI 跨 0。方向仍正，
    `timmie`/`patton`/`ellin`/`shitou` 等带额外目标项的关卡在涨，但按 `EVAL_PROTOCOL` §4
