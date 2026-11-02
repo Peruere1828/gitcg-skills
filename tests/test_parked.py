@@ -10,8 +10,10 @@ stable prompt prefix).
 
 from __future__ import annotations
 
+import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +25,7 @@ from envs.match import run_match
 from envs.policy import expert_policy
 from npc.policy import npc_policy_for_stage
 from npc.spec import get_stage
+from reps.schema import DeckSpec
 from skillloop.agent import AgentConfig
 from skillloop.library import SkillLibrary
 from skillloop.parked import ParkedGame, ParkedRunner
@@ -160,9 +163,8 @@ def test_parked_rows_match_synchronous_runner(monkeypatch):
     current: dict[str, object] = {}
 
     def spy_match(*args, **kwargs):
-        # Record decisions as well: play_one itself does not need them, but the
-        # comparison below does. Recording is side-effect free.
-        kwargs["record_decisions"] = True
+        # Capture the record for the decision-stream comparison below; play_one
+        # itself already records decisions for objective judging.
         record = real_match(*args, **kwargs)
         captured[(str(current["stage"]), int(current["seed"]))] = record
         return record
@@ -465,3 +467,64 @@ def test_missing_client_is_reported_not_crashed():
 
     assert rows[0]["error"] == "no_llm_config"
     assert rows[0]["llm_calls"] == 0
+
+
+# -- card pool pin ------------------------------------------------------------
+_POST_330_CARD = 213061      # v3.4.0 card ("砰砰礼物"), rejected by CreateParam(version="v3.3.0")
+
+
+def _v33_deck(*, post_330_card: int | None = None) -> DeckSpec:
+    """A deck that fits the v3.3 launch pool (the shipped expert decks use later cards)."""
+    path = Path(__file__).resolve().parents[1] / "configs/pools/mond_liyue_launch_v33.json"
+    pool = json.loads(path.read_text(encoding="utf-8"))
+    cards = [int(card) for card in pool["cards"][:30]]
+    if post_330_card is not None:
+        cards[-1] = int(post_330_card)
+    return DeckSpec(
+        name=DECK,
+        characters=tuple(int(c) for c in pool["characters"][:3]),
+        cards=tuple(cards),
+    )
+
+
+def test_card_version_reaches_parked_games_and_rows(monkeypatch):
+    import skillloop.parked as parked_module
+
+    deck = _v33_deck()
+    monkeypatch.setattr(parked_module, "deck_spec", lambda name: deck)
+    seen: dict = {}
+    real_build = parked_module._build_create_param
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(parked_module, "_build_create_param", spy)
+    spec = RunSpec(
+        group="llm_empty", stages=("timmie",), seeds=(0,), deck=DECK, max_calls=1,
+        card_version="v3.3.0", out="data/runs/unused-in-tests.jsonl",
+    )
+    task, row = _run_task(spec, StubClient('{"choice": 0}'), concurrency=1)
+
+    assert seen.get("version") == "v3.3.0"     # the pin reaches the engine
+    assert row["card_version"] == "v3.3.0"     # ... and the row
+    assert row["error"] is None
+    assert task.final_state is not None
+
+
+def test_out_of_pool_card_is_a_parked_row_error(monkeypatch):
+    """The same rejection as ``skillloop.run``: row error, scheduler keeps going."""
+    import skillloop.parked as parked_module
+
+    deck = _v33_deck(post_330_card=_POST_330_CARD)
+    monkeypatch.setattr(parked_module, "deck_spec", lambda name: deck)
+    spec = RunSpec(
+        group="llm_empty", stages=("timmie",), seeds=(0,), deck=DECK,
+        card_version="v3.3.0", out="data/runs/unused-in-tests.jsonl",
+    )
+    task, row = _run_task(spec, StubClient('{"choice": 0}'), concurrency=1)
+
+    assert row["error"].startswith("AssertionError")
+    assert row["card_version"] == "v3.3.0"
+    assert row["llm_calls"] == 0                 # failed before any decision
+    assert task.final_state is None              # no game was ever played

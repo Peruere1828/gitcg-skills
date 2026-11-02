@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from envs.decks import deck_spec
 from reps.action_adapter import BuiltDecisionContext
 from reps.schema import DecisionContext, DecisionType, LowLevelActionSpec, OptionKind
 from skillloop.agent import AgentConfig, SkillAgentPolicy, parse_choice
+from skillloop.cards import card_kind
 from skillloop.library import SkillLibrary
-from skillloop.render import StateRenderer, TaskSpec
+from skillloop.render import ObjectiveDetail, StateRenderer, TaskSpec
 from skillloop.schema import Skill, SkillConditions
 
 
@@ -206,3 +208,104 @@ def test_retrieval_matches_machine_objective_types_not_prompt_text():
     SkillAgentPolicy(_Base(), other, renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
                      task=task, library=lib, config=AgentConfig(top_k=3)).choose(_built(3))
     assert "speed" not in other.calls[0][0]["content"]
+
+
+# -- pinned loadout ----------------------------------------------------------
+def test_pinned_skills_replace_retrieval_and_keep_order():
+    lib = SkillLibrary.from_skills([
+        Skill(skill_id="alpha", skill_name="甲", description="第一"),
+        Skill(skill_id="beta", skill_name="乙", description="第二"),
+        Skill(skill_id="unpinned", skill_name="丙", description="不应出现"),
+    ])
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(
+        client, library=lib, top_k=3, pinned_skills=("beta", "alpha", "missing"),
+    )
+    agent.choose(_built(3))
+    system = client.calls[0][0]["content"]
+    assert "alpha" in system and "beta" in system
+    assert "unpinned" not in system
+    assert system.index("beta") < system.index("alpha")   # prompt order == pinned order
+
+
+def test_pinned_skills_do_not_change_across_decisions():
+    lib = SkillLibrary.from_skills([
+        Skill(skill_id="alpha", skill_name="甲", description="第一"),
+        Skill(skill_id="beta", skill_name="乙", description="第二"),
+    ])
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(client, library=lib, pinned_skills=("alpha",))
+    agent.choose(_built(3))
+    first_system = client.calls[0][0]["content"]
+    first_hash = agent.decisions[0].system_hash
+    agent.choose(_built(3))
+    assert client.calls[1][0]["content"] == first_system
+    assert agent.decisions[1].system_hash == first_hash
+
+
+# -- per-decision progress block --------------------------------------------
+def _built_cards(card_ids: tuple[int, ...]) -> BuiltDecisionContext:
+    specs = tuple(
+        LowLevelActionSpec(
+            action_code=200 + index,
+            request_type=DecisionType.ACTION,
+            kind=OptionKind.ACTION_PLAY_CARD,
+            label=f"card{card_id}",
+            subject_definition_id=int(card_id),
+        )
+        for index, card_id in enumerate(card_ids)
+    )
+    context = DecisionContext(
+        acting_player=0,
+        request_type=DecisionType.ACTION,
+        step_index=8,
+        full_state=None,
+        legal_low_level_codes=tuple(spec.action_code for spec in specs),
+        legal_low_level_specs=specs,
+        legal_low_level_mask=tuple(True for _ in specs),
+    )
+    return BuiltDecisionContext(
+        context=context,
+        payload_by_low_level_code={},
+        label_by_low_level_code={},
+        low_to_high_code={},
+    )
+
+
+def test_progress_block_is_in_user_message_and_counts_our_card_plays():
+    weapons = list(dict.fromkeys(
+        card_id for card_id in deck_spec("superconduct_mika_attack").cards
+        if card_kind(int(card_id)) == "weapon"
+    ))[:2]
+    assert len(weapons) == 2
+
+    task = TaskSpec(
+        stage="wagner",
+        display="瓦格纳",
+        objectives=("赢得胜利", "打出2张武器牌", "5回合内胜利"),
+        deck="superconduct_mika_attack",
+        objective_types=("win", "play_equipment_card", "win_within_rounds"),
+        max_rounds=5,
+        objective_details=(
+            ObjectiveDetail("win", "赢得胜利"),
+            ObjectiveDetail("play_equipment_card", "打出2张武器牌", count=2, kind="weapon"),
+            ObjectiveDetail("win_within_rounds", "5回合内胜利", n=5),
+        ),
+    )
+    client = _FakeClient('{"choice": 0}')
+    agent = SkillAgentPolicy(
+        _Base(), client, renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+        task=task, config=AgentConfig(),
+    )
+    agent.choose(_built_cards(tuple(weapons)))
+    first = client.calls[0][1]["content"]
+    assert first.startswith("回合 ")
+    assert "未完成目标：" in first
+    assert "打出2张武器牌（我方已打0/2）" in first
+    assert "赢得胜利（未知）" in first
+
+    agent.choose(_built_cards(tuple(weapons)))
+    second = client.calls[1][1]["content"]
+    assert "打出2张武器牌（我方已打1/2）" in second
+    # system prefix is still byte-identical; only the user message moved
+    assert client.calls[0][0]["content"] == client.calls[1][0]["content"]

@@ -34,6 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--top-k", type=int, default=5)
     ap.add_argument("--max-calls", type=int, default=80)
     ap.add_argument("--model", default=None)
+    ap.add_argument("--stage-decks", default=None)
+    ap.add_argument("--loadout", default=None)
+    ap.add_argument("--card-version", default=None,
+                    help="pin the engine card pool (e.g. v3.3.0); default: engine default pool")
     ap.add_argument("--concurrency", type=int, default=96)
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
@@ -44,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         group=args.group, stages=stages, seeds=_seed_list(args.seeds), deck=args.deck,
         workers=args.concurrency, library_root=args.library, top_k=args.top_k,
         model=args.model, max_calls=args.max_calls, out=args.out,
+        stage_decks_root=args.stage_decks, loadout_root=args.loadout,
+        card_version=args.card_version,
     )
     tasks = [
         ParkedGame(stage=get_stage(stage), seed=seed, spec=spec, task_index=index)

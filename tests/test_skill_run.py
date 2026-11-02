@@ -4,8 +4,17 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+
+import common.llm
 import skillloop.run as run_module
+from npc.spec import get_stage
+from reps.schema import DeckSpec
+from skillloop.library import SkillLibrary
+from skillloop.loadout import Loadout, engine_lock_hash, save_loadout
 from skillloop.run import (
     RunSpec,
     _seed_list,
@@ -14,6 +23,7 @@ from skillloop.run import (
     run,
     summarize,
 )
+from skillloop.schema import Skill
 
 
 def _row(stage: str, seed: int, three_star: bool, *, stars: int = 3, n_obj: int = 3, **extra) -> dict:
@@ -66,6 +76,324 @@ def test_fingerprint_tracks_spec_changes():
     assert a != b and a != c
     assert a["group"] == "scripted" and a["library_version"] == 0
     assert "engine_lock" in a and "hp_table" in a
+
+
+def test_play_one_records_decisions_for_card_objectives():
+    """Regression: the scored row must see what the contestant played.
+
+    ``play_equipment_card`` / ``play_event_cards`` are judged from
+    ``MatchRecord.decisions``; with ``record_decisions=False`` they were always
+    false. ``timaeus`` seed 7 is a real expert-vs-NPC game in which the expert
+    plays artifacts, so this asserts the objective is *observable*, not that the
+    policy is good.
+    """
+    spec = RunSpec(
+        group="scripted",
+        stages=("timaeus",),
+        seeds=(7,),
+        deck="superconduct_aggro",
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "timaeus", "seed": 7, "task_index": 0}
+    )
+    assert row["error"] is None
+    assert row["objectives"]["play_equipment_card"] is True
+
+
+# -- card pool version -------------------------------------------------------
+_V33_POOL = Path(__file__).resolve().parents[1] / "configs/pools/mond_liyue_launch_v33.json"
+_POST_330_CARD = 213061      # v3.4.0 card ("砰砰礼物"), rejected by CreateParam(version="v3.3.0")
+
+
+def _v33_deck(*, name: str = "superconduct_aggro", post_330_card: int | None = None) -> DeckSpec:
+    """A deck that fits the v3.3 launch pool (the shipped expert decks use later cards).
+
+    ``post_330_card`` replaces the last card with a card released after v3.3.0.
+    """
+    pool = json.loads(_V33_POOL.read_text(encoding="utf-8"))
+    cards = [int(card) for card in pool["cards"][:30]]
+    if post_330_card is not None:
+        cards[-1] = int(post_330_card)
+    return DeckSpec(
+        name=name,
+        characters=tuple(int(c) for c in pool["characters"][:3]),
+        cards=tuple(cards),
+    )
+
+
+def test_card_version_pins_the_pool_and_is_recorded(monkeypatch):
+    """A v3.3-only scripted game plays under the pin and the row records it."""
+    deck = _v33_deck()
+    monkeypatch.setattr(run_module, "deck_spec", lambda name: deck)
+    spec = RunSpec(
+        group="scripted",
+        stages=("timmie",),
+        seeds=(0,),
+        deck=deck.name,
+        card_version="v3.3.0",
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+    )
+
+    assert row["error"] is None
+    assert row["card_version"] == "v3.3.0"
+    assert row["rounds"] > 0
+    assert row["truncated"] is False
+
+
+def test_card_version_rejects_out_of_pool_cards_as_a_row_error(tmp_path, monkeypatch):
+    """A post-3.3 card fails the engine's state build; the grid gets error rows."""
+    deck = _v33_deck(post_330_card=_POST_330_CARD)
+    monkeypatch.setattr(run_module, "deck_spec", lambda name: deck)
+    monkeypatch.delenv("GITCG_LLM_BUDGET_USD", raising=False)
+    spec = RunSpec(
+        group="scripted",
+        stages=("timmie",),
+        seeds=(0, 1),
+        deck=deck.name,
+        card_version="v3.3.0",
+        out=str(tmp_path / "run.jsonl"),
+    )
+
+    summary = run(spec, progress=False)
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "run.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    # The out-of-pool card is caught while building the state, before any game:
+    # every row carries the engine error instead of aborting the whole grid.
+    assert summary["valid"] == 0
+    assert len(rows) == 2
+    for row in rows:
+        assert row["error"].startswith("AssertionError")
+        assert "v3.3.0" in row["error"]
+        assert row["card_version"] == "v3.3.0"
+
+
+def test_fingerprint_tracks_card_version():
+    base = dict(group="scripted", stages=("timmie",), seeds=(1,), deck="superconduct_aggro")
+    default = RunSpec(**base).fingerprint()
+    pinned = RunSpec(**base, card_version="v3.3.0").fingerprint()
+    assert default["card_version"] is None
+    assert pinned["card_version"] == "v3.3.0"
+    assert default != pinned
+
+
+# -- fixed stage decks -------------------------------------------------------
+def _write_stage_decks(path, mapping: dict[str, str]) -> str:
+    path.write_text(
+        json.dumps({"stages": {stage: {"deck": deck, "notes": "test"} for stage, deck in mapping.items()}}),
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+def _library_root(tmp_path, *, version: int = 4) -> str:
+    root = tmp_path / "library"
+    SkillLibrary.from_skills(
+        [
+            Skill(skill_id="alpha", skill_name="甲", description="技能甲"),
+            Skill(skill_id="beta", skill_name="乙", description="技能乙"),
+        ],
+        version=version,
+    ).save(root)
+    return str(root)
+
+
+def _loadout(*, version: int = 4, deck: str = "superconduct_mika_attack") -> Loadout:
+    return Loadout(
+        stage="wagner",
+        deck=deck,
+        skills=("beta", "alpha"),
+        rationale="test",
+        model="stub-model",
+        prompt_hash="abcdef123456",
+        fallback=False,
+        library_version=version,
+        engine_lock=engine_lock_hash(),
+    )
+
+
+@pytest.mark.parametrize("group", ["scripted", "dynamic"])
+def test_stage_decks_change_scripted_and_dynamic_identically(tmp_path, group):
+    config = _write_stage_decks(
+        tmp_path / "stage_decks.json", {"wagner": "superconduct_mika_attack"}
+    )
+    spec = RunSpec(
+        group=group,
+        stages=("wagner",),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        library_root=_library_root(tmp_path) if group == "dynamic" else None,
+        stage_decks_root=config,
+    )
+    policy = run_module.build_policy(spec, get_stage("wagner"))
+
+    if group == "scripted":
+        assert policy.name == "expert:superconduct_mika_attack"
+    else:
+        assert policy.task.deck == "superconduct_mika_attack"
+        assert policy.base.name == "expert:superconduct_mika_attack"
+
+
+@pytest.mark.parametrize("group", ["scripted", "dynamic"])
+def test_missing_stage_deck_falls_back_to_run_spec_deck(tmp_path, group):
+    config = _write_stage_decks(
+        tmp_path / "stage_decks.json", {"wagner": "superconduct_mika_attack"}
+    )
+    spec = RunSpec(
+        group=group,
+        stages=("timmie",),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        library_root=_library_root(tmp_path) if group == "dynamic" else None,
+        stage_decks_root=config,
+    )
+    policy = run_module.build_policy(spec, get_stage("timmie"))
+
+    if group == "scripted":
+        assert policy.name == "expert:superconduct_aggro"
+    else:
+        assert policy.task.deck == "superconduct_aggro"
+
+
+def test_fingerprint_tracks_stage_decks_and_loadout(tmp_path):
+    config = _write_stage_decks(
+        tmp_path / "stage_decks.json", {"wagner": "superconduct_mika_attack"}
+    )
+    loadout_root = tmp_path / "loadouts"
+    save_loadout(loadout_root, _loadout())
+
+    base = dict(group="dynamic", stages=("wagner",), seeds=(1,), deck="superconduct_aggro")
+    a = RunSpec(**base).fingerprint()
+    b = RunSpec(**base, stage_decks_root=config).fingerprint()
+    c = RunSpec(**base, loadout_root=str(loadout_root)).fingerprint()
+    assert a != b and a != c
+    assert b["stage_decks_hash"] != "none"
+    assert c["loadout_hash"] != "none"
+
+
+def test_run_passes_frozen_loadout_and_stage_deck_to_workers(tmp_path, monkeypatch):
+    config = _write_stage_decks(
+        tmp_path / "stage_decks.json", {"wagner": "superconduct_mika_attack"}
+    )
+    library_root = _library_root(tmp_path, version=4)
+    loadout_root = tmp_path / "loadouts"
+    loadout = _loadout(version=4)
+    save_loadout(loadout_root, loadout)
+
+    seen: list[dict] = []
+
+    def fake_play_one(item):
+        seen.append(item)
+        return _row(item["stage"], item["seed"], True, cost_usd=0.0)
+
+    monkeypatch.setattr(run_module, "play_one", fake_play_one)
+    monkeypatch.delenv("GITCG_LLM_BUDGET_USD", raising=False)
+    spec = RunSpec(
+        group="dynamic",
+        stages=("wagner",),
+        seeds=(0, 1),
+        deck="superconduct_aggro",
+        library_root=library_root,
+        loadout_root=str(loadout_root),
+        stage_decks_root=config,
+        out=str(tmp_path / "run.jsonl"),
+    )
+    run(spec, progress=False)
+
+    assert len(seen) == 2
+    for item in seen:
+        assert item["loadout"]["deck"] == "superconduct_mika_attack"
+        assert item["loadout"]["skills"] == ["beta", "alpha"]
+        assert item["stage_decks"] == {"wagner": "superconduct_mika_attack"}
+    # the same frozen loadout is reused across seeds
+    assert {item["loadout"]["prompt_hash"] for item in seen} == {"abcdef123456"}
+
+
+def test_missing_stage_loadout_fails_loudly(tmp_path, monkeypatch):
+    config = _write_stage_decks(tmp_path / "stage_decks.json", {})
+    loadout_root = tmp_path / "loadouts"
+    save_loadout(loadout_root, _loadout())
+    monkeypatch.setattr(run_module, "play_one", lambda item: _row(item["stage"], item["seed"], True))
+    spec = RunSpec(
+        group="dynamic",
+        stages=("wagner", "timmie"),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        library_root=_library_root(tmp_path),
+        loadout_root=str(loadout_root),
+        stage_decks_root=config,
+        out=str(tmp_path / "run.jsonl"),
+    )
+    with pytest.raises(SystemExit, match="no loadout for stage"):
+        run(spec, progress=False)
+
+
+def test_stale_loadout_is_rejected(tmp_path, monkeypatch):
+    library_root = _library_root(tmp_path, version=5)
+    loadout_root = tmp_path / "loadouts"
+    save_loadout(loadout_root, _loadout(version=4))
+    monkeypatch.setattr(run_module, "play_one", lambda item: _row(item["stage"], item["seed"], True))
+    spec = RunSpec(
+        group="dynamic",
+        stages=("wagner",),
+        seeds=(0,),
+        deck="superconduct_mika_attack",
+        library_root=library_root,
+        loadout_root=str(loadout_root),
+        out=str(tmp_path / "run.jsonl"),
+    )
+    with pytest.raises(SystemExit, match="stale loadout"):
+        run(spec, progress=False)
+
+
+def test_play_one_pins_skills_and_records_loadout_hash(tmp_path, monkeypatch):
+    captured: dict = {}
+
+    class _DummyPolicy:
+        decisions: list = []
+
+    def fake_build_policy(spec, stage, *, client=None, deck=None, pinned_skills=()):
+        captured.update(deck=deck, pinned_skills=pinned_skills)
+        return _DummyPolicy()
+
+    monkeypatch.setattr(run_module, "build_policy", fake_build_policy)
+    monkeypatch.setattr(
+        run_module, "run_match",
+        lambda *args, **kwargs: SimpleNamespace(winner=0, rounds=3, error=None, truncated=False),
+    )
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    monkeypatch.setattr(common.llm, "build_llm_client", lambda: SimpleNamespace(usage=None))
+
+    spec = RunSpec(
+        group="dynamic",
+        stages=("wagner",),
+        seeds=(7,),
+        deck="superconduct_aggro",
+        library_root=_library_root(tmp_path),
+    )
+    loadout = _loadout()
+    row = run_module.play_one(
+        {
+            "spec": spec.__dict__,
+            "stage": "wagner",
+            "seed": 7,
+            "task_index": 0,
+            "stage_decks": {},
+            "loadout": loadout.as_dict(),
+        }
+    )
+
+    assert captured == {"deck": "superconduct_mika_attack", "pinned_skills": ("beta", "alpha")}
+    assert row["deck"] == "superconduct_mika_attack"
+    assert row["pinned_skills"] == ["beta", "alpha"]
+    assert row["skill_loadout_hash"] == loadout.fingerprint()
+    assert row["library_version"] == 4
 
 
 # -- budget guard ------------------------------------------------------------

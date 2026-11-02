@@ -58,7 +58,7 @@ import threading
 import time
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from gitcg import Game, State
@@ -69,12 +69,22 @@ from envs.policy import expert_policy
 from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage
+from npc.stage_rules import stage_rules_json
 from skillloop.agent import AgentConfig, parse_choice
+from skillloop.cards import card_kind, skill_kind
 from skillloop.library import SkillLibrary
-from skillloop.render import StateRenderer, select_candidates
+from skillloop.loadout import Loadout
+from skillloop.render import (
+    ProgressSignals,
+    StateRenderer,
+    progress_block,
+    select_candidates,
+)
 from skillloop.run import (
     RunSpec,
     _assets,
+    _loadouts_for_spec,
+    _stage_decks_for_spec,
     budget_exhausted,
     budget_from_env,
     summarize,
@@ -135,13 +145,20 @@ class ParkablePolicy:
 
     def _system(self, context) -> dict[str, str]:
         if self.system is None:
-            if self.library is not None and self.config.top_k > 0:
-                ctx = {
-                    "stage": self.task.stage,
-                    "objective_types": tuple(self.task.objective_types),
-                    "round": int(context.player_view.round_number) if context.player_view else None,
-                }
-                self.skills = self.library.retrieve(self.task.describe(), ctx, k=self.config.top_k)
+            if self.library is not None:
+                if self.config.pinned_skills:
+                    self.skills = [
+                        skill
+                        for skill_id in self.config.pinned_skills
+                        if (skill := self.library.get(skill_id)) is not None
+                    ]
+                elif self.config.top_k > 0:
+                    ctx = {
+                        "stage": self.task.stage,
+                        "objective_types": tuple(self.task.objective_types),
+                        "round": int(context.player_view.round_number) if context.player_view else None,
+                    }
+                    self.skills = self.library.retrieve(self.task.describe(), ctx, k=self.config.top_k)
             rules = self.library.rules_text() if self.library is not None else ""
             self.system = self.renderer.system_message(task=self.task, skills=self.skills, rules_note=rules)
             self.system_hash = hashlib.sha1(self.system["content"].encode("utf-8")).hexdigest()[:12]
@@ -150,6 +167,37 @@ class ParkablePolicy:
     def take_pending(self) -> PendingDecision | None:
         pending, self.pending = self.pending, None
         return pending
+
+    def _progress_signals(self, context) -> ProgressSignals:
+        """Mirror the synchronous agent's self-counted progress from recorded actions."""
+        signals = ProgressSignals()
+        decisions = list(getattr(self.book, "decisions", ()) or ())
+        for record in decisions:
+            if int(getattr(record, "player", 0)) != 0:
+                continue
+            chosen = getattr(record, "chosen_kind", None)
+            subject = int(getattr(record, "subject_definition_id", 0) or 0)
+            if chosen == "action_play_card":
+                kind = getattr(record, "card_kind", None) or card_kind(subject)
+                if kind == "weapon":
+                    signals.played_weapon += 1
+                elif kind == "artifact":
+                    signals.played_artifact += 1
+                elif kind == "event":
+                    signals.played_event += 1
+                elif kind == "support":
+                    signals.played_support += 1
+                else:
+                    signals.played_other += 1
+            elif chosen == "action_use_skill" and skill_kind(subject) == "burst":
+                signals.bursts += 1
+        state = context.player_view
+        if state is not None and 0 <= int(context.acting_player) < len(state.players):
+            signals.defeated = sum(
+                1 for character in state.players[int(context.acting_player)].characters
+                if character.defeated
+            )
+        return signals
 
     def choose(self, built) -> int:
         context = built.context
@@ -173,9 +221,13 @@ class ParkablePolicy:
 
         assert self.snapshot_fn is not None, "snapshot_fn not wired"
         self.calls += 1
+        progress = progress_block(self.task, context, self._progress_signals(context))
         self.pending = PendingDecision(
             key=key,
-            prompt=[self._system(context), self.renderer.user_message(context, candidates)],
+            prompt=[
+                self._system(context),
+                self.renderer.user_message(context, candidates, progress=progress),
+            ],
             codes=list(codes),
             step=int(context.step_index),
             request=context.request_type.value,
@@ -249,6 +301,20 @@ class ParkedRunner:
                 raise ValueError(f"group {spec.group!r} needs a library_root")
             self.library = SkillLibrary.load(spec.library_root)
         self.library_version = self.library.version if self.library is not None else 0
+        # Fixed stage deck + frozen loadouts, resolved once (same contract as run.py).
+        self.stage_decks = _stage_decks_for_spec(spec)
+        self.loadouts: dict[str, Loadout] = _loadouts_for_spec(spec, library=self.library)
+        if self.loadouts:
+            missing = [stage for stage in spec.stages if stage not in self.loadouts]
+            if missing:
+                raise ValueError(f"no loadout for stage(s) {missing} under {spec.loadout_root}")
+            for stage in spec.stages:
+                expected = self.stage_decks.get(stage, spec.deck)
+                if self.loadouts[stage].deck != expected:
+                    raise ValueError(
+                        f"loadout for {stage!r} was planned for {self.loadouts[stage].deck!r}, "
+                        f"but the fixed stage deck is {expected!r}"
+                    )
         self.config = AgentConfig(
             model=spec.model,
             max_calls_per_game=spec.max_calls,
@@ -264,6 +330,16 @@ class ParkedRunner:
         # per-invocation budget fields (``budget_usd`` / ``spent_usd`` / ``aborted``).
         self.last_summary: dict[str, Any] | None = None
 
+    def _deck(self, stage_name: str) -> str:
+        loadout = self.loadouts.get(stage_name)
+        if loadout is not None:
+            return loadout.deck
+        return self.stage_decks.get(stage_name, self.spec.deck)
+
+    def _pinned(self, stage_name: str) -> tuple[str, ...]:
+        loadout = self.loadouts.get(stage_name)
+        return tuple(loadout.skills) if loadout is not None else ()
+
     # -- engine side -------------------------------------------------------
     def _ensure_client(self) -> Any:
         if not self._client_ready:
@@ -276,13 +352,16 @@ class ParkedRunner:
         return self.client
 
     def _policy(self, task: ParkedGame) -> ParkablePolicy:
+        deck = self._deck(task.stage.name)
+        pinned = self._pinned(task.stage.name)
+        config = replace(self.config, pinned_skills=pinned) if pinned else self.config
         renderer = StateRenderer(_assets(), opponent_name=f"NPC({task.stage.display})")
         policy = ParkablePolicy(
-            expert_policy(self.spec.deck, seed=0),
+            expert_policy(deck, seed=0),
             renderer=renderer,
-            task=task_spec(task.stage, self.spec.deck),
+            task=task_spec(task.stage, deck),
             library=self.library,
-            config=self.config,
+            config=config,
             calls=task.calls,                 # carry the per-game budget across resumes
             book=task,
         )
@@ -291,11 +370,19 @@ class ParkedRunner:
         return policy
 
     def _make_game(self, task: ParkedGame, policy: ParkablePolicy) -> Game:
-        contestant = deck_spec(self.spec.deck)
+        contestant = deck_spec(self._deck(task.stage.name))
         npc_deck = type(contestant)(name=f"npc_{task.stage.name}",
                                     characters=task.stage.deck_characters, cards=contestant.cards)
         if task.snapshot is None:
-            game = Game(create_param=_build_create_param(contestant, npc_deck, seed=task.seed))
+            game = Game(create_param=_build_create_param(
+                contestant,
+                npc_deck,
+                seed=task.seed,
+                version=self.spec.card_version,
+                stage_rules=(
+                    stage_rules_json(task.stage.name) if self.spec.stage_rules else None
+                ),
+            ))
         else:
             game = Game(state=State(json=task.snapshot))
         game.set_player(0, PolicyPlayer(0, policy, recorder=task.decisions, event_sink=task.events))
@@ -517,10 +604,17 @@ class ParkedRunner:
             "task_index": task.task_index,
             "stage": task.stage.name,
             "seed": task.seed,
-            "deck": self.spec.deck,
+            "deck": self._deck(task.stage.name),
+            "card_version": self.spec.card_version,
             "group": self.spec.group,
+            "stage_rules": bool(self.spec.stage_rules),
             "model": self.spec.model,
             "library_version": self.library_version,
+            "skill_loadout_hash": (
+                self.loadouts[task.stage.name].fingerprint()
+                if task.stage.name in self.loadouts else ""
+            ),
+            "pinned_skills": list(self._pinned(task.stage.name)),
             "winner": task.winner,
             "rounds": task.rounds,
             "three_star": bool(stars.three_star) if stars else False,

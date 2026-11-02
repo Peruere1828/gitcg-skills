@@ -46,6 +46,18 @@ def _kind_label(kind: OptionKind) -> str:
 
 
 @dataclass(frozen=True)
+class ObjectiveDetail:
+    """Machine-readable objective data used by the per-decision progress block."""
+
+    type: str
+    text: str = ""
+    count: int | None = None
+    kind: str | None = None
+    n: int | None = None
+    k: int | None = None
+
+
+@dataclass(frozen=True)
 class TaskSpec:
     """One natural-language task: a stage (+ its three-star objectives) and a deck."""
 
@@ -54,10 +66,130 @@ class TaskSpec:
     objectives: tuple[str, ...]          # human-readable objective texts (prompt)
     deck: str
     objective_types: tuple[str, ...] = ()  # machine types (retrieval conditions)
+    max_rounds: int | None = None          # e.g. the n in win_within_rounds
+    objective_details: tuple[ObjectiveDetail, ...] = ()
 
     def describe(self) -> str:
         goals = "；".join(self.objectives) if self.objectives else "赢得胜利"
         return f"关卡【{self.display}】用【{self.deck}】出战。三星目标：{goals}。"
+
+
+@dataclass
+class ProgressSignals:
+    """Cheap, self-counted progress at one decision.
+
+    Only things the agent can observe from its *own* chosen actions (card type,
+    burst skill, current defeated characters) are tracked. Everything else stays
+    ``unknown`` in the prompt instead of being guessed.
+    """
+
+    played_weapon: int = 0
+    played_artifact: int = 0
+    played_event: int = 0
+    played_support: int = 0
+    played_other: int = 0
+    bursts: int = 0
+    defeated: int = 0
+
+
+def _objective_details(task: TaskSpec) -> tuple[ObjectiveDetail, ...]:
+    if task.objective_details:
+        return task.objective_details
+    types = task.objective_types
+    return tuple(
+        ObjectiveDetail(type=types[index] if index < len(types) else "", text=text)
+        for index, text in enumerate(task.objectives)
+    )
+
+
+def _played_for(detail: ObjectiveDetail, signals: ProgressSignals) -> int | None:
+    """Own-card count for an equipment objective, or ``None`` when not countable."""
+    kind = detail.kind or "equipment"
+    if kind == "weapon":
+        return signals.played_weapon
+    if kind == "artifact":
+        return signals.played_artifact
+    if kind == "equipment":
+        return signals.played_weapon + signals.played_artifact
+    return None  # e.g. kind="talent": the agent does not classify talents
+
+
+def progress_block(task: TaskSpec, context: Any, signals: ProgressSignals) -> str:
+    """Compact ``回合 R/最大回合数；未完成目标：...`` line for the user message.
+
+    What it knows exactly:
+
+    * round number (from the public state) and the stage's round limit;
+    * equipment / event cards **we** have played (counted from our own decisions);
+    * burst skills **we** have used (same counting);
+    * defeated characters on our side (from the public state).
+
+    What it cannot know at decision time: whether we will win, whether the final
+    ``defeated_less_than`` check will pass, and elemental-reaction counts (the public
+    view does not expose a reliable running total). Those are rendered as ``未知``.
+    A countable objective is omitted once our own count reaches its threshold; a
+    round limit is marked failed only when the current round already exceeds it.
+    """
+    state = context.player_view
+    round_number = int(state.round_number) if state is not None else None
+    details = _objective_details(task)
+    max_rounds = task.max_rounds
+    if max_rounds is None:
+        max_rounds = next(
+            (detail.n for detail in details if detail.type == "win_within_rounds" and detail.n is not None),
+            None,
+        )
+    header = f"回合 {round_number if round_number is not None else '?'}/{max_rounds if max_rounds is not None else '?'}"
+
+    unfinished: list[str] = []
+    for detail in details:
+        text = detail.text or detail.type or "目标"
+        kind = detail.type
+
+        if kind == "play_equipment_card":
+            have = _played_for(detail, signals)
+            if have is None:
+                unfinished.append(f"{text}（未知）")
+                continue
+            required = detail.count if detail.count is not None else 1
+            if have < required:
+                unfinished.append(f"{text}（我方已打{have}/{required}）")
+            continue
+
+        if kind == "play_event_cards":
+            required = detail.count if detail.count is not None else 1
+            if signals.played_event < required:
+                unfinished.append(f"{text}（我方已打{signals.played_event}/{required}）")
+            continue
+
+        if kind == "use_elemental_burst":
+            required = detail.count if detail.count is not None else 1
+            if signals.bursts < required:
+                unfinished.append(f"{text}（我方已用{signals.bursts}/{required}）")
+            continue
+
+        if kind == "defeated_less_than":
+            if detail.k is None:
+                unfinished.append(f"{text}（未知）")
+            elif signals.defeated >= int(detail.k):
+                unfinished.append(f"{text}（已失败：我方已倒下{signals.defeated}人）")
+            else:
+                unfinished.append(f"{text}（我方已倒下{signals.defeated}人，未知最终）")
+            continue
+
+        if kind == "win_within_rounds":
+            limit = detail.n if detail.n is not None else max_rounds
+            if round_number is not None and limit is not None and round_number > int(limit):
+                unfinished.append(f"{text}（已失败：当前第{round_number}回合）")
+            else:
+                unfinished.append(f"{text}（未知）")
+            continue
+
+        # win / trigger_elemental_reactions / anything new: no cheap exact signal.
+        unfinished.append(f"{text}（未知）")
+
+    tail = "；".join(unfinished) if unfinished else "无（按我方动作计数）"
+    return f"{header}；未完成目标：{tail}"
 
 
 class StateRenderer:
@@ -206,8 +338,19 @@ class StateRenderer:
         parts.append(OUTPUT_CONTRACT)
         return {"role": "system", "content": "\n".join(parts)}
 
-    def user_message(self, context: DecisionContext, candidates: Sequence[tuple[int, LowLevelActionSpec]]) -> dict[str, str]:
-        lines = [self.describe_state(context), "", "合法动作："]
+    def user_message(
+        self,
+        context: DecisionContext,
+        candidates: Sequence[tuple[int, LowLevelActionSpec]],
+        *,
+        progress: str | None = None,
+    ) -> dict[str, str]:
+        lines: list[str] = []
+        if progress:
+            # Dynamic, per-decision text. It must stay in the *user* message so the
+            # system prefix (and therefore the provider cache key) is unchanged.
+            lines.append(progress)
+        lines.extend([self.describe_state(context), "", "合法动作："])
         lines.extend(
             self.describe_candidate(context, spec, index)
             for index, (_code, spec) in enumerate(candidates)

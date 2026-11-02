@@ -24,8 +24,16 @@ from typing import Any, Callable, Sequence
 
 from common.llm import extract_json_object
 from reps.action_adapter import BuiltDecisionContext
+from reps.schema import OptionKind
+from skillloop.cards import card_kind, skill_kind
 from skillloop.library import SkillLibrary
-from skillloop.render import StateRenderer, TaskSpec, select_candidates
+from skillloop.render import (
+    ProgressSignals,
+    StateRenderer,
+    TaskSpec,
+    progress_block,
+    select_candidates,
+)
 from skillloop.schema import Skill
 
 
@@ -43,6 +51,9 @@ class AgentConfig:
     request_types: tuple[str, ...] = ("action", "switch_hands", "choose_active")
     candidate_cap: int = 16
     top_k: int = 5                      # skill retrieval depth (the course's "Top-k" factor)
+    # Frozen stage loadout (see ``skillloop.loadout``). When non-empty, these exact
+    # skills replace BM25 retrieval for the whole game; order is prompt order.
+    pinned_skills: tuple[str, ...] = ()
 
 
 @dataclass
@@ -120,15 +131,24 @@ class SkillAgentPolicy:
         self._system: dict[str, str] | None = None
         self._system_hash = ""
         self._skills: list[Skill] = []
+        self._signals = ProgressSignals()
 
     # -- prompt ---------------------------------------------------------------
     def _system_message(self, context: Any) -> dict[str, str]:
         """Build the stable prefix once per game (or when the library changes)."""
         if self._system is None:
-            if self.library is not None and self.config.top_k > 0:
-                self._skills = self.library.retrieve(
-                    self.task.describe(), self._context_dict(context), k=self.config.top_k
-                )
+            if self.library is not None:
+                if self.config.pinned_skills:
+                    # Frozen loadout: exactly these ids, in order; unknown ids skipped.
+                    self._skills = [
+                        skill
+                        for skill_id in self.config.pinned_skills
+                        if (skill := self.library.get(skill_id)) is not None
+                    ]
+                elif self.config.top_k > 0:
+                    self._skills = self.library.retrieve(
+                        self.task.describe(), self._context_dict(context), k=self.config.top_k
+                    )
             if self.library is not None and not self.rules_note:
                 self.rules_note = self.library.rules_text()
             self._system = self.renderer.system_message(
@@ -146,20 +166,65 @@ class SkillAgentPolicy:
             round_number = int(context.player_view.round_number)
         return {"stage": stage, "objective_types": objectives, "round": round_number}
 
+    # -- progress -------------------------------------------------------------
+    def _observe(self, context: Any, code: int) -> None:
+        """Count only what we can know from our own final action.
+
+        Called for *every* final choice (model or expert fallback), so forced card
+        plays and off-policy requests still count toward objective progress.
+        """
+        spec = next(
+            (
+                spec
+                for candidate, spec in zip(
+                    context.legal_low_level_codes, context.legal_low_level_specs
+                )
+                if int(candidate) == int(code)
+            ),
+            None,
+        )
+        if spec is not None:
+            if spec.kind == OptionKind.ACTION_PLAY_CARD:
+                kind = card_kind(int(spec.subject_definition_id or 0))
+                if kind == "weapon":
+                    self._signals.played_weapon += 1
+                elif kind == "artifact":
+                    self._signals.played_artifact += 1
+                elif kind == "event":
+                    self._signals.played_event += 1
+                elif kind == "support":
+                    self._signals.played_support += 1
+                else:
+                    self._signals.played_other += 1
+            elif spec.kind == OptionKind.ACTION_USE_SKILL:
+                if skill_kind(int(spec.subject_definition_id or 0)) == "burst":
+                    self._signals.bursts += 1
+        state = context.player_view
+        if state is not None and 0 <= int(context.acting_player) < len(state.players):
+            self._signals.defeated = sum(
+                1 for character in state.players[int(context.acting_player)].characters
+                if character.defeated
+            )
+
+    def _finish(self, context: Any, code: int) -> int:
+        self._observe(context, int(code))
+        return int(code)
+
     # -- policy ---------------------------------------------------------------
     def choose(self, built: BuiltDecisionContext) -> int:
         context = built.context
         base_code = int(self.base.choose(built))
         if context.request_type.value not in self.config.request_types:
-            return base_code
+            return self._finish(context, base_code)
         if self.calls >= self.config.max_calls_per_game:
-            return base_code
+            return self._finish(context, base_code)
         candidates = select_candidates(context, max_candidates=self.config.candidate_cap)
         if len(candidates) < 2:
-            return base_code  # forced decision: no information for the LLM to add
+            return self._finish(context, base_code)  # forced decision: no information for the LLM to add
 
         system = self._system_message(context)
-        user = self.renderer.user_message(context, candidates)
+        progress = progress_block(self.task, context, self._signals)
+        user = self.renderer.user_message(context, candidates, progress=progress)
         started = time.perf_counter()
         raw = self.client.chat(
             [system, user],
@@ -193,4 +258,4 @@ class SkillAgentPolicy:
         self.decisions.append(decision)
         if self.on_decision is not None:
             self.on_decision(decision)
-        return final_code
+        return self._finish(context, final_code)

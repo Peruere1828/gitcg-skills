@@ -16,6 +16,10 @@ Usage::
     python -m skillloop.run --group scripted --stages all --seeds 3 --workers 6
     python -m skillloop.run --group dynamic --library data/skills/lib1 --seeds 50 \
         --out data/runs/dynamic.jsonl
+    python -m skillloop.run --group dynamic --library data/skills/dyn_v3 \
+        --stage-decks configs/stage_decks.json --loadout reports/loadouts \
+        --seeds 50 --out data/runs/dynamic_loadout.jsonl
+    python -m skillloop.run --group scripted --stages all --seeds 3 --stage-rules
 """
 
 from __future__ import annotations
@@ -39,11 +43,21 @@ from envs.policy import expert_policy
 from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage, get_stage, stage_names
+from npc.stage_rules import stage_rules_json
 from skillloop.agent import AgentConfig, SkillAgentPolicy
 from skillloop.library import SkillLibrary
+from skillloop.loadout import (
+    Loadout,
+    engine_lock_hash,
+    load_loadouts,
+    load_stage_decks,
+    loadout_matches,
+    stage_task,
+)
 from skillloop.render import StateRenderer, TaskSpec
 
 GROUPS = ("scripted", "contestant", "llm_empty", "static", "dynamic")
+LIBRARY_GROUPS = ("static", "dynamic")
 
 
 @dataclass(frozen=True)
@@ -59,6 +73,18 @@ class RunSpec:
     max_calls: int = 80
     rotation: str | None = None
     out: str = "data/runs/run.jsonl"
+    # Per-stage fixed deck (``configs/stage_decks.json``), identical in every arm.
+    stage_decks_root: str | None = None
+    # Frozen per-(stage, library version) skill loadouts.
+    loadout_root: str | None = None
+    # Card pool to pin the game to (``CreateParam(version=...)``, e.g. "v3.3.0").
+    # ``None`` keeps the engine default, i.e. today's behaviour. A pinned pool
+    # rejects any deck whose characters/cards were released after it.
+    card_version: str | None = None
+    # Send the stage's adventure-challenge rules (initial supports / effects) to
+    # the engine through ``ATTR_CREATEPARAM_STAGE_RULES``. The rule belongs to the
+    # stage, so it applies identically to every group.
+    stage_rules: bool = False
 
     def fingerprint(self) -> dict[str, Any]:
         library_version = 0
@@ -72,14 +98,29 @@ class RunSpec:
             "stages": list(self.stages),
             "seeds": list(self.seeds),
             "deck": self.deck,
+            "card_version": self.card_version,
             "library_root": self.library_root,
             "library_version": library_version,
             "top_k": self.top_k,
             "model": self.model,
             "rotation": self.rotation,
+            "stage_rules": self.stage_rules,
+            "special_rules": (
+                _sha1(Path("configs/npc/special_rules.json"))
+                if self.stage_rules
+                else "off"
+            ),
             "engine_lock": _sha1(Path("configs/engine.lock")),
             "hp_table": _sha1(Path("configs/npc/hp_table.json")),
             "stages": _sha1(Path("configs/npc/npc_stages_mond_liyue.json")),
+            "stage_decks_root": self.stage_decks_root,
+            "stage_decks_hash": (
+                _sha1(Path(self.stage_decks_root)) if self.stage_decks_root else "none"
+            ),
+            "loadout_root": self.loadout_root,
+            "loadout_hash": (
+                _dir_hash(Path(self.loadout_root)) if self.loadout_root else "none"
+            ),
         }
 
 
@@ -87,6 +128,19 @@ def _sha1(path: Path) -> str:
     if not path.exists():
         return "missing"
     return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+
+
+def _dir_hash(path: Path) -> str:
+    """Hash file names + contents so any loadout edit invalidates resume."""
+    if not path.exists():
+        return "missing"
+    if path.is_file():
+        return _sha1(path)
+    digest = hashlib.sha1()
+    for file in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(str(file.relative_to(path)).encode("utf-8"))
+        digest.update(file.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def budget_from_env() -> float | None:
@@ -115,40 +169,98 @@ def _assets():
 
 
 def task_spec(stage: NpcStage, deck: str) -> TaskSpec:
-    return TaskSpec(
-        stage=stage.name,
-        display=stage.display or stage.name,
-        objectives=tuple(obj.text for obj in stage.objectives),
-        deck=deck,
-        objective_types=tuple(obj.type for obj in stage.objectives),
-    )
+    """The stage prompt spec (kept here for callers; data assembly lives in loadout)."""
+    return stage_task(stage, deck)
 
 
-def build_policy(spec: RunSpec, stage: NpcStage, *, client: Any = None):
+def _stage_decks_for_spec(spec: RunSpec) -> dict[str, str]:
+    """Load the fixed stage->deck map once, or return ``{}`` without the flag."""
+    if not spec.stage_decks_root:
+        return {}
+    path = Path(spec.stage_decks_root)
+    if not path.exists():
+        raise SystemExit(f"--stage-decks file not found: {path}")
+    return load_stage_decks(path)
+
+
+def _loadouts_for_spec(spec: RunSpec, *, library: SkillLibrary | None = None) -> dict[str, Loadout]:
+    """Load + validate frozen loadouts once (only groups that own a library)."""
+    if not spec.loadout_root or spec.group not in LIBRARY_GROUPS:
+        return {}
+    if not spec.library_root:
+        raise SystemExit(f"group {spec.group!r} needs --library together with --loadout")
+    lib = library or SkillLibrary.load(spec.library_root)
+    root = Path(spec.loadout_root)
+    versioned = root / f"v{lib.version}"
+    source = versioned if versioned.is_dir() else root
+    loadouts = load_loadouts(source)
+    if not loadouts:
+        raise SystemExit(
+            f"no loadouts in {source}; run: python -m scripts.plan_loadout "
+            f"--library {spec.library_root} --out {root}"
+        )
+    current_lock = engine_lock_hash()
+    for stage in spec.stages:
+        loadout = loadouts.get(stage)
+        if loadout is None:
+            continue
+        if not loadout_matches(loadout, library_version=lib.version, engine_lock=current_lock):
+            raise SystemExit(
+                f"stale loadout for {stage!r}: file has library v{loadout.library_version} / "
+                f"engine {loadout.engine_lock or 'missing'}, run uses v{lib.version} / "
+                f"engine {current_lock}; re-run scripts.plan_loadout"
+            )
+    return loadouts
+
+
+def build_policy(
+    spec: RunSpec,
+    stage: NpcStage,
+    *,
+    client: Any = None,
+    deck: str | None = None,
+    pinned_skills: tuple[str, ...] = (),
+):
     """Return the policy for one group (the only thing that differs across groups)."""
+    if deck is None:
+        deck = _stage_decks_for_spec(spec).get(stage.name, spec.deck)
     if spec.group == "scripted":
-        return expert_policy(spec.deck, seed=0)
+        return expert_policy(deck, seed=0)
     if spec.group == "contestant":
         from npc.contestant import build_contestant_policy
 
-        return build_contestant_policy(deck_spec(spec.deck), stage, inject_objectives=True)
+        return build_contestant_policy(deck_spec(deck), stage, inject_objectives=True)
     if spec.group not in GROUPS:
         raise SystemExit(f"unknown group {spec.group!r}; expected one of {GROUPS}")
 
     library = None
-    if spec.group in ("static", "dynamic"):
+    if spec.group in LIBRARY_GROUPS:
         if not spec.library_root:
             raise SystemExit(f"group {spec.group!r} needs --library")
         library = SkillLibrary.load(spec.library_root)
     renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
     return SkillAgentPolicy(
-        expert_policy(spec.deck, seed=0),
+        expert_policy(deck, seed=0),
         client,
         renderer=renderer,
-        task=task_spec(stage, spec.deck),
+        task=task_spec(stage, deck),
         library=library,
-        config=AgentConfig(model=spec.model, max_calls_per_game=spec.max_calls, top_k=spec.top_k),
+        config=AgentConfig(
+            model=spec.model,
+            max_calls_per_game=spec.max_calls,
+            top_k=spec.top_k,
+            pinned_skills=tuple(pinned_skills),
+        ),
     )
+
+
+def _loadout_from_payload(payload: dict[str, Any]) -> Loadout | None:
+    raw = payload.get("loadout")
+    if isinstance(raw, Loadout):
+        return raw
+    if isinstance(raw, dict) and raw.get("stage"):
+        return Loadout.from_dict(raw)
+    return None
 
 
 def play_one(payload: dict[str, Any]) -> dict[str, Any]:
@@ -160,43 +272,100 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     spec = RunSpec(**payload["spec"])
     stage = get_stage(payload["stage"])
     seed = int(payload["seed"])
+    rules_json = stage_rules_json(stage.name) if spec.stage_rules else None
+
+    stage_decks = payload.get("stage_decks")
+    if stage_decks is None:
+        stage_decks = _stage_decks_for_spec(spec)
+    loadout = _loadout_from_payload(payload) if spec.group in LIBRARY_GROUPS else None
+    if loadout is None and spec.loadout_root and spec.group in LIBRARY_GROUPS:
+        loadout = _loadouts_for_spec(spec).get(stage.name)
+    if loadout is not None and loadout.stage != stage.name:
+        return {
+            "stage": stage.name, "seed": seed, "group": spec.group,
+            "card_version": spec.card_version,
+            "stage_rules": bool(spec.stage_rules),
+            "error": f"loadout_stage_mismatch:{loadout.stage}",
+        }
+
+    deck = loadout.deck if loadout is not None else stage_decks.get(stage.name, spec.deck)
+    pinned_skills = tuple(loadout.skills) if loadout is not None else ()
 
     client = None
-    if spec.group.startswith("llm") or spec.group in ("static", "dynamic"):
+    if spec.group.startswith("llm") or spec.group in LIBRARY_GROUPS:
         from common.llm import build_llm_client
 
         client = build_llm_client()
         if client is None:
-            return {"stage": stage.name, "seed": seed, "group": spec.group, "error": "no_llm_config"}
+            return {
+                "stage": stage.name, "seed": seed, "group": spec.group,
+                "card_version": spec.card_version,
+                "stage_rules": bool(spec.stage_rules),
+                "error": "no_llm_config",
+            }
 
-    policy0 = build_policy(spec, stage, client=client)
-    contestant = deck_spec(spec.deck)
+    policy0 = build_policy(
+        spec, stage, client=client, deck=deck, pinned_skills=pinned_skills
+    )
+    contestant = deck_spec(deck)
     npc_deck = type(contestant)(
         name=f"npc_{stage.name}", characters=stage.deck_characters, cards=contestant.cards
     )
     started = time.perf_counter()
-    record = run_match(
-        contestant,
-        npc_deck,
-        policy0,
-        npc_policy_for_stage(stage, rotation=spec.rotation),
-        seed=seed,
-        record_decisions=False,
-        record_events=True,
-        record_final_state=True,
-    )
+    try:
+        record = run_match(
+            contestant,
+            npc_deck,
+            policy0,
+            npc_policy_for_stage(stage, rotation=spec.rotation),
+            seed=seed,
+            version=spec.card_version,
+            record_decisions=True,
+            record_events=True,
+            record_final_state=True,
+            stage_rules=rules_json,
+        )
+    except Exception as exc:
+        # The engine validates the pinned pool while it builds the initial state,
+        # which happens inside ``run_match`` but *before* its own try/except: an
+        # out-of-pool card raises ``AssertionError`` (message printed by the C++
+        # side as "Unknown card id N"). Turn that into a normal error row so one
+        # bad deck cannot kill a whole grid; other engine errors keep the old
+        # behaviour when no pool is pinned.
+        if spec.card_version is None:
+            raise
+        detail = f": {exc}" if str(exc).strip() else ""
+        return {
+            "task_index": payload.get("task_index", 0),
+            "stage": stage.name,
+            "seed": seed,
+            "deck": deck,
+            "card_version": spec.card_version,
+            "group": spec.group,
+            "stage_rules": bool(spec.stage_rules),
+            "error": f"{type(exc).__name__}{detail} (card_version={spec.card_version})",
+            "seconds": round(time.perf_counter() - started, 2),
+        }
     elapsed = time.perf_counter() - started
     stars = evaluate_stage(stage, record)
     decisions = getattr(policy0, "decisions", []) or []
     usage = getattr(client, "usage", None)
+    if loadout is not None:
+        library_version = loadout.library_version
+    else:
+        library_version = SkillLibrary.load(spec.library_root).version if spec.library_root else 0
     return {
         "task_index": payload.get("task_index", 0),
         "stage": stage.name,
         "seed": seed,
-        "deck": spec.deck,
+        "deck": deck,
+        "card_version": spec.card_version,
         "group": spec.group,
+        "stage_rules": bool(spec.stage_rules),
         "model": spec.model,
-        "library_version": (SkillLibrary.load(spec.library_root).version if spec.library_root else 0),
+        "library_version": library_version,
+        "skill_loadout_hash": loadout.fingerprint() if loadout is not None else "",
+        "pinned_skills": list(pinned_skills),
         "winner": record.winner,
         "rounds": record.rounds,
         "three_star": bool(stars.three_star),
@@ -220,6 +389,32 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
 def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
     out = Path(spec.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Read the two per-stage configs once per invocation; workers get the resolved
+    # values in their payload instead of re-reading them per game.
+    stage_decks = _stage_decks_for_spec(spec)
+    loadouts = _loadouts_for_spec(spec)
+    if loadouts:
+        missing = [stage for stage in spec.stages if stage not in loadouts]
+        if missing:
+            raise SystemExit(
+                f"no loadout for stage(s) {missing} under {spec.loadout_root}; "
+                "run scripts.plan_loadout for every stage in this grid"
+            )
+        for stage in spec.stages:
+            expected = stage_decks.get(stage, spec.deck)
+            if loadouts[stage].deck != expected:
+                raise SystemExit(
+                    f"loadout for {stage!r} was planned for deck "
+                    f"{loadouts[stage].deck!r}, but --stage-decks/RunSpec.deck gives "
+                    f"{expected!r}; re-run scripts.plan_loadout"
+                )
+    elif spec.loadout_root and spec.group not in LIBRARY_GROUPS and progress:
+        print(
+            f"[run] --loadout ignored for group {spec.group!r} "
+            "(only static/dynamic load a skill library)",
+            flush=True,
+        )
+
     meta_path = out.with_suffix(out.suffix + ".meta.json")
     fingerprint = spec.fingerprint()
 
@@ -244,7 +439,14 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
                 done.add((str(row["stage"]), int(row["seed"])))
 
     pending = [
-        {"spec": spec.__dict__, "stage": stage, "seed": seed, "task_index": index}
+        {
+            "spec": spec.__dict__,
+            "stage": stage,
+            "seed": seed,
+            "task_index": index,
+            "stage_decks": stage_decks,
+            "loadout": loadouts[stage].as_dict() if stage in loadouts else None,
+        }
         for index, (stage, seed) in enumerate(
             (stage, seed) for stage in spec.stages for seed in spec.seeds
         )
@@ -378,6 +580,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-calls", type=int, default=80)
     parser.add_argument("--rotation", default=None)
+    parser.add_argument("--stage-decks", default=None,
+                        help="JSON with one fixed deck per stage (configs/stage_decks.json)")
+    parser.add_argument("--loadout", default=None,
+                        help="frozen skill loadouts (reports/loadouts); static/dynamic only")
+    parser.add_argument("--card-version", default=None,
+                        help="pin the engine card pool (e.g. v3.3.0); default: engine default pool")
+    parser.add_argument("--stage-rules", action="store_true",
+                        help="send each stage's special rules (configs/npc/special_rules.json)")
     parser.add_argument("--out", default=None)
     return parser
 
@@ -405,6 +615,10 @@ def main(argv: list[str] | None = None) -> int:
         max_calls=args.max_calls,
         rotation=args.rotation,
         out=args.out or f"data/runs/{args.group}_{args.deck}.jsonl",
+        stage_decks_root=args.stage_decks,
+        loadout_root=args.loadout,
+        card_version=args.card_version,
+        stage_rules=args.stage_rules,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
