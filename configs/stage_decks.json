@@ -1,0 +1,68 @@
+{
+  "stages": {
+    "blanche": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "buyun": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "chefmao": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "ellin": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "irontonguetian": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "jifang": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "lan": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "liusu": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "marjorie": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "patton": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "shitou": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "swan": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "timaeus": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; artifact objective is reachable with this deck; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "timmie": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "uncletian": {
+      "deck": "superconduct_aggro",
+      "notes": "placeholder for one fixed deck per stage; event objective is reachable with this deck; matrix-based pick (scripts/deck_matrix.py) lands later"
+    },
+    "wagner": {
+      "deck": "superconduct_mika_attack",
+      "notes": "weapon-carrying deck for the 打出1张武器牌 objective; matrix-based pick (scripts/deck_matrix.py) lands later"
+    }
+  }
+}

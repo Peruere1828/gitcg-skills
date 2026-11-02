@@ -1,0 +1,2599 @@
+{
+  "version": "v3.3.0",
+  "assets_path": "/home/ubuntuaaa/projects/gitcg-skills/data/assets/expert_system_assets_chs_latest.json",
+  "assets_sha1": "6b13d08f6419",
+  "pool": {
+    "player_characters": [
+      1101,
+      1102,
+      1103,
+      1104,
+      1105,
+      1201,
+      1202,
+      1203,
+      1301,
+      1302,
+      1303,
+      1305,
+      1401,
+      1402,
+      1403,
+      1404,
+      1501,
+      1502,
+      1601,
+      1602,
+      1701,
+      2201,
+      2202,
+      2301,
+      2501,
+      2601,
+      2701
+    ],
+    "npc_characters": [],
+    "action_cards": [
+      211011,
+      211021,
+      211031,
+      211041,
+      211051,
+      212011,
+      212021,
+      212031,
+      213011,
+      213021,
+      213031,
+      213051,
+      214011,
+      214021,
+      214031,
+      214041,
+      215011,
+      215021,
+      216011,
+      216021,
+      217011,
+      222011,
+      222021,
+      223011,
+      225011,
+      226011,
+      227011,
+      311101,
+      311102,
+      311103,
+      311201,
+      311202,
+      311203,
+      311301,
+      311302,
+      311303,
+      311401,
+      311402,
+      311403,
+      311501,
+      311502,
+      311503,
+      312001,
+      312002,
+      312003,
+      312004,
+      312005,
+      312006,
+      312101,
+      312102,
+      312201,
+      312202,
+      312301,
+      312302,
+      312401,
+      312402,
+      312501,
+      312502,
+      312601,
+      312602,
+      312701,
+      312702,
+      321001,
+      321002,
+      321003,
+      321004,
+      321005,
+      321006,
+      322001,
+      322002,
+      322003,
+      322004,
+      322005,
+      322006,
+      322007,
+      322008,
+      322009,
+      322010,
+      322011,
+      322012,
+      323001,
+      323002,
+      331101,
+      331102,
+      331201,
+      331202,
+      331301,
+      331302,
+      331401,
+      331402,
+      331501,
+      331502,
+      331601,
+      331602,
+      331701,
+      331702,
+      332001,
+      332002,
+      332003,
+      332004,
+      332005,
+      332006,
+      332007,
+      332008,
+      332009,
+      332010,
+      332011,
+      332012,
+      332013,
+      332014,
+      332015,
+      333001,
+      333002,
+      333003,
+      333004,
+      333005,
+      333006,
+      333007,
+      333008
+    ],
+    "counts": {
+      "character_candidates": 27,
+      "characters_engine_legal": 27,
+      "player_characters": 27,
+      "npc_characters": 0,
+      "card_candidates": 127,
+      "cards_engine_legal": 120,
+      "cards_deck_buildable": 119,
+      "cards_engine_rejected": 7
+    },
+    "rejected_cards": [
+      {
+        "id": 81,
+        "name": "元素附魔：冰",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 81 | AssertionError:"
+      },
+      {
+        "id": 82,
+        "name": "元素附魔：水",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 82 | AssertionError:"
+      },
+      {
+        "id": 83,
+        "name": "元素附魔：火",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 83 | AssertionError:"
+      },
+      {
+        "id": 84,
+        "name": "元素附魔：雷",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 84 | AssertionError:"
+      },
+      {
+        "id": 85,
+        "name": "元素附魔：风",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 85 | AssertionError:"
+      },
+      {
+        "id": 86,
+        "name": "元素附魔：岩",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 86 | AssertionError:"
+      },
+      {
+        "id": 87,
+        "name": "元素附魔：草",
+        "since_version": "v3.3.0",
+        "engine_message": "gitcg_state_new: Uncaught Error: Unknown card id 87 | AssertionError:"
+      }
+    ]
+  },
+  "characters": {
+    "1101": {
+      "name": "甘雨",
+      "english_name": "Ganyu",
+      "element": "CRYO",
+      "weapon": "BOW",
+      "since_version": "v3.3.0"
+    },
+    "1102": {
+      "name": "迪奥娜",
+      "english_name": "Diona",
+      "element": "CRYO",
+      "weapon": "BOW",
+      "since_version": "v3.3.0"
+    },
+    "1103": {
+      "name": "凯亚",
+      "english_name": "Kaeya",
+      "element": "CRYO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1104": {
+      "name": "重云",
+      "english_name": "Chongyun",
+      "element": "CRYO",
+      "weapon": "CLAYMORE",
+      "since_version": "v3.3.0"
+    },
+    "1105": {
+      "name": "神里绫华",
+      "english_name": "Kamisato Ayaka",
+      "element": "CRYO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1201": {
+      "name": "芭芭拉",
+      "english_name": "Barbara",
+      "element": "HYDRO",
+      "weapon": "CATALYST",
+      "since_version": "v3.3.0"
+    },
+    "1202": {
+      "name": "行秋",
+      "english_name": "Xingqiu",
+      "element": "HYDRO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1203": {
+      "name": "莫娜",
+      "english_name": "Mona",
+      "element": "HYDRO",
+      "weapon": "CATALYST",
+      "since_version": "v3.3.0"
+    },
+    "1301": {
+      "name": "迪卢克",
+      "english_name": "Diluc",
+      "element": "PYRO",
+      "weapon": "CLAYMORE",
+      "since_version": "v3.3.0"
+    },
+    "1302": {
+      "name": "香菱",
+      "english_name": "Xiangling",
+      "element": "PYRO",
+      "weapon": "POLE",
+      "since_version": "v3.3.0"
+    },
+    "1303": {
+      "name": "班尼特",
+      "english_name": "Bennett",
+      "element": "PYRO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1305": {
+      "name": "宵宫",
+      "english_name": "Yoimiya",
+      "element": "PYRO",
+      "weapon": "BOW",
+      "since_version": "v3.3.0"
+    },
+    "1401": {
+      "name": "菲谢尔",
+      "english_name": "Fischl",
+      "element": "ELECTRO",
+      "weapon": "BOW",
+      "since_version": "v3.3.0"
+    },
+    "1402": {
+      "name": "雷泽",
+      "english_name": "Razor",
+      "element": "ELECTRO",
+      "weapon": "CLAYMORE",
+      "since_version": "v3.3.0"
+    },
+    "1403": {
+      "name": "刻晴",
+      "english_name": "Keqing",
+      "element": "ELECTRO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1404": {
+      "name": "赛诺",
+      "english_name": "Cyno",
+      "element": "ELECTRO",
+      "weapon": "POLE",
+      "since_version": "v3.3.0"
+    },
+    "1501": {
+      "name": "砂糖",
+      "english_name": "Sucrose",
+      "element": "ANEMO",
+      "weapon": "CATALYST",
+      "since_version": "v3.3.0"
+    },
+    "1502": {
+      "name": "琴",
+      "english_name": "Jean",
+      "element": "ANEMO",
+      "weapon": "SWORD",
+      "since_version": "v3.3.0"
+    },
+    "1601": {
+      "name": "凝光",
+      "english_name": "Ningguang",
+      "element": "GEO",
+      "weapon": "CATALYST",
+      "since_version": "v3.3.0"
+    },
+    "1602": {
+      "name": "诺艾尔",
+      "english_name": "Noelle",
+      "element": "GEO",
+      "weapon": "CLAYMORE",
+      "since_version": "v3.3.0"
+    },
+    "1701": {
+      "name": "柯莱",
+      "english_name": "Collei",
+      "element": "DENDRO",
+      "weapon": "BOW",
+      "since_version": "v3.3.0"
+    },
+    "2201": {
+      "name": "纯水精灵·洛蒂娅",
+      "english_name": "Rhodeia of Loch",
+      "element": "HYDRO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    },
+    "2202": {
+      "name": "愚人众·藏镜仕女",
+      "english_name": "Mirror Maiden",
+      "element": "HYDRO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    },
+    "2301": {
+      "name": "愚人众·火之债务处理人",
+      "english_name": "Fatui Pyro Agent",
+      "element": "PYRO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    },
+    "2501": {
+      "name": "魔偶剑鬼",
+      "english_name": "Maguu Kenki",
+      "element": "ANEMO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    },
+    "2601": {
+      "name": "丘丘岩盔王",
+      "english_name": "Stonehide Lawachurl",
+      "element": "GEO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    },
+    "2701": {
+      "name": "翠翎恐蕈",
+      "english_name": "Jadeplume Terrorshroom",
+      "element": "DENDRO",
+      "weapon": "NONE",
+      "since_version": "v3.3.0"
+    }
+  },
+  "cards": {
+    "211011": {
+      "name": "唯此一心",
+      "english_name": "Undivided Heart",
+      "kind": "talent",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 1101,
+      "cost": 5,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为甘雨时，装备此牌。\n甘雨装备此牌后，立刻使用一次霜华矢。\n装备有此牌的甘雨使用霜华矢时：如果此技能在本场对局中曾经被使用过，则其对敌方后台角色造成的穿透伤害改为3点。\n（牌组中包含甘雨，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "211021": {
+      "name": "猫爪冰摇",
+      "english_name": "Shaken, Not Purred",
+      "kind": "talent",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 1102,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为迪奥娜时，装备此牌。\n迪奥娜装备此牌后，立刻使用一次猫爪冻冻。\n装备有此牌的迪奥娜生成的猫爪护盾，所提供的护盾值+1。\n（牌组中包含迪奥娜，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "211031": {
+      "name": "冷血之剑",
+      "english_name": "Cold-Blooded Strike",
+      "kind": "talent",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 1103,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为凯亚时，装备此牌。\n凯亚装备此牌后，立刻使用一次霜袭。\n装备有此牌的凯亚使用霜袭后：治疗自身2点。（每回合1次）\n（牌组中包含凯亚，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "211041": {
+      "name": "吐纳真定",
+      "english_name": "Steady Breathing",
+      "kind": "talent",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 1104,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为重云时，装备此牌。\n重云装备此牌后，立刻使用一次重华叠霜。\n装备有此牌的重云生成的重华叠霜领域获得以下效果：\n使我方单手剑、双手剑或长柄武器角色的普通攻击伤害+1。\n（牌组中包含重云，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "211051": {
+      "name": "寒天宣命祝词",
+      "english_name": "Kanten Senmyou Blessing",
+      "kind": "talent",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 1105,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_TALENT"
+      ],
+      "description": "装备有此牌的神里绫华生成的冰元素附魔会使所附属角色造成的冰元素伤害+1。\n切换到装备有此牌的神里绫华时：少花费1个元素骰。（每回合1次）\n（牌组中包含神里绫华，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "212011": {
+      "name": "光辉的季节",
+      "english_name": "Glorious Season",
+      "kind": "talent",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 1201,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为芭芭拉时，装备此牌。\n芭芭拉装备此牌后，立刻使用一次演唱，开始♪。\n装备有此牌的芭芭拉在场时，歌声之环会使我方执行「切换角色」行动时少花费1个元素骰。（每回合1次）\n（牌组中包含芭芭拉，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "212021": {
+      "name": "重帘留香",
+      "english_name": "The Scent Remained",
+      "kind": "talent",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 1202,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为行秋时，装备此牌。\n行秋装备此牌后，立刻使用一次画雨笼山。\n装备有此牌的行秋生成的雨帘剑改为可以抵挡至少为2的伤害，并且初始可用次数+1。\n（牌组中包含行秋，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "212031": {
+      "name": "沉没的预言",
+      "english_name": "Prophecy of Submersion",
+      "kind": "talent",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 1203,
+      "cost": 6,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为莫娜时，装备此牌。\n莫娜装备此牌后，立刻使用一次星命定轨。\n装备有此牌的莫娜出战期间，我方引发的水元素相关反应伤害额外+2。\n（牌组中包含莫娜，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "213011": {
+      "name": "流火焦灼",
+      "english_name": "Flowing Flame",
+      "kind": "talent",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 1301,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为迪卢克时，装备此牌。\n迪卢克装备此牌后，立刻使用一次逆焰之刃。\n装备有此牌的迪卢克每回合第2次与第3次使用逆焰之刃时：少花费1个火元素。\n（牌组中包含迪卢克，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "213021": {
+      "name": "交叉火力",
+      "english_name": "Crossfire",
+      "kind": "talent",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 1302,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为香菱时，装备此牌。\n香菱装备此牌后，立刻使用一次锅巴出击。\n装备有此牌的香菱使用锅巴出击时：自身也会造成1点火元素伤害。\n（牌组中包含香菱，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "213031": {
+      "name": "冒险憧憬",
+      "english_name": "Grand Expectation",
+      "kind": "talent",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 1303,
+      "cost": 6,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为班尼特时，装备此牌。\n班尼特装备此牌后，立刻使用一次美妙旅程。\n装备有此牌的班尼特生成的鼓舞领域，其伤害提升效果改为总是生效，不再具有生命值限制。\n（牌组中包含班尼特，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "213051": {
+      "name": "长野原龙势流星群",
+      "english_name": "Naganohara Meteor Swarm",
+      "kind": "talent",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 1305,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为宵宫时，装备此牌。\n宵宫装备此牌后，立刻使用一次焰硝庭火舞。\n装备有此牌的宵宫所生成的庭火焰硝触发后额外造成1点火元素伤害。\n（牌组中包含宵宫，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "214011": {
+      "name": "噬星魔鸦",
+      "english_name": "Stellar Predator",
+      "kind": "talent",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 1401,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为菲谢尔时，装备此牌。\n菲谢尔装备此牌后，立刻使用一次夜巡影翼。\n装备有此牌的菲谢尔生成的奥兹，会在菲谢尔普通攻击后造成2点雷元素伤害。（需消耗可用次数）\n（牌组中包含菲谢尔，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "214021": {
+      "name": "觉醒",
+      "english_name": "Awakening",
+      "kind": "talent",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 1402,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为雷泽时，装备此牌。\n雷泽装备此牌后，立刻使用一次利爪与苍雷。\n装备有此牌的雷泽使用利爪与苍雷后：使我方一个雷元素角色获得1点充能。（每回合1次，出战角色优先）\n（牌组中包含雷泽，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "214031": {
+      "name": "抵天雷罚",
+      "english_name": "Thundering Penance",
+      "kind": "talent",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 1403,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为刻晴时，装备此牌。\n刻晴装备此牌后，立刻使用一次星斗归位。\n装备有此牌的刻晴生成的雷元素附魔获得以下效果：\n初始持续回合+1，并且会使所附属角色造成的雷元素伤害+1。\n（牌组中包含刻晴，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "214041": {
+      "name": "落羽的裁择",
+      "english_name": "Featherfall Judgment",
+      "kind": "talent",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 1404,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为赛诺时，装备此牌。\n赛诺装备此牌后，立刻使用一次秘仪·律渊渡魂。\n装备有此牌的赛诺在启途誓使的「凭依」级数至少为2时，使用秘仪·律渊渡魂造成的伤害+1。（每回合至多2次）\n（牌组中包含赛诺，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "215011": {
+      "name": "混元熵增论",
+      "english_name": "Chaotic Entropy",
+      "kind": "talent",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 1501,
+      "cost": 5,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为砂糖时，装备此牌。\n砂糖装备此牌后，立刻使用一次禁·风灵作成·柒伍同构贰型。\n装备有此牌的砂糖生成的大型风灵已转换成另一种元素后：我方造成的此类元素伤害+1。\n（牌组中包含砂糖，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "215021": {
+      "name": "蒲公英的国土",
+      "english_name": "Lands of Dandelion",
+      "kind": "talent",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 1502,
+      "cost": 6,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为琴时，装备此牌。\n琴装备此牌后，立刻使用一次蒲公英之风。\n装备有此牌的琴在场时，蒲公英领域会使我方造成的风元素伤害+1。\n（牌组中包含琴，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "216011": {
+      "name": "储之千日，用之一刻",
+      "english_name": "Strategic Reserve",
+      "kind": "talent",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 1601,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为凝光时，装备此牌。\n凝光装备此牌后，立刻使用一次璇玑屏。\n装备有此牌的凝光在场时，璇玑屏会使我方造成的岩元素伤害+1。\n（牌组中包含凝光，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "216021": {
+      "name": "支援就交给我吧",
+      "english_name": "I Got Your Back",
+      "kind": "talent",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 1602,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为诺艾尔时，装备此牌。\n诺艾尔装备此牌后，立刻使用一次护心铠。\n诺艾尔普通攻击后：如果此牌和护体岩铠仍在场，则治疗我方所有角色1点。（每回合1次）\n（牌组中包含诺艾尔，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "217011": {
+      "name": "飞叶迴斜",
+      "english_name": "Floral Sidewinder",
+      "kind": "talent",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 1701,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为柯莱时，装备此牌。\n柯莱装备此牌后，立刻使用一次拂花偈叶。\n装备有此牌的柯莱使用了拂花偈叶的回合中，我方角色的技能引发草元素相关反应后：造成1点草元素伤害。（每回合1次）\n（牌组中包含柯莱，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "222011": {
+      "name": "百川奔流",
+      "english_name": "Streaming Surge",
+      "kind": "talent",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 2201,
+      "cost": 7,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为纯水精灵·洛蒂娅时，装备此牌。\n纯水精灵·洛蒂娅装备此牌后，立刻使用一次潮涌与激流。\n装备有此牌的纯水精灵·洛蒂娅使用潮涌与激流时：我方所有召唤物可用次数+1。\n（牌组中包含纯水精灵·洛蒂娅，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "222021": {
+      "name": "镜锢之笼",
+      "english_name": "Mirror Cage",
+      "kind": "talent",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 2202,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为愚人众·藏镜仕女时，装备此牌。\n愚人众·藏镜仕女装备此牌后，立刻使用一次潋波绽破。\n装备有此牌的愚人众·藏镜仕女生成的水光破镜初始持续回合+1，并且会使所附属角色受到的水元素伤害+1。\n（牌组中包含愚人众·藏镜仕女，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "223011": {
+      "name": "悉数讨回",
+      "english_name": "Paid in Full",
+      "kind": "talent",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 2301,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为愚人众·火之债务处理人时，装备此牌。\n愚人众·火之债务处理人装备此牌后，立刻使用一次伺机而动。\n装备有此牌的愚人众·火之债务处理人生成的潜行获得以下效果：\n初始可用次数+1，并且使所附属角色造成的物理伤害变为火元素伤害。\n（牌组中包含愚人众·火之债务处理人，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "225011": {
+      "name": "机巧神通",
+      "english_name": "Transcendent Automaton",
+      "kind": "talent",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 2501,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为魔偶剑鬼时，装备此牌。\n魔偶剑鬼装备此牌后，立刻使用一次孤风刀势。\n装备有此牌的魔偶剑鬼使用孤风刀势后，我方切换到后一个角色；使用霜驰影突后，我方切换到前一个角色。\n（牌组中包含魔偶剑鬼，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "226011": {
+      "name": "重铸：岩盔",
+      "english_name": "Stonehide Reforged",
+      "kind": "talent",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 2601,
+      "cost": 6,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为丘丘岩盔王时，装备此牌。\n丘丘岩盔王装备此牌后，立刻使用一次Upa Shato。\n装备有此牌的丘丘岩盔王击倒敌方角色后：丘丘岩盔王重新附属岩盔和坚岩之力。\n（牌组中包含丘丘岩盔王，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "227011": {
+      "name": "孢子增殖",
+      "english_name": "Proliferating Spores",
+      "kind": "talent",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 2701,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_TALENT",
+        "GCG_TAG_SLOWLY"
+      ],
+      "description": "战斗行动：我方出战角色为翠翎恐蕈时，装备此牌。\n翠翎恐蕈装备此牌后，立刻使用一次不稳定孢子云。\n装备有此牌的翠翎恐蕈，可累积的「活化激能」层数+1。\n（牌组中包含翠翎恐蕈，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311101": {
+      "name": "魔导绪论",
+      "english_name": "Magic Guide",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CATALYST",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CATALYST"
+      ],
+      "description": "角色造成的伤害+1。\n（「法器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311102": {
+      "name": "祭礼残章",
+      "english_name": "Sacrificial Fragments",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CATALYST",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CATALYST"
+      ],
+      "description": "角色造成的伤害+1。\n角色使用「元素战技」后：生成1个此角色类型的元素骰。（每回合1次）\n（「法器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311103": {
+      "name": "天空之卷",
+      "english_name": "Skyward Atlas",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CATALYST",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CATALYST"
+      ],
+      "description": "角色造成的伤害+1。\n每回合1次：角色使用「普通攻击」造成的伤害额外+1。\n（「法器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311201": {
+      "name": "鸦羽弓",
+      "english_name": "Raven Bow",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "BOW",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_BOW"
+      ],
+      "description": "角色造成的伤害+1。\n（「弓」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311202": {
+      "name": "祭礼弓",
+      "english_name": "Sacrificial Bow",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "BOW",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_BOW"
+      ],
+      "description": "角色造成的伤害+1。\n角色使用「元素战技」后：生成1个此角色类型的元素骰。（每回合1次）\n（「弓」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311203": {
+      "name": "天空之翼",
+      "english_name": "Skyward Harp",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "BOW",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_BOW"
+      ],
+      "description": "角色造成的伤害+1。\n每回合1次：角色使用「普通攻击」造成的伤害额外+1。\n（「弓」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311301": {
+      "name": "白铁大剑",
+      "english_name": "White Iron Greatsword",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CLAYMORE",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CLAYMORE"
+      ],
+      "description": "角色造成的伤害+1。\n（「双手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311302": {
+      "name": "祭礼大剑",
+      "english_name": "Sacrificial Greatsword",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CLAYMORE",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CLAYMORE"
+      ],
+      "description": "角色造成的伤害+1。\n角色使用「元素战技」后：生成1个此角色类型的元素骰。（每回合1次）\n（「双手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311303": {
+      "name": "狼的末路",
+      "english_name": "Wolf's Gravestone",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "CLAYMORE",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_CLAYMORE"
+      ],
+      "description": "角色造成的伤害+1。\n攻击剩余生命值不多于6的目标时，伤害额外+2。\n（「双手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311401": {
+      "name": "白缨枪",
+      "english_name": "White Tassel",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "POLE",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_POLE"
+      ],
+      "description": "角色造成的伤害+1。\n（「长柄武器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311402": {
+      "name": "千岩长枪",
+      "english_name": "Lithic Spear",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "POLE",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_POLE"
+      ],
+      "description": "角色造成的伤害+1。\n入场时：我方队伍中每有1名「璃月」角色，此牌就为附属的角色提供1点护盾。（最多3点）\n（「长柄武器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311403": {
+      "name": "天空之脊",
+      "english_name": "Skyward Spine",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "POLE",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_POLE"
+      ],
+      "description": "角色造成的伤害+1。\n每回合1次：角色使用「普通攻击」造成的伤害额外+1。\n（「长柄武器」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311501": {
+      "name": "旅行剑",
+      "english_name": "Traveler's Handy Sword",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "SWORD",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_SWORD"
+      ],
+      "description": "角色造成的伤害+1。\n（「单手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311502": {
+      "name": "祭礼剑",
+      "english_name": "Sacrificial Sword",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "SWORD",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_SWORD"
+      ],
+      "description": "角色造成的伤害+1。\n角色使用「元素战技」后：生成1个此角色类型的元素骰。（每回合1次）\n（「单手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "311503": {
+      "name": "风鹰剑",
+      "english_name": "Aquila Favonia",
+      "kind": "weapon",
+      "element": "",
+      "weapon": "SWORD",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_WEAPON",
+        "GCG_TAG_WEAPON_SWORD"
+      ],
+      "description": "角色造成的伤害+1。\n对方使用技能后：如果所附属角色为「出战角色」，则治疗该角色1点。（每回合至多2次）\n（「单手剑」角色才能装备。角色最多装备1件「武器」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312001": {
+      "name": "冒险家头带",
+      "english_name": "Adventurer's Bandana",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "角色使用「普通攻击」后：治疗自身1点。（每回合至多3次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312002": {
+      "name": "幸运儿银冠",
+      "english_name": "Lucky Dog's Silver Circlet",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "角色使用「元素战技」后：治疗自身2点。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312003": {
+      "name": "游医的方巾",
+      "english_name": "Traveling Doctor's Handkerchief",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "角色使用「元素爆发」后：治疗所有我方角色1点。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312004": {
+      "name": "赌徒的耳环",
+      "english_name": "Gambler's Earrings",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "敌方角色被击倒后：如果所附属角色为「出战角色」，则生成2个万能元素。（整场牌局限制3次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312005": {
+      "name": "教官的帽子",
+      "english_name": "Instructor's Cap",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "角色引发元素反应后：生成1个此角色元素类型的元素骰。（每回合至多3次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312006": {
+      "name": "流放者头冠",
+      "english_name": "Exile's Circlet",
+      "kind": "artifact",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "角色使用「元素爆发」后：所有我方后台角色获得1点充能。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312101": {
+      "name": "破冰踏雪的回音",
+      "english_name": "Broken Rime's Echo",
+      "kind": "artifact",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个冰元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312102": {
+      "name": "冰风迷途的勇士",
+      "english_name": "Blizzard Strayer",
+      "kind": "artifact",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个冰元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出冰元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312201": {
+      "name": "酒渍船帽",
+      "english_name": "Wine-Stained Tricorne",
+      "kind": "artifact",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个水元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312202": {
+      "name": "沉沦之心",
+      "english_name": "Heart of Depth",
+      "kind": "artifact",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个水元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出水元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312301": {
+      "name": "焦灼的魔女帽",
+      "english_name": "Witch's Scorching Hat",
+      "kind": "artifact",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个火元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312302": {
+      "name": "炽烈的炎之魔女",
+      "english_name": "Crimson Witch of Flames",
+      "kind": "artifact",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个火元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出火元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312401": {
+      "name": "唤雷的头冠",
+      "english_name": "Thunder Summoner's Crown",
+      "kind": "artifact",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个雷元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312402": {
+      "name": "如雷的盛怒",
+      "english_name": "Thundering Fury",
+      "kind": "artifact",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个雷元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出雷元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312501": {
+      "name": "翠绿的猎人之冠",
+      "english_name": "Viridescent Venerer's Diadem",
+      "kind": "artifact",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个风元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312502": {
+      "name": "翠绿之影",
+      "english_name": "Viridescent Venerer",
+      "kind": "artifact",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个风元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出风元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312601": {
+      "name": "不动玄石之相",
+      "english_name": "Mask of Solitude Basalt",
+      "kind": "artifact",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个岩元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312602": {
+      "name": "悠古的磐岩",
+      "english_name": "Archaic Petra",
+      "kind": "artifact",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个岩元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出岩元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312701": {
+      "name": "月桂的宝冠",
+      "english_name": "Laurel Coronet",
+      "kind": "artifact",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个草元素。（每回合1次）\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "312702": {
+      "name": "深林的记忆",
+      "english_name": "Deepwood Memories",
+      "kind": "artifact",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ARTIFACT"
+      ],
+      "description": "对角色打出「天赋」或角色使用技能时：少花费1个草元素。（每回合1次）\n投掷阶段：2个元素骰初始总是投出草元素。\n（角色最多装备1件「圣遗物」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321001": {
+      "name": "璃月港口",
+      "english_name": "Liyue Harbor Wharf",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "结束阶段：抓2张牌。\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321002": {
+      "name": "骑士团图书馆",
+      "english_name": "Knights of Favonius Library",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "入场时：选择任意元素骰重投。\n投掷阶段：获得额外一次重投机会。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321003": {
+      "name": "群玉阁",
+      "english_name": "Jade Chamber",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "投掷阶段：2个元素骰初始总是投出我方出战角色类型的元素。\n行动阶段开始时：如果我方手牌数量不多于3，则弃置此牌，生成1个万能元素。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321004": {
+      "name": "晨曦酒庄",
+      "english_name": "Dawn Winery",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "我方执行「切换角色」行动时：少花费1个元素骰。（每回合2次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321005": {
+      "name": "望舒客栈",
+      "english_name": "Wangshu Inn",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "结束阶段：治疗受伤最多的我方后台角色2点。\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "321006": {
+      "name": "西风大教堂",
+      "english_name": "Favonius Cathedral",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_PLACE"
+      ],
+      "description": "结束阶段：治疗我方「出战角色」2点。\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322001": {
+      "name": "派蒙",
+      "english_name": "Paimon",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 3,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "行动阶段开始时：生成2点万能元素。\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322002": {
+      "name": "凯瑟琳",
+      "english_name": "Katheryne",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "我方执行「切换角色」行动时：将此次切换视为「快速行动」而非「战斗行动」。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322003": {
+      "name": "蒂玛乌斯",
+      "english_name": "Timaeus",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "入场时：此牌附带2个「合成材料」。如果我方牌组中初始包含至少6张「圣遗物」，则从牌组中随机抽取1张「圣遗物」牌。\n结束阶段：此牌补充1个「合成材料」。\n打出「圣遗物」手牌时：如可能，则支付等同于「圣遗物」总费用数量的「合成材料」，以免费装备此「圣遗物」。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322004": {
+      "name": "瓦格纳",
+      "english_name": "Wagner",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "入场时：此牌附带2个「锻造原胚」。如果我方牌组中初始包含至少3种不同的「武器」，则从牌组中随机抽取1张「武器」牌。\n结束阶段：此牌补充1个「锻造原胚」。\n打出「武器」手牌时：如可能，则支付等同于「武器」总费用数量的「锻造原胚」，以免费装备此「武器」。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322005": {
+      "name": "卯师傅",
+      "english_name": "Chef Mao",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "打出「料理」事件牌后：生成1个随机基础元素骰。（每回合1次）\n打出「料理」事件牌后：从牌组中随机抽取1张「料理」事件牌。（整场牌局限制1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322006": {
+      "name": "阿圆",
+      "english_name": "Tubby",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "打出「场地」支援牌时：少花费2个元素骰。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322007": {
+      "name": "提米",
+      "english_name": "Timmie",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "每回合自动触发1次：此牌累积1只「鸽子」。如果此牌已累积3只「鸽子」，则弃置此牌，抓1张牌，并生成1点万能元素。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322008": {
+      "name": "立本",
+      "english_name": "Liben",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "结束阶段：收集我方未使用的元素骰（每种最多1个）。\n行动阶段开始时：如果此牌已收集3个元素骰，则抓2张牌，生成2点万能元素，然后弃置此牌。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322009": {
+      "name": "常九爷",
+      "english_name": "Chang the Ninth",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "双方角色使用技能后：如果造成了物理伤害、穿透伤害或引发了元素反应，此牌累积1个「灵感」。如果此牌已累积3个「灵感」，则弃置此牌并抓2张牌。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322010": {
+      "name": "艾琳",
+      "english_name": "Ellin",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "我方角色使用本回合使用过的技能时：少花费1个元素骰。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322011": {
+      "name": "田铁嘴",
+      "english_name": "Iron Tongue Tian",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "结束阶段：我方一名充能未满的角色获得1点充能。（出战角色优先）\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "322012": {
+      "name": "刘苏",
+      "english_name": "Liu Su",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ALLY"
+      ],
+      "description": "我方切换到一个没有充能的角色后：使我方出战角色获得1点充能。（每回合1次）\n可用次数：2",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "323001": {
+      "name": "参量质变仪",
+      "english_name": "Parametric Transformer",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_ITEM"
+      ],
+      "description": "双方角色使用技能后：如果造成了元素伤害，此牌累积1个「质变进度」。如果此牌已累积3个「质变进度」，则弃置此牌并生成3个不同的基础元素骰。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "323002": {
+      "name": "便携营养袋",
+      "english_name": "NRE",
+      "kind": "support",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_ITEM"
+      ],
+      "description": "入场时：从牌组中随机抽取1张「料理」事件。\n我方打出「料理」事件牌时：从牌组中随机抽取1张「料理」事件牌。（每回合1次）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331101": {
+      "name": "元素共鸣：交织之冰",
+      "english_name": "Elemental Resonance: Woven Ice",
+      "kind": "event",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个冰元素骰。\n（牌组包含至少2个冰元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331102": {
+      "name": "元素共鸣：粉碎之冰",
+      "english_name": "Elemental Resonance: Shattering Ice",
+      "kind": "event",
+      "element": "CRYO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "本回合中，我方当前出战角色下一次造成的伤害+2。\n（牌组包含至少2个冰元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331201": {
+      "name": "元素共鸣：交织之水",
+      "english_name": "Elemental Resonance: Woven Waters",
+      "kind": "event",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个水元素骰。\n（牌组包含至少2个水元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331202": {
+      "name": "元素共鸣：愈疗之水",
+      "english_name": "Elemental Resonance: Soothing Water",
+      "kind": "event",
+      "element": "HYDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "治疗我方出战角色2点。然后，治疗所有我方后台角色1点。\n（牌组包含至少2个水元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331301": {
+      "name": "元素共鸣：交织之火",
+      "english_name": "Elemental Resonance: Woven Flames",
+      "kind": "event",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个火元素骰。\n（牌组包含至少2个火元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331302": {
+      "name": "元素共鸣：热诚之火",
+      "english_name": "Elemental Resonance: Fervent Flames",
+      "kind": "event",
+      "element": "PYRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "本回合中，我方当前出战角色下一次引发火元素相关反应时，造成的伤害+3。\n（牌组包含至少2个火元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331401": {
+      "name": "元素共鸣：交织之雷",
+      "english_name": "Elemental Resonance: Woven Thunder",
+      "kind": "event",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个雷元素骰。\n（牌组包含至少2个雷元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331402": {
+      "name": "元素共鸣：强能之雷",
+      "english_name": "Elemental Resonance: High Voltage",
+      "kind": "event",
+      "element": "ELECTRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "我方出战角色和下一名充能未满的角色获得1点充能。\n（牌组包含至少2个雷元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331501": {
+      "name": "元素共鸣：交织之风",
+      "english_name": "Elemental Resonance: Woven Winds",
+      "kind": "event",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个风元素骰。\n（牌组包含至少2个风元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331502": {
+      "name": "元素共鸣：迅捷之风",
+      "english_name": "Elemental Resonance: Impetuous Winds",
+      "kind": "event",
+      "element": "ANEMO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "我方下次执行「切换角色」行动时：将此次切换视为「快速行动」而非「战斗行动」，并且少花费1个元素骰。\n我方下次触发扩散反应时对目标以外的所有敌方角色造成的伤害+1。\n（牌组包含至少2个风元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331601": {
+      "name": "元素共鸣：交织之岩",
+      "english_name": "Elemental Resonance: Woven Stone",
+      "kind": "event",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个岩元素骰。\n（牌组包含至少2个岩元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331602": {
+      "name": "元素共鸣：坚定之岩",
+      "english_name": "Elemental Resonance: Enduring Rock",
+      "kind": "event",
+      "element": "GEO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "为我方出战角色提供3点护盾。\n（牌组包含至少2个岩元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331701": {
+      "name": "元素共鸣：交织之草",
+      "english_name": "Elemental Resonance: Woven Weeds",
+      "kind": "event",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "生成1个草元素骰。\n（牌组包含至少2个草元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "331702": {
+      "name": "元素共鸣：蔓生之草",
+      "english_name": "Elemental Resonance: Sprawling Greenery",
+      "kind": "event",
+      "element": "DENDRO",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_RESONANCE"
+      ],
+      "description": "若我方场上存在燃烧烈焰/草原核或丰穰之核/激化领域，则对对方出战角色造成1点火元素伤害/水元素伤害/雷元素伤害。\n（牌组包含至少2个草元素角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332001": {
+      "name": "最好的伙伴！",
+      "english_name": "The Bestest Travel Companion!",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [],
+      "description": "生成2个万能元素。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332002": {
+      "name": "换班时间",
+      "english_name": "Changing Shifts",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "我方下次执行「切换角色」行动时：少花费1个元素骰。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332003": {
+      "name": "一掷乾坤",
+      "english_name": "Toss-Up",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "选择任意元素骰重投，可重投2次。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332004": {
+      "name": "运筹帷幄",
+      "english_name": "Strategize",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [],
+      "description": "抓2张牌。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332005": {
+      "name": "本大爷还没有输！",
+      "english_name": "I Haven't Lost Yet!",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "本回合有我方角色被击倒，才能打出：生成1个万能元素，我方当前出战角色获得1点充能。（每回合中，最多只能打出1张「本大爷还没有输！」。）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332006": {
+      "name": "交给我吧！",
+      "english_name": "Leave It to Me!",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "我方下次执行「切换角色」行动时：将此次切换视为「快速行动」而非「战斗行动」。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332007": {
+      "name": "鹤归之时",
+      "english_name": "When the Crane Returned",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [],
+      "description": "我方下一次使用技能后：将下一个我方后台角色切换到场上。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332008": {
+      "name": "星天之兆",
+      "english_name": "Starsigns",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [],
+      "description": "我方当前出战角色获得1点充能。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332009": {
+      "name": "白垩之术",
+      "english_name": "Calx's Arts",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [],
+      "description": "从最多2个我方后台角色身上，转移1点充能到我方出战角色。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332010": {
+      "name": "诸武精通",
+      "english_name": "Master of Weaponry",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "将一个装备在我方角色的「武器」装备牌，转移给另一个武器类型相同的我方角色，并重置其效果的「每回合」次数限制。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332011": {
+      "name": "神宝迁宫祝词",
+      "english_name": "Blessing of the Divine Relic's Installation",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [],
+      "description": "将一个装备在我方角色的「圣遗物」装备牌，转移给另一个我方角色，并重置其效果的「每回合」次数限制。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332012": {
+      "name": "快快缝补术",
+      "english_name": "Quick Knit",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [],
+      "description": "选择一个我方「召唤物」，使其「可用次数」+1。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332013": {
+      "name": "送你一程",
+      "english_name": "Send Off",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [],
+      "description": "选择一个敌方「召唤物」，使其「可用次数」-2。",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332014": {
+      "name": "护法之誓",
+      "english_name": "Guardian's Oath",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 4,
+      "tags": [],
+      "description": "消灭所有「召唤物」。（不分敌我！）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "332015": {
+      "name": "深渊的呼唤",
+      "english_name": "Abyssal Summons",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [],
+      "description": "召唤一个随机「丘丘人」召唤物！\n（牌组包含至少2个「魔物」角色，才能加入牌组）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333001": {
+      "name": "绝云锅巴",
+      "english_name": "Jueyun Guoba",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "本回合中，目标角色下一次「普通攻击」造成的伤害+1。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333002": {
+      "name": "仙跳墙",
+      "english_name": "Adeptus' Temptation",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 2,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "本回合中，目标角色下一次「元素爆发」造成的伤害+3。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333003": {
+      "name": "莲花酥",
+      "english_name": "Lotus Flower Crisp",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "本回合中，目标角色下次受到的伤害-3。\n（每回合中每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333004": {
+      "name": "北地烟熏鸡",
+      "english_name": "Northern Smoked Chicken",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "本回合中，目标角色下一次「普通攻击」少花费1个无色元素。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333005": {
+      "name": "甜甜花酿鸡",
+      "english_name": "Sweet Madame",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 0,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "治疗目标角色1点。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333006": {
+      "name": "蒙德土豆饼",
+      "english_name": "Mondstadt Hash Brown",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "治疗目标角色2点。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333007": {
+      "name": "烤蘑菇披萨",
+      "english_name": "Mushroom Pizza",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "治疗目标角色1点，两回合内结束阶段再治疗此角色1点。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    },
+    "333008": {
+      "name": "兽肉薄荷卷",
+      "english_name": "Minty Meat Rolls",
+      "kind": "event",
+      "element": "",
+      "weapon": "",
+      "related_character": 0,
+      "cost": 1,
+      "tags": [
+        "GCG_TAG_FOOD"
+      ],
+      "description": "目标角色在本回合结束前，之后3次「普通攻击」都少花费1个无色元素。\n（每回合每个角色最多食用1次「料理」）",
+      "since_version": "v3.3.0",
+      "obtainable": true
+    }
+  },
+  "decks": {
+    "keqing_jihua": {
+      "name": "keqing_jihua",
+      "characters": [
+        1401,
+        1701,
+        1403
+      ],
+      "cards": [
+        217011,
+        214031,
+        321002,
+        332006,
+        332006,
+        331401,
+        332002,
+        332003,
+        321001,
+        321003,
+        332007,
+        332009,
+        332013,
+        333003,
+        333006,
+        331402,
+        331401,
+        331402,
+        332004,
+        332001,
+        322009,
+        322012,
+        217011,
+        312006,
+        312006,
+        332008,
+        332008,
+        332012,
+        332004,
+        332001
+      ],
+      "source": "share_code",
+      "character_names": [
+        "菲谢尔",
+        "柯莱",
+        "刻晴"
+      ],
+      "character_elements": [
+        "ELECTRO",
+        "DENDRO",
+        "ELECTRO"
+      ],
+      "character_weapons": [
+        "BOW",
+        "BOW",
+        "SWORD"
+      ],
+      "composition": {
+        "talent": 3,
+        "weapon": 0,
+        "artifact": 2,
+        "support": 5,
+        "event": 20,
+        "other": 0,
+        "total": 30
+      },
+      "objective_coverage": {
+        "weapon": 0,
+        "artifact": 2,
+        "event": 20
+      },
+      "event_categories": {
+        "dice": 3,
+        "draw": 2,
+        "heal": 2,
+        "damage": 0
+      },
+      "archetype": "quicken",
+      "notes": "imported from data/era_decks.txt:17; share_code=AbGgDi8OAWDA5WsOBWCA9LQPDxBgyvYMDtBQa/IJD5AwmbMPC4BQ+PcPD8CQ9P0PEBAA",
+      "share_code": "AbGgDi8OAWDA5WsOBWCA9LQPDxBgyvYMDtBQa/IJD5AwmbMPC4BQ+PcPD8CQ9P0PEBAA"
+    },
+    "ganyu_shuanglei": {
+      "name": "ganyu_shuanglei",
+      "characters": [
+        1401,
+        1101,
+        1403
+      ],
+      "cards": [
+        211011,
+        214031,
+        331401,
+        331401,
+        331402,
+        331402,
+        332001,
+        332002,
+        332003,
+        332004,
+        332006,
+        332008,
+        332009,
+        321002,
+        321001,
+        321005,
+        312006,
+        312006,
+        322011,
+        322012,
+        322009,
+        322009,
+        333003,
+        333002,
+        333003,
+        332006,
+        332004,
+        332001,
+        322001,
+        332008
+      ],
+      "source": "share_code",
+      "character_names": [
+        "菲谢尔",
+        "甘雨",
+        "刻晴"
+      ],
+      "character_elements": [
+        "ELECTRO",
+        "CRYO",
+        "ELECTRO"
+      ],
+      "character_weapons": [
+        "BOW",
+        "BOW",
+        "SWORD"
+      ],
+      "composition": {
+        "talent": 2,
+        "weapon": 0,
+        "artifact": 2,
+        "support": 8,
+        "event": 18,
+        "other": 0,
+        "total": 30
+      },
+      "objective_coverage": {
+        "weapon": 0,
+        "artifact": 2,
+        "event": 18
+      },
+      "event_categories": {
+        "dice": 3,
+        "draw": 2,
+        "heal": 2,
+        "damage": 1
+      },
+      "archetype": "double-electro Ganyu",
+      "notes": "imported from data/era_decks.txt:18; share_code=AkGhtAIMAnHBmj4KBpGBzeYND9FRy+cND6JhDPIREKIhDPQQEGFB9fcQEBGBw/oQDIEB",
+      "share_code": "AkGhtAIMAnHBmj4KBpGBzeYND9FRy+cND6JhDPIREKIhDPQQEGFB9fcQEBGBw/oQDIEB"
+    },
+    "linghua_yongdong": {
+      "name": "linghua_yongdong",
+      "characters": [
+        1105,
+        1202,
+        1103
+      ],
+      "cards": [
+        331101,
+        331101,
+        331102,
+        331102,
+        332001,
+        332001,
+        332002,
+        332003,
+        332004,
+        332004,
+        332006,
+        332007,
+        332008,
+        332009,
+        333003,
+        333008,
+        312004,
+        311503,
+        311503,
+        211051,
+        321002,
+        322002,
+        322010,
+        322009,
+        322012,
+        321001,
+        332008,
+        211051,
+        333008,
+        332006
+      ],
+      "source": "share_code",
+      "character_names": [
+        "神里绫华",
+        "行秋",
+        "凯亚"
+      ],
+      "character_elements": [
+        "CRYO",
+        "HYDRO",
+        "CRYO"
+      ],
+      "character_weapons": [
+        "SWORD",
+        "SWORD",
+        "SWORD"
+      ],
+      "composition": {
+        "talent": 2,
+        "weapon": 2,
+        "artifact": 1,
+        "support": 6,
+        "event": 19,
+        "other": 0,
+        "total": 30
+      },
+      "objective_coverage": {
+        "weapon": 2,
+        "artifact": 1,
+        "event": 19
+      },
+      "event_categories": {
+        "dice": 5,
+        "draw": 2,
+        "heal": 1,
+        "damage": 2
+      },
+      "archetype": "Ayaka freeze",
+      "notes": "imported from data/era_decks.txt:21; share_code=AJFQCwoRAAAwl98JDRDwkeAEDhAAtPEMDzAQy/IMD6AwzfQLDzBA+PYEDxFwEPgPD2AA",
+      "share_code": "AJFQCwoRAAAwl98JDRDwkeAEDhAAtPEMDzAQy/IMD6AwzfQLDzBA+PYEDxFwEPgPD2AA"
+    },
+    "keqing_shuanghuo": {
+      "name": "keqing_shuanghuo",
+      "characters": [
+        2301,
+        1303,
+        1403
+      ],
+      "cards": [
+        213031,
+        312006,
+        321002,
+        311501,
+        331301,
+        331301,
+        331302,
+        331302,
+        332001,
+        332001,
+        332002,
+        332003,
+        332004,
+        332004,
+        332006,
+        332006,
+        332008,
+        333006,
+        333003,
+        333003,
+        333006,
+        214031,
+        214031,
+        322012,
+        322011,
+        332009,
+        321001,
+        321003,
+        312301,
+        312301
+      ],
+      "source": "share_code",
+      "character_names": [
+        "愚人众·火之债务处理人",
+        "班尼特",
+        "刻晴"
+      ],
+      "character_elements": [
+        "PYRO",
+        "PYRO",
+        "ELECTRO"
+      ],
+      "character_weapons": [
+        "NONE",
+        "SWORD",
+        "SWORD"
+      ],
+      "composition": {
+        "talent": 3,
+        "weapon": 1,
+        "artifact": 3,
+        "support": 5,
+        "event": 18,
+        "other": 0,
+        "total": 30
+      },
+      "objective_coverage": {
+        "weapon": 1,
+        "artifact": 3,
+        "event": 18
+      },
+      "event_categories": {
+        "dice": 3,
+        "draw": 2,
+        "heal": 4,
+        "damage": 2
+      },
+      "archetype": "double-pyro Keqing",
+      "notes": "imported from data/era_decks.txt:19; share_code=A0Bw9hMPAWDA+E8QCeGQC7QQCLHwDuMFDoAwWOQMDtBAzPEPD5AQs/ILD1AwqfQKD5AA",
+      "share_code": "A0Bw9hMPAWDA+E8QCeGQC7QQCLHwDuMFDoAwWOQMDtBAzPEPD5AQs/ILD1AwqfQKD5AA"
+    },
+    "nvpu_shuangyan_era": {
+      "name": "nvpu_shuangyan_era",
+      "characters": [
+        1602,
+        1601,
+        1202
+      ],
+      "cards": [
+        311303,
+        311303,
+        333006,
+        333006,
+        331601,
+        331601,
+        331602,
+        331602,
+        332001,
+        216011,
+        312004,
+        332003,
+        332004,
+        332004,
+        332006,
+        332006,
+        332008,
+        332009,
+        333003,
+        333002,
+        332005,
+        322001,
+        322009,
+        322011,
+        322010,
+        322008,
+        321005,
+        321001,
+        332001,
+        333003
+      ],
+      "source": "share_code_variant",
+      "character_names": [
+        "诺艾尔",
+        "凝光",
+        "行秋"
+      ],
+      "character_elements": [
+        "GEO",
+        "GEO",
+        "HYDRO"
+      ],
+      "character_weapons": [
+        "CLAYMORE",
+        "CATALYST",
+        "SWORD"
+      ],
+      "composition": {
+        "talent": 1,
+        "weapon": 2,
+        "artifact": 1,
+        "support": 7,
+        "event": 19,
+        "other": 0,
+        "total": 30
+      },
+      "objective_coverage": {
+        "weapon": 2,
+        "artifact": 1,
+        "event": 19
+      },
+      "event_categories": {
+        "dice": 4,
+        "draw": 2,
+        "heal": 4,
+        "damage": 1
+      },
+      "archetype": "double-geo Noelle",
+      "notes": "era variant of nvpu_shuangyan; source share_code=AkCw9ioPAGCg+IYPCJFhC00QFKDQ9ekMDiCQyuoMDsCgy/EMBpBgt5cLDzAw8fQQD7AA; 2x 333014 松茸酿肉卷 -> 2x 333006 蒙德土豆饼; other cards unchanged",
+      "share_code": "",
+      "source_share_code": "AkCw9ioPAGCg+IYPCJFhC00QFKDQ9ekMDiCQyuoMDsCgy/EMBpBgt5cLDzAw8fQQD7AA"
+    }
+  }
+}
