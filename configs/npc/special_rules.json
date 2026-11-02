@@ -1,0 +1,529 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-11-02",
+  "scope": "16 Mondstadt (8) + Liyue (8) NPC Adventure Challenge stages",
+  "authority": "HoYoWiki（观测枢）NPC 条目的「挑战目标or特殊规则」块；仅取【冒险挑战】，不取【决斗对局】。",
+  "sources": {
+    "primary": "HoYoWiki / 观测枢 NPC entries via content/info API (content ids in each stage)",
+    "cross_check": "BWIKI（wiki.biligame.com/ys）NPC 页面的「来客挑战」编辑提示；仅作旁证，模式不同，不作为本表依据",
+    "lineups": "GameWith article/show/37530（只有阵容，无特殊规则）",
+    "card_ids": "data/assets/expert_system_assets_chs_latest.json（按 exact name 查 GCG_CARD_ASSIST）"
+  },
+  "card_lookup": {
+    "source": "data/assets/expert_system_assets_chs_latest.json",
+    "method": "exact name match, type == GCG_CARD_ASSIST",
+    "ambiguous": [],
+    "not_found": [
+      "地脉镇石",
+      "地脉异常",
+      "异变之石"
+    ],
+    "notes": "群玉阁(321003) 与 璃月港口(321001) 是两张不同的场地牌，不是同名歧义；本次 buyun 用群玉阁、uncletian 用璃月港口。所有 10 个初始支援名均在资产文件中唯一命中，无需 null。"
+  },
+  "field_notes": {
+    "rule_text": "HoYoWiki 规则原文；「无」表示该冒险挑战没有特殊规则。",
+    "initial_supports": "开局放在我方支援区的牌；card_id 为玩家可打出的同名支援牌 id。",
+    "removable": "是否可在支援区溢出时被替换/弃置。这批 16 关全部按标准支援牌推断为 true；规则原文没有「不可弃置」字样，未做游戏内实测。",
+    "effects": "规则文本直接给出的效果；via_support 的条目来自该支援牌自身卡面，规则文本只写「初始存在」。",
+    "verified": "规则原文与初始支援均已在 HoYoWiki 条目的冒险挑战段核对。"
+  },
+  "effect_kinds": {
+    "initial_energy": {
+      "fields": [
+        "value",
+        "target",
+        "timing"
+      ],
+      "target": "friendly_all",
+      "timing": "battle_start",
+      "example": "blanche"
+    },
+    "element_application": {
+      "fields": [
+        "element",
+        "target",
+        "timing"
+      ],
+      "target": "enemy_active | both_active",
+      "timing": "action_phase_start",
+      "example": "patton (enemy_active), liusu/shitou/chefmao (both_active)"
+    },
+    "artifact_free_equip": {
+      "fields": [
+        "target",
+        "limit",
+        "resource",
+        "via_support",
+        "basis",
+        "source"
+      ],
+      "note": "来自支援牌卡面，不是规则原文；每回合1次，消耗合成材料"
+    },
+    "weapon_free_equip": {
+      "fields": [
+        "target",
+        "limit",
+        "resource",
+        "via_support",
+        "basis",
+        "source"
+      ],
+      "note": "来自支援牌卡面，不是规则原文；每回合1次，消耗锻造原胚"
+    }
+  },
+  "coverage": {
+    "stages": 16,
+    "with_initial_support": 10,
+    "with_effects": 7,
+    "no_rule": 3,
+    "verified": 16,
+    "unknown": 0
+  },
+  "stages": [
+    {
+      "stage": "timmie",
+      "display": "提米",
+      "display_en": "Timmie",
+      "region": "mondstadt",
+      "challenge_title": "两个丘丘人",
+      "rule_text": "我方支援区初始存在一张「提米」。",
+      "initial_supports": [
+        {
+          "name": "提米",
+          "card_id": 322007,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "每回合自动触发1次：此牌累积1只「鸽子」。如果此牌已累积3只「鸽子」，则弃置此牌，抓1张牌，并生成1点万能元素。"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:timmie"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1335/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1335",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1335 的「挑战目标or特殊规则」块，冒险挑战「两个丘丘人」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "swan",
+      "display": "斯万",
+      "display_en": "Swan",
+      "region": "mondstadt",
+      "challenge_title": "一切冒险的开始",
+      "rule_text": "无",
+      "initial_supports": [],
+      "effects": [],
+      "special_rules": [],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/510/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=510",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 510 的「挑战目标or特殊规则」块，冒险挑战「一切冒险的开始」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "wagner",
+      "display": "瓦格纳",
+      "display_en": "Wagner",
+      "region": "mondstadt",
+      "challenge_title": "紧急修理",
+      "rule_text": "我方支援区初始存在一张「瓦格纳」。",
+      "initial_supports": [
+        {
+          "name": "瓦格纳",
+          "card_id": 322004,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "入场时：此牌附带2个「锻造原胚」。如果我方牌组中初始包含至少3种不同的「武器」，则从牌组中随机抽取1张「武器」牌。\n结束阶段：此牌补充1个「锻造原胚」。\n打出「武器」手牌时：如可能，则支付等同于「武器」总费用数量的「锻造原胚」，以免费装备此「武器」。（每回合1次）"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "weapon_free_equip",
+          "target": "friendly",
+          "limit": "once_per_round",
+          "resource": "锻造原胚",
+          "via_support": "瓦格纳",
+          "basis": "support_card_text",
+          "note": "「瓦格纳」支援牌：打出「武器」手牌时，如可能，支付等同于「武器」总费用的「锻造原胚」以免费装备（每回合1次）。规则文本本身只写初始支援，未写武器免费。",
+          "source": "card:322004",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "initial_support:wagner",
+        "weapon_free_equip_via_support"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/203/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=203",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 203 的「挑战目标or特殊规则」块，冒险挑战「紧急修理」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "marjorie",
+      "display": "玛乔丽",
+      "display_en": "Marjorie",
+      "region": "mondstadt",
+      "challenge_title": "都在射程范围内",
+      "rule_text": "无",
+      "initial_supports": [],
+      "effects": [],
+      "special_rules": [],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/190/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=190",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 190 的「挑战目标or特殊规则」块，冒险挑战「都在射程范围内」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "blanche",
+      "display": "布兰琪",
+      "display_en": "Blanche",
+      "region": "mondstadt",
+      "challenge_title": "火与冰的传说",
+      "rule_text": "战斗开始后，我方所有角色获得2点充能。",
+      "initial_supports": [],
+      "effects": [
+        {
+          "kind": "initial_energy",
+          "value": 2,
+          "target": "friendly_all",
+          "timing": "battle_start",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "initial_energy_2_friendly_all"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/205/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=205",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 205 的「挑战目标or特殊规则」块，冒险挑战「火与冰的传说」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "timaeus",
+      "display": "蒂玛乌斯",
+      "display_en": "Timaeus",
+      "region": "mondstadt",
+      "challenge_title": "持盾的危机",
+      "rule_text": "我方支援区初始存在一张「蒂玛乌斯」。",
+      "initial_supports": [
+        {
+          "name": "蒂玛乌斯",
+          "card_id": 322003,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "入场时：此牌附带2个「合成材料」。如果我方牌组中初始包含至少6张「圣遗物」，则从牌组中随机抽取1张「圣遗物」牌。\n结束阶段：此牌补充1个「合成材料」。\n打出「圣遗物」手牌时：如可能，则支付等同于「圣遗物」总费用数量的「合成材料」，以免费装备此「圣遗物」。（每回合1次）"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "artifact_free_equip",
+          "target": "friendly",
+          "limit": "once_per_round",
+          "resource": "合成材料",
+          "via_support": "蒂玛乌斯",
+          "basis": "support_card_text",
+          "note": "「蒂玛乌斯」支援牌：打出「圣遗物」手牌时，如可能，支付等同于「圣遗物」总费用的「合成材料」以免费装备（每回合1次）。旧配置的 artifact_cards_free 是近似说法，并非无条件所有圣遗物 0 费。",
+          "source": "card:322003",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "initial_support:timaeus",
+        "artifact_free_equip_via_support"
+      ],
+      "legacy_special_rules": [
+        "artifact_cards_free"
+      ],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/196/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=196",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 196 的「挑战目标or特殊规则」块，冒险挑战「持盾的危机」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "patton",
+      "display": "巴顿",
+      "display_en": "Patton",
+      "region": "mondstadt",
+      "challenge_title": "湖边奇遇",
+      "rule_text": "行动阶段开始时，对敌方的出战角色附着水元素。",
+      "initial_supports": [],
+      "effects": [
+        {
+          "kind": "element_application",
+          "element": "hydro",
+          "target": "enemy_active",
+          "timing": "action_phase_start",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "hydro_application_action_phase_start_enemy_active"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/179/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=179",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 179 的「挑战目标or特殊规则」块，冒险挑战「湖边奇遇」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "ellin",
+      "display": "艾琳",
+      "display_en": "Ellin",
+      "region": "mondstadt",
+      "challenge_title": "攀高危险",
+      "rule_text": "我方支援区初始存在一张「艾琳」。",
+      "initial_supports": [
+        {
+          "name": "艾琳",
+          "card_id": 322010,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "我方角色使用本回合使用过的技能时：少花费1个元素骰。（每回合1次）"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:ellin"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1296/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1296",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1296 的「挑战目标or特殊规则」块，冒险挑战「攀高危险」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "jifang",
+      "display": "纪芳",
+      "display_en": "Jifang",
+      "region": "liyue",
+      "challenge_title": "神侠行剑谭",
+      "rule_text": "无。",
+      "initial_supports": [],
+      "effects": [],
+      "special_rules": [],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1170/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1170",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1170 的「挑战目标or特殊规则」块，冒险挑战「神侠行剑谭」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "buyun",
+      "display": "步云",
+      "display_en": "Bu'yun",
+      "region": "liyue",
+      "challenge_title": "熟能生巧",
+      "rule_text": "我方支援区初始存在一张「群玉阁」。",
+      "initial_supports": [
+        {
+          "name": "群玉阁",
+          "card_id": 321003,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "投掷阶段：2个元素骰初始总是投出我方出战角色类型的元素。\n行动阶段开始时：如果我方手牌数量不多于3，则弃置此牌，生成1个万能元素。"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:jade_chamber"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1334/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1334",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1334 的「挑战目标or特殊规则」块，冒险挑战「熟能生巧」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "liusu",
+      "display": "刘苏",
+      "display_en": "Tea Master Liu Su",
+      "region": "liyue",
+      "challenge_title": "岩国周游记",
+      "rule_text": "我方支援区初始存在一张「刘苏」；行动阶段开始时，对双方的出战角色附着水元素。",
+      "initial_supports": [
+        {
+          "name": "刘苏",
+          "card_id": 322012,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "我方切换到一个没有充能的角色后：使我方出战角色获得1点充能。（每回合1次）\n可用次数：2"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "element_application",
+          "element": "hydro",
+          "target": "both_active",
+          "timing": "action_phase_start",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "initial_support:liu_su",
+        "hydro_application_action_phase_start_both_active"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/5725/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=5725",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 5725 的「挑战目标or特殊规则」块，冒险挑战「岩国周游记」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "shitou",
+      "display": "石头",
+      "display_en": "Shitou",
+      "region": "liyue",
+      "challenge_title": "古石旧事",
+      "rule_text": "行动阶段开始时，对双方的出战角色附着水元素。",
+      "initial_supports": [],
+      "effects": [
+        {
+          "kind": "element_application",
+          "element": "hydro",
+          "target": "both_active",
+          "timing": "action_phase_start",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "hydro_application_action_phase_start_both_active"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1021/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1021",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1021 的「挑战目标or特殊规则」块，冒险挑战「古石旧事」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "irontonguetian",
+      "display": "田铁嘴",
+      "display_en": "Iron Tongue Tian",
+      "region": "liyue",
+      "challenge_title": "荡邪录",
+      "rule_text": "我方支援区初始存在一张「田铁嘴」。",
+      "initial_supports": [
+        {
+          "name": "田铁嘴",
+          "card_id": 322011,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "结束阶段：我方一名充能未满的角色获得1点充能。（出战角色优先）\n可用次数：2"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:iron_tongue_tian"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1668/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1668",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1668 的「挑战目标or特殊规则」块，冒险挑战「荡邪录」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "chefmao",
+      "display": "卯师傅",
+      "display_en": "Chef Mao",
+      "region": "liyue",
+      "challenge_title": "烈火烹油",
+      "rule_text": "我方支援区初始存在一张「卯师傅」；行动阶段开始时，对双方的出战角色附着火元素。",
+      "initial_supports": [
+        {
+          "name": "卯师傅",
+          "card_id": 322005,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "打出「料理」事件牌后：生成1个随机基础元素骰。（每回合1次）\n打出「料理」事件牌后：从牌组中随机抽取1张「料理」事件牌。（整场牌局限制1次）"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "element_application",
+          "element": "pyro",
+          "target": "both_active",
+          "timing": "action_phase_start",
+          "verified": true
+        }
+      ],
+      "special_rules": [
+        "initial_support:chef_mao",
+        "pyro_application_action_phase_start_both_active"
+      ],
+      "legacy_special_rules": [
+        "chef_mao_support_present",
+        "pyro_application_on_action_phase_start"
+      ],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/680/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=680",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 680 的「挑战目标or特殊规则」块，冒险挑战「烈火烹油」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "uncletian",
+      "display": "天叔",
+      "display_en": "Uncle Tian",
+      "region": "liyue",
+      "challenge_title": "临危受命",
+      "rule_text": "我方支援区初始存在一张「璃月港口」。",
+      "initial_supports": [
+        {
+          "name": "璃月港口",
+          "card_id": 321001,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "结束阶段：抓2张牌。\n可用次数：2"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:liyue_harbor"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1445/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1445",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1445 的「挑战目标or特殊规则」块，冒险挑战「临危受命」；抓取日期 2026-11-02。"
+    },
+    {
+      "stage": "lan",
+      "display": "岚姐",
+      "display_en": "Lan",
+      "region": "liyue",
+      "challenge_title": "七剑往事",
+      "rule_text": "我方支援区初始存在一张「凯瑟琳」。",
+      "initial_supports": [
+        {
+          "name": "凯瑟琳",
+          "card_id": 322002,
+          "removable": true,
+          "removable_verified": false,
+          "removable_basis": "标准支援牌（GCG_CARD_ASSIST）；HoYoWiki 规则只写「初始存在」，未标注不可弃置；未做游戏内溢出替换实测。",
+          "card_text": "我方执行「切换角色」行动时：将此次切换视为「快速行动」而非「战斗行动」。（每回合1次）"
+        }
+      ],
+      "effects": [],
+      "special_rules": [
+        "initial_support:katheryne"
+      ],
+      "legacy_special_rules": [],
+      "verified": true,
+      "source": "https://baike.mihoyo.com/ys/obc/content/1032/detail",
+      "source_api": "https://api-static.mihoyo.com/common/blackboard/ys_obc/v1/content/info?app_sn=ys_obc&content_id=1032",
+      "source_note": "HoYoWiki（观测枢）NPC 条目 1032 的「挑战目标or特殊规则」块，冒险挑战「七剑往事」；抓取日期 2026-11-02。"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ engine-overlay/
 ├── versions.env               # 所有 pin（引擎 tag/commit、V8 wrapper/版本、node/pnpm/cmake、镜像 tag）
 ├── overlay/                   # 我们的引擎改动（引擎仓根目录镜像；B0 为空）
 │   └── README.md              # B1 起敌人 .gts 的放置路径对照
+├── patches/                   # 引擎改动的完整 diff（可 git apply；overlay/ 为已应用的同内容）
+│   └── stage-rules.patch      # PvE 冒险挑战关卡规则（attr 2002）
 └── scripts/
     ├── materialize.sh         # 物化引擎源码到 build/engine，精确 pin 到 v0.21.0
     ├── materialize-v8.sh      # 预取 V8 wrapper（piovium/v8-cmake，含 vendor 的 V8 源码）
@@ -195,3 +197,77 @@ bash engine-overlay/scripts/standalone.sh dev     # http://localhost:5173/
   `sha256=82630a6e0d1f6a5e09306c41c131100e73b404a09c67deb1957c2feeade7e9ce`。
 - 验收：`tests/test_npc_enemies.py`（**27 passed**：蒂玛乌斯三只行为抽检 +
   19 类敌人各跑满一局无错 + 3 深渊法师护罩挂载）；`pytest -m "not slow"` 全绿。
+
+## 构建记录（PvE 冒险挑战关卡规则，2026-11-02）
+
+把 `configs/npc/special_rules.json` 的关卡规则做成真实引擎状态，经字符串
+CreateParam 属性 `GITCG_ATTR_CREATEPARAM_STAGE_RULES = 2002` 传入：
+
+```json
+{"player": 0,
+ "supports": [{"card_id": 322007, "removable": true}],
+ "effects": [{"kind": "initial_energy", "value": 2, "target": "friendly_all"},
+             {"kind": "element_application", "element": "HYDRO", "target": "enemy_active"}]}
+```
+
+- **P1 初始支援**：`Game.start()` 在第一次通知前，用正常支援牌打出路径
+  （`createHandCard` → `setSupportPlayAction` → `insertEntityOnStage`）放置，
+  因此 `on staged` 正常触发（蒂玛乌斯/瓦格纳免费装备可用）；支援计入 4 张上限。
+  实体带 `stageRule` 与 `removable`（默认 true；false 时不出现在替换列表，
+  并由 `dispose` / `removeEntity` 双重保护）。
+- **P2 效果**：`initial_energy` 在 `createInitialState` 一次性加到全体角色
+  （按 `maxEnergy`/`specialEnergy` 截断）；`element_application` 由
+  `stage_rule_effects.ts` 生成合成 `onActionPhase` 触发技能，在行动阶段开始时
+  对 `enemy_active` / `both_active` / `friendly_active` 调用 `SkillContext.apply`。
+- 无该属性时不会添加任何状态字段，也不会改变首个 pause 边界：
+  同 fixture 的初始 state JSON 与旧 `.so` **逐字节相同**（`f9929a10…`）。
+- 完整 diff：`patches/stage-rules.patch`；同样的文件也已放进 `overlay/`，
+  `apply-overlay.sh` 会在重克隆后自动应用。patch 可用于没有 overlay 的干净 v0.21.0 源树：
+  `git -C build/engine apply ../../engine-overlay/patches/stage-rules.patch`。
+
+改动的上游文件：
+
+| 文件 | 改动 |
+|---|---|
+| `packages/core/src/base/state.ts` | `StageRuleEffect`/`StageRuleInstance`/spec 类型；`EntityState.stageRule`/`removable`；`GameState.initialSupportSpecs`/`initialRuleEffects` |
+| `packages/core/src/game.ts` | `CreateInitialStateConfig.stageRuleSupports/Effects`；`initial_energy`；`placeInitialSupports()`（正常支援路径） |
+| `packages/core/src/mutator.ts` | `InsertHandCardOption.stageRule/removable` 透传到手牌实体 |
+| `packages/core/src/utils.ts` | `isIrremovableSupport`；替换列表过滤；`allSkills` 追加合成 `onActionPhase` 技能 |
+| `packages/core/src/runtime/skill_context.ts` | `dispose` 跳过 `removable === false` 的支援 |
+| `packages/core/src/base/mutation.ts` | `removeEntity` 兜底跳过不可移除支援 |
+| `packages/core/src/stage_rule_effects.ts` | 新增：合成元素附着触发技能 |
+| `packages/cbinding/js/constant.ts` | `GITCG_ATTR_CREATEPARAM_STAGE_RULES = 2002` |
+| `packages/cbinding/js/main.ts` | 解析 JSON string → specs，传入 `createInitialState` |
+
+`gitcg.h` 由 `prepare.ts` 从 `constant.ts` 自动重生成（本 patch 不含 C/C++ 改动）。
+
+构建/安装：
+
+```sh
+SKIP_IMAGE=1 SKIP_MATERIALIZE=1 bash engine-overlay/scripts/build-in-docker.sh
+CONDA_ENV=gitcg-skill bash engine-overlay/scripts/install-lib.sh
+```
+
+- overlay：36 个文件（17 敌人 `.gts` + 本次 9 个 core/cbinding 文件），
+  `overlay_tree_sha256=784f6f8fd2eb6b4c4db6ba4c0259dbc8e5e9f18aa9f5af40e466c362f053d4a5`。
+- 增量构建 **28 s**（pnpm 20:17→20:42，cmake+链接 20:42→20:45），V8 未重编；
+  重跑 overlay 后产物 sha 完全一致。
+- 产物 `build/artifacts/libgitcg.so`，**36,624,176 bytes**，
+  `sha256=392ebfd77049a9a458eef401e8364e4b234cc9557bd6cd285ddaf6957d08e23f`
+  （BuildID `30afb07c…`）。
+- 安装前备份：`build/artifacts/libgitcg.so.pre-stage-rules`（同 `.prev`），
+  `sha256=62a0ac61591c0800b950612b33844793f8c0d862252b492a8165d76b511b665a`；
+  wheel 原始 `.so` 仍在 `site-packages/gitcg/libgitcg.so.orig`。
+- 回滚：`cp -a build/artifacts/libgitcg.so.pre-stage-rules site-packages/gitcg/libgitcg.so`。
+
+验收（全部在新 `.so` 上）：
+
+| 项 | 结果 |
+|---|---|
+| `timmie` | `game.start()` 后 support 区含 322007；`game.state().json()` 含该实体 |
+| `timaeus` | 322003 存在、`material=2`；312006 圣遗物打出费为 0，打出后 `material=0`（免费装备路径可达） |
+| `blanche` | 3 个角色 energy 均为 2（1407 上限 2 截断） |
+| `patton` / `liusu` / `shitou` / `chefmao` | 首次行动阶段：敌方 active Hydro / 双方 Hydro / 双方 Hydro / 双方 Pyro |
+| 无规则回归 | 同 seed/fixture 终局 state JSON sha `4b748732…` 与旧 `.so` 完全一致；同 fixture 初始 state `f9929a10…` 一致 |
+| 支援上限 | 规则支援 + 4 张手牌支援：max/final 均为 4；`removable:true` 出现在替换列表，`removable:false` 不出现且最终保留 |
+| 快速门禁 | `pytest -q -m "not slow"`：**309 passed, 8 skipped**（exit 0） |

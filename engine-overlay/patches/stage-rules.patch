@@ -1,0 +1,667 @@
+diff --git a/packages/cbinding/js/constant.ts b/packages/cbinding/js/constant.ts
+index 9a9578f4..5e5b3fc2 100644
+--- a/packages/cbinding/js/constant.ts
++++ b/packages/cbinding/js/constant.ts
+@@ -25,6 +25,7 @@ export const GITCG_ATTR_STATE_CONFIG_MAX_DICE_COUNT = 109;
+ 
+ export const GITCG_ATTR_CREATEPARAM_NO_SHUFFLE_0 = 2000;
+ export const GITCG_ATTR_CREATEPARAM_NO_SHUFFLE_1 = 2001;
++export const GITCG_ATTR_CREATEPARAM_STAGE_RULES = 2002;
+ 
+ export const GITCG_ATTR_PLAYER_ALWAYS_OMNI_0 = 3010;
+ export const GITCG_ATTR_PLAYER_ALWAYS_OMNI_1 = 3011;
+diff --git a/packages/cbinding/js/main.ts b/packages/cbinding/js/main.ts
+index 99a08133..affefb87 100644
+--- a/packages/cbinding/js/main.ts
++++ b/packages/cbinding/js/main.ts
+@@ -41,6 +41,10 @@ import {
+   type DeckConfig,
+   type GameState as InternalState,
+   type Mutation,
++  type StageRuleEffect,
++  type StageRuleEffectSpec,
++  type StageRuleElement,
++  type StageRuleSupportSpec,
+   type Version,
+ } from "@gi-tcg/core";
+ import * as c from "./constant";
+@@ -62,6 +66,8 @@ class GameCreateParameter {
+     },
+   ];
+   dataVersion: Version | undefined = void 0;
++  stageRuleSupports: StageRuleSupportSpec[] = [];
++  stageRuleEffects: StageRuleEffectSpec[] = [];
+ 
+   #assertNumber(value: unknown): asserts value is number {
+     if (typeof value !== "number") {
+@@ -69,6 +75,96 @@ class GameCreateParameter {
+     }
+   }
+ 
++  #setStageRules(json: string) {
++    const parsed = JSON.parse(json) as {
++      player?: unknown;
++      supports?: unknown;
++      effects?: unknown;
++    };
++    const who = Number(parsed.player ?? 0);
++    if (who !== 0 && who !== 1) {
++      throw new Error(`Invalid stage rule player: ${String(parsed.player)}`);
++    }
++    const rawSupports = Array.isArray(parsed.supports) ? parsed.supports : [];
++    const supports: StageRuleSupportSpec[] = rawSupports.map((raw) => {
++      const entry = raw as { card_id?: unknown; removable?: unknown };
++      const cardId = Number(entry.card_id);
++      if (!Number.isInteger(cardId) || cardId <= 0) {
++        throw new Error(`Invalid stage rule support card_id: ${String(entry.card_id)}`);
++      }
++      return {
++        who: who as 0 | 1,
++        definitionId: cardId,
++        removable: entry.removable !== false,
++        effects: [],
++        stage: "",
++      };
++    });
++    // Every current stage has at most one starting support. When there is
++    // exactly one, its action-phase effect lives and dies with that support.
++    const supportDefinitionId =
++      supports.length === 1 ? supports[0].definitionId : void 0;
++    const elements = new Set([
++      "CRYO",
++      "HYDRO",
++      "PYRO",
++      "ELECTRO",
++      "GEO",
++      "DENDRO",
++    ]);
++    const elementTargets = new Set([
++      "enemy_active",
++      "both_active",
++      "friendly_active",
++    ]);
++    const rawEffects = Array.isArray(parsed.effects) ? parsed.effects : [];
++    const effects: StageRuleEffectSpec[] = rawEffects.map((raw) => {
++      const entry = raw as {
++        kind?: unknown;
++        value?: unknown;
++        element?: unknown;
++        target?: unknown;
++      };
++      const kind = String(entry.kind ?? "");
++      let effect: StageRuleEffect;
++      if (kind === "initial_energy") {
++        if (entry.target !== "friendly_all") {
++          throw new Error(
++            `Invalid initial_energy target: ${String(entry.target)}`,
++          );
++        }
++        const value = Number(entry.value);
++        if (!Number.isFinite(value)) {
++          throw new Error(`Invalid initial_energy value: ${String(entry.value)}`);
++        }
++        effect = { kind, value, target: "friendly_all" };
++      } else if (kind === "element_application") {
++        const element = String(entry.element ?? "").toUpperCase();
++        if (!elements.has(element)) {
++          throw new Error(
++            `Invalid element_application element: ${String(entry.element)}`,
++          );
++        }
++        const target = String(entry.target ?? "");
++        if (!elementTargets.has(target)) {
++          throw new Error(
++            `Invalid element_application target: ${String(entry.target)}`,
++          );
++        }
++        effect = {
++          kind,
++          element: element as StageRuleElement,
++          target: target as "enemy_active" | "both_active" | "friendly_active",
++        };
++      } else {
++        throw new Error(`Unsupported stage rule effect kind: ${kind}`);
++      }
++      return { who: who as 0 | 1, effect, supportDefinitionId, stage: "" };
++    });
++    this.stageRuleSupports = supports;
++    this.stageRuleEffects = effects;
++  }
++
+   setDeck(who: 0 | 1, characters_or_cards: 1 | 2, value: number[]) {
+     if (who !== 0 && who !== 1) {
+       throw new Error(`Invalid who: ${who}`);
+@@ -142,6 +238,13 @@ class GameCreateParameter {
+         this.decks[1].noShuffle = !!value;
+         break;
+       }
++      case c.GITCG_ATTR_CREATEPARAM_STAGE_RULES: {
++        if (typeof value !== "string") {
++          throw new Error("Stage rules must be a JSON string");
++        }
++        this.#setStageRules(value);
++        break;
++      }
+       default: {
+         throw new Error(`Invalid attribute: ${attribute}`);
+       }
+@@ -161,6 +264,8 @@ class GameCreateParameter {
+         data: getData(this.dataVersion),
+         versionBehavior: this.dataVersion,
+         decks: this.decks,
++        stageRuleSupports: this.stageRuleSupports,
++        stageRuleEffects: this.stageRuleEffects,
+       }),
+       this.dataVersion ?? CURRENT_VERSION,
+     );
+diff --git a/packages/core/src/base/mutation.ts b/packages/core/src/base/mutation.ts
+index 35554387..136bd21b 100644
+--- a/packages/core/src/base/mutation.ts
++++ b/packages/core/src/base/mutation.ts
+@@ -436,6 +436,14 @@ function doMutation(state: GameState, m: Mutation): GameState {
+       });
+     }
+     case "removeEntity": {
++      if (
++        m.oldState.definition.type === "support" &&
++        "removable" in m.oldState &&
++        m.oldState.removable === false
++      ) {
++        // Last-resort guard: irremovable stage-rule supports survive every path.
++        return state;
++      }
+       return produce(state, (draft) => {
+         const removed = removeEntity(draft, m.oldState.id);
+         draft.players[m.from.who].removedEntities.push(
+diff --git a/packages/core/src/base/state.ts b/packages/core/src/base/state.ts
+index 32fee5d6..2cc2a723 100644
+--- a/packages/core/src/base/state.ts
++++ b/packages/core/src/base/state.ts
+@@ -156,6 +156,54 @@ export interface IteratorState {
+ export type PhaseType =
+   "initActives" | "initHands" | "roll" | "action" | "end" | "gameEnd";
+ 
++export type StageRuleElement =
++  | "CRYO"
++  | "HYDRO"
++  | "PYRO"
++  | "ELECTRO"
++  | "GEO"
++  | "DENDRO";
++
++/**
++ * One Adventure Challenge stage effect. Effects are declared in the string
++ * create-param attribute `ATTR_CREATEPARAM_STAGE_RULES = 2002`.
++ */
++export type StageRuleEffect =
++  | {
++      readonly kind: "initial_energy";
++      readonly value: number;
++      readonly target: "friendly_all";
++    }
++  | {
++      readonly kind: "element_application";
++      readonly element: StageRuleElement;
++      readonly target: "enemy_active" | "both_active" | "friendly_active";
++    };
++
++/** Serialized on a support entity placed by a stage rule (audit / replay). */
++export interface StageRuleInstance {
++  readonly stage: string;
++  readonly effects: readonly StageRuleEffect[];
++}
++
++/** A support placed at `Game.start()` by a stage rule. */
++export interface StageRuleSupportSpec {
++  readonly who: 0 | 1;
++  readonly definitionId: number;
++  readonly removable: boolean;
++  readonly effects: readonly StageRuleEffect[];
++  readonly stage: string;
++}
++
++/** A stage effect not tied to a deck card. */
++export interface StageRuleEffectSpec {
++  readonly who: 0 | 1;
++  readonly effect: StageRuleEffect;
++  /** If set, the effect is only active while this support is present. */
++  readonly supportDefinitionId?: number;
++  readonly stage: string;
++}
++
+ export interface GameState {
+   readonly [StateSymbol]: "game";
+   readonly data: GameData;
+@@ -169,6 +217,10 @@ export interface GameState {
+   readonly winner: 0 | 1 | null;
+   readonly players: readonly [PlayerState, PlayerState];
+   readonly extensions: readonly ExtensionState[];
++  /** Consumed by `Game.start()`; not a source of support entities. */
++  readonly initialSupportSpecs?: readonly StageRuleSupportSpec[];
++  /** Stage effects not bound to a support entity (e.g. Blanche/Patton). */
++  readonly initialRuleEffects?: readonly StageRuleEffectSpec[];
+ }
+ 
+ export interface PlayerState {
+@@ -226,6 +278,10 @@ export interface EntityState<Ty extends EntityType = EntityType> {
+   readonly definition: EntityDefinition<Ty>;
+   readonly variables: EntityVariables;
+   readonly attachments: AttachmentState[];
++  /** Set on supports placed by an Adventure Challenge stage rule. */
++  readonly stageRule?: StageRuleInstance;
++  /** Defaults to true. false = cannot be replaced or disposed. */
++  readonly removable?: boolean;
+ }
+ 
+ export type EntityVariables = VariableOfConfig<EntityVariableConfigs>;
+diff --git a/packages/core/src/game.ts b/packages/core/src/game.ts
+index dd5dda93..71b801b0 100644
+--- a/packages/core/src/game.ts
++++ b/packages/core/src/game.ts
+@@ -44,6 +44,8 @@ import {
+   type PlayerState,
+   type VersionBehavior,
+   type PhaseType,
++  type StageRuleEffectSpec,
++  type StageRuleSupportSpec,
+ } from "./base/state";
+ import { CURRENT_VERSION, type Version } from "./base/version";
+ import type { Mutation } from "./base/mutation";
+@@ -221,6 +223,34 @@ export interface CreateInitialStateConfig extends Writable<
+   versionBehavior?: VersionBehavior | Version;
+   decks: readonly [DeckConfig, DeckConfig];
+   data: GameData;
++  /** Supports placed at `Game.start()` by Adventure Challenge rules. */
++  stageRuleSupports?: readonly StageRuleSupportSpec[];
++  /** Stage effects applied by Adventure Challenge rules. */
++  stageRuleEffects?: readonly StageRuleEffectSpec[];
++}
++
++/**
++ * `initial_energy` is a battle-start rule and does not depend on a support
++ * entity, so it is applied while building the initial state.
++ */
++function applyStageRuleInitialEnergy(
++  state: GameState,
++  specs: readonly StageRuleEffectSpec[],
++): void {
++  for (const spec of specs) {
++    const { effect } = spec;
++    if (effect.kind !== "initial_energy") {
++      continue;
++    }
++    for (const ch of state.players[spec.who].characters) {
++      const varName = ch.definition.specialEnergy?.variableName ?? "energy";
++      const maxEnergy =
++        ch.definition.specialEnergy?.slotSize ?? ch.variables.maxEnergy;
++      const variables = ch.variables as unknown as Record<string, number>;
++      const current = variables[varName] ?? 0;
++      variables[varName] = Math.min(maxEnergy, current + effect.value);
++    }
++  }
+ }
+ 
+ export type ErrorLevel = "strict" | "toleratePreview" | "skipPhase";
+@@ -282,6 +312,8 @@ export class Game {
+       decks,
+       data,
+       versionBehavior = CURRENT_VERSION,
++      stageRuleSupports = [],
++      stageRuleEffects = [],
+       ...partialConfig
+     } = opt;
+     const extensions = data.extensions
+@@ -317,7 +349,14 @@ export class Game {
+       roundNumber: 0,
+       winner: null,
+       extensions,
++      ...(stageRuleSupports.length > 0
++        ? { initialSupportSpecs: stageRuleSupports }
++        : {}),
++      ...(stageRuleEffects.length > 0
++        ? { initialRuleEffects: stageRuleEffects }
++        : {}),
+     };
++    applyStageRuleInitialEnergy(state, stageRuleEffects);
+     return state;
+   }
+ 
+@@ -401,6 +440,66 @@ export class Game {
+     }
+   }
+ 
++  /**
++   * Place Adventure Challenge starting supports. Runs before the first
++   * notification, so the initial state already contains them. Uses the normal
++   * support-play skill (`setSupportPlayAction`) so `on staged` triggers work.
++   * The support occupies a real slot of the 4-support cap.
++   */
++  private async placeInitialSupports(): Promise<void> {
++    const specs = this.state.initialSupportSpecs ?? [];
++    for (const spec of specs) {
++      const placed = this.state.players[spec.who].supports.find(
++        (support) => support.definition.id === spec.definitionId,
++      );
++      if (placed) {
++        // State restored from JSON / replay: already placed.
++        continue;
++      }
++      const definition = this.state.data.entities.get(spec.definitionId);
++      if (!definition || definition.type !== "support") {
++        throw new GiTcgDataError(
++          `Unknown stage-rule support card ${spec.definitionId}`,
++        );
++      }
++      if (
++        this.state.players[spec.who].supports.length >=
++        this.state.config.maxSupportsCount
++      ) {
++        throw new GiTcgDataError(
++          `Stage rule has more initial supports than the ${this.state.config.maxSupportsCount}-support cap`,
++        );
++      }
++      const { state: card } = this.mutator.createHandCard(
++        spec.who,
++        definition,
++        {
++          noOverflow: true,
++          stageRule: { stage: spec.stage, effects: spec.effects },
++          removable: spec.removable,
++        },
++      );
++      const playSkill = playSkillOfCard(definition);
++      if (!playSkill) {
++        throw new GiTcgDataError(
++          `Stage-rule support ${spec.definitionId} has no play skill`,
++        );
++      }
++      await this.executeSkill(
++        defineSkillInfo({ caller: card, definition: playSkill }),
++        { targets: [] },
++      );
++      const nowPlaced = this.state.players[spec.who].supports.some(
++        (support) => support.id === card.id,
++      );
++      if (!nowPlaced) {
++        throw new GiTcgDataError(
++          `Failed to place stage-rule support ${spec.definitionId}`,
++        );
++      }
++    }
++  }
++
+   async start(): Promise<0 | 1 | null> {
+     if (this.finishResolvers !== null) {
+       throw new GiTcgCoreInternalError(
+@@ -423,6 +522,12 @@ export class Game {
+       },
+       async () => {
+         try {
++          if (this.state.initialSupportSpecs?.length) {
++            // Only yield to the microtask queue when there is real work: an
++            // unconditional `await` would move the first pause boundary even
++            // for games without stage rules.
++            await this.placeInitialSupports();
++          }
+           await this.mutator.notifyAndPause({ force: true, canResume: true });
+           while (!this._terminated) {
+             const currentPhase = this.state.phase;
+diff --git a/packages/core/src/mutator.ts b/packages/core/src/mutator.ts
+index 109c0c0c..74bba395 100644
+--- a/packages/core/src/mutator.ts
++++ b/packages/core/src/mutator.ts
+@@ -27,6 +27,7 @@ import {
+ import {
+   type EntityState,
+   type EntityVariables,
++  type StageRuleInstance,
+   StateSymbol,
+   stringifyState,
+ } from "./base/state";
+@@ -185,6 +186,10 @@ export type InsertPilePayload =
+ export interface InsertHandCardOption {
+   /** 不执行爆牌逻辑；用于直接打出的场景（冒险/汤/烟谜主） */
+   noOverflow?: boolean;
++  /** 关卡规则注入的支援牌标记 */
++  stageRule?: StageRuleInstance;
++  /** 默认为 true；false 表示不可被替换/弃置 */
++  removable?: boolean;
+ }
+ 
+ export interface CreateHandCardResult {
+@@ -872,6 +877,8 @@ export class StateMutator {
+         ),
+       ),
+       attachments: [],
++      ...(opt.stageRule ? { stageRule: opt.stageRule } : {}),
++      ...(opt.removable !== void 0 ? { removable: opt.removable } : {}),
+     };
+     const events = this.insertHandCard(
+       {
+diff --git a/packages/core/src/runtime/skill_context.ts b/packages/core/src/runtime/skill_context.ts
+index f8e6f6ed..3c52df0b 100644
+--- a/packages/core/src/runtime/skill_context.ts
++++ b/packages/core/src/runtime/skill_context.ts
+@@ -1474,6 +1474,17 @@ export class SkillContext<Meta extends ContextMetaBase> {
+           `Character caller cannot be disposed. You may forget an argument when calling \`dispose\``,
+         );
+       }
++      if (
++        target.definition.type === "support" &&
++        "removable" in target &&
++        target.removable === false
++      ) {
++        this.mutator.log(
++          DetailLogType.Other,
++          `${stringifyState(target)} is an irremovable stage-rule support; skip dispose`,
++        );
++        continue;
++      }
+       using l = this.mutator.subLog(
+         DetailLogType.Primitive,
+         `Dispose ${stringifyState(target)} for ${reason}`,
+diff --git a/packages/core/src/stage_rule_effects.ts b/packages/core/src/stage_rule_effects.ts
+new file mode 100644
+index 00000000..e77db721
+--- /dev/null
++++ b/packages/core/src/stage_rule_effects.ts
+@@ -0,0 +1,147 @@
++// Copyright (C) 2026 Piovium Labs
++//
++// This program is free software: you can redistribute it and/or modify
++// it under the terms of the GNU Affero General Public License as
++// published by the Free Software Foundation, either version 3 of the
++// License, or (at your option) any later version.
++//
++// This program is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU Affero General Public License for more details.
++//
++// You should have received a copy of the GNU Affero General Public License
++// along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++import { DamageType } from "@gi-tcg/typings";
++
++import {
++  SkillContextOptions,
++  type TriggeredSkillDefinition,
++} from "./base/skill";
++import type {
++  CharacterState,
++  EntityState,
++  GameState,
++  StageRuleEffect,
++  StageRuleElement,
++} from "./base/state";
++import type { AppliableDamageType } from "./data/type";
++import { $ } from "./query";
++import { SkillContext } from "./runtime/skill_context";
++import type { CallerAndTriggeredSkill } from "./utils";
++
++/** Reserved (negative) skill ids so stage-rule skills never collide with data. */
++const STAGE_RULE_SKILL_ID_BASE = -910000;
++
++const DAMAGE_TYPE_OF: Record<StageRuleElement, AppliableDamageType> = {
++  CRYO: DamageType.Cryo,
++  HYDRO: DamageType.Hydro,
++  PYRO: DamageType.Pyro,
++  ELECTRO: DamageType.Electro,
++  GEO: DamageType.Geo,
++  DENDRO: DamageType.Dendro,
++};
++
++function activeCharacter(
++  state: GameState,
++  who: 0 | 1,
++): CharacterState | null {
++  const player = state.players[who];
++  return (
++    player.characters.find((ch) => ch.id === player.activeCharacterId) ?? null
++  );
++}
++
++function findSupport(
++  state: GameState,
++  who: 0 | 1,
++  definitionId: number,
++): EntityState | null {
++  return (
++    state.players[who].supports.find(
++      (support) => support.definition.id === definitionId,
++    ) ?? null
++  );
++}
++
++function buildElementApplicationSkill(
++  id: number,
++  caller: CharacterState | EntityState,
++  effect: Extract<StageRuleEffect, { kind: "element_application" }>,
++): TriggeredSkillDefinition {
++  const damageType = DAMAGE_TYPE_OF[effect.element];
++  const target = effect.target;
++  return {
++    type: "skill",
++    id,
++    ownerType: caller.definition.type,
++    skillType: null,
++    triggerOn: "onActionPhase",
++    initiativeSkillConfig: null,
++    usagePerRoundVariableName: null,
++    filter: () => true,
++    action: SkillContext.encapsulate(
++      SkillContextOptions.plain,
++      (context: SkillContext<any>) => {
++        // Resolve both actives before applying: a reaction on the first one can
++        // defeat it and switch in a new active, which must not be hit.
++        const myActive = context.query($.my.active);
++        const oppActive = context.query($.opp.active);
++        if (target !== "enemy_active" && myActive) {
++          context.apply(damageType, myActive);
++        }
++        if (target !== "friendly_active" && oppActive) {
++          context.apply(damageType, oppActive);
++        }
++      },
++    ),
++  };
++}
++
++/**
++ * Adventure Challenge `element_application` effects fire at the start of every
++ * action phase. They are synthetic triggered skills, built from state on each
++ * event, so they need no serialization and do not touch real card data.
++ */
++export function buildStageRuleTriggeredSkills(
++  state: GameState,
++  triggerOn: "onActionPhase",
++): CallerAndTriggeredSkill[] {
++  if (triggerOn !== "onActionPhase") {
++    return [];
++  }
++  const specs = state.initialRuleEffects;
++  if (!specs || specs.length === 0) {
++    return [];
++  }
++  const result: CallerAndTriggeredSkill[] = [];
++  let index = 0;
++  for (const spec of specs) {
++    const effect = spec.effect;
++    if (effect.kind !== "element_application") {
++      continue;
++    }
++    let caller: CharacterState | EntityState | null;
++    if (spec.supportDefinitionId !== void 0) {
++      // Liu Su / Chef Mao: the effect lives as long as their support does.
++      caller = findSupport(state, spec.who, spec.supportDefinitionId);
++    } else {
++      // Patton / Shitou / Blanche: no support entity is involved.
++      caller = activeCharacter(state, spec.who);
++    }
++    if (!caller) {
++      continue;
++    }
++    result.push({
++      caller,
++      skill: buildElementApplicationSkill(
++        STAGE_RULE_SKILL_ID_BASE - index,
++        caller,
++        effect,
++      ),
++    });
++    index++;
++  }
++  return result;
++}
+diff --git a/packages/core/src/utils.ts b/packages/core/src/utils.ts
+index 8c769ade..da7cb4bf 100644
+--- a/packages/core/src/utils.ts
++++ b/packages/core/src/utils.ts
+@@ -63,6 +63,7 @@ import type { ActionInfoWithModification } from "./preview";
+ import type { PlayerConfig } from "./player";
+ import type { MoveEntityM } from "./base/mutation";
+ import type { ExEntityType } from "./data/type";
++import { buildStageRuleTriggeredSkills } from "./stage_rule_effects";
+ 
+ export type Computed<T, R = any> = {
+   [K in keyof T]: T[K];
+@@ -441,6 +442,9 @@ export function allSkills(
+       }
+     }
+   }
++  if (triggerOn === "onActionPhase") {
++    result.push(...buildStageRuleTriggeredSkills(state, triggerOn));
++  }
+   return result;
+ }
+ 
+@@ -624,6 +628,15 @@ export function shouldEnterOverride<T extends AnyState>(
+   return existOne;
+ }
+ 
++/** 关卡规则支援牌可能标记为不可移除（例如「地脉镇石」）。 */
++export function isIrremovableSupport(state: AnyState): boolean {
++  return (
++    state.definition.type === "support" &&
++    "removable" in state &&
++    state.removable === false
++  );
++}
++
+ export interface CreateEntityOptions {
+   /** 若覆盖创建，只修改 `overrideVariables` 中指定的变量 */
+   readonly modifyOverriddenVariablesOnly?: boolean;
+@@ -817,9 +830,11 @@ export function getPlayCardTargetCandidates(
+   const player = state.players[who];
+   if (
+     card.definition.type === "support" &&
+-    player.supports.length === state.config.maxSupportsCount
++    player.supports.length >= state.config.maxSupportsCount
+   ) {
+-    return player.supports.map((support) => ({ targets: [support] }));
++    return player.supports
++      .filter((support) => !isIrremovableSupport(support))
++      .map((support) => ({ targets: [support] }));
+   }
+   return (0, skillInfo.definition.initiativeSkillConfig.getTarget)(
+     state,

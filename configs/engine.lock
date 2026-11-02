@@ -4,8 +4,19 @@
 [engine]
 repo = "https://github.com/piovium/genius-invokation"
 # refs/genius-invokation @ 2026-10-07
+# 注意：本字段是 refs 快照 HEAD；实际构建源是 tag v0.21.0（见 [overlay].source_commit）。
 commit = "6f01d5c1c1cee1791d6b9b3bfff5312208ce0a21"
 pybinding_version = "0.21.0"
+
+[overlay]
+# 我们的引擎改动（engine-overlay/）叠加在上游 tag v0.21.0 源上；没有新的上游 commit。
+source_tag = "v0.21.0"
+source_commit = "c94826b4611a19f0057d667f7db3b0f9aaf68c7e"
+overlay_tree_sha256 = "784f6f8fd2eb6b4c4db6ba4c0259dbc8e5e9f18aa9f5af40e466c362f053d4a5"
+libgitcg_sha256 = "392ebfd77049a9a458eef401e8364e4b234cc9557bd6cd285ddaf6957d08e23f"
+libgitcg_bytes = 36624176
+stage_rules_patch = "engine-overlay/patches/stage-rules.patch"
+updated = "2026-11-02"
 
 [cards]
 # 卡池数据版本：assets API `/api/v4/data/latest/CHS/all`，缓存于 data/assets/（不入库）

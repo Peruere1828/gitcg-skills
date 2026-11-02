@@ -38,6 +38,13 @@ from reps.snapshot import snapshot_notification, snapshot_state
 
 from .policy import Policy
 
+# Engine CreateParam attribute carrying the stage special rules as a JSON string
+# (same mechanism as ``ATTR_CREATEPARAM_DATA_VERSION``). The installed wheel may
+# predate the constant; 2002 is the agreed C-ABI key, so look it up defensively.
+ATTR_CREATEPARAM_STAGE_RULES = int(
+    getattr(low_level, "ATTR_CREATEPARAM_STAGE_RULES", 2002)
+)
+
 
 @dataclass
 class DecisionRecord:
@@ -543,6 +550,7 @@ def _build_create_param(
     seed: int,
     version: str | None = None,
     deterministic_shuffle: bool = True,
+    stage_rules: str | None = None,
 ) -> CreateParam:
     create_param = CreateParam(version=version)
     create_param.set_characters(0, list(deck0.characters))
@@ -560,6 +568,10 @@ def _build_create_param(
         create_param.set_cards(0, list(deck0.cards))
         create_param.set_cards(1, list(deck1.cards))
     create_param.set_attr(low_level.ATTR_STATE_CONFIG_RANDOM_SEED, int(seed))
+    # ``None`` keeps the default byte-identical (no attribute sent); a JSON
+    # string carries the stage's initial supports/effects. See npc.stage_rules.
+    if stage_rules is not None:
+        create_param.set_attr(ATTR_CREATEPARAM_STAGE_RULES, stage_rules)
     return create_param
 
 
@@ -587,6 +599,7 @@ def run_match(
     record_events: bool = False,
     deterministic_shuffle: bool = True,
     full_state_for_agents: bool = False,
+    stage_rules: str | None = None,
 ) -> MatchRecord:
     """Play one full game synchronously in the current thread.
 
@@ -599,6 +612,10 @@ def run_match(
     ``_build_create_param``. The process-global action codebook is reset so codes
     do not depend on earlier matches in the same process (see
     ``reps.action_hierarchy.reset_default_hierarchical_action_codebook``).
+
+    ``stage_rules`` is the JSON payload built by :mod:`npc.stage_rules`; it is
+    forwarded to the engine's ``ATTR_CREATEPARAM_STAGE_RULES`` string attribute.
+    ``None`` (the default) sends nothing and keeps the old game setup.
     """
     from reps.action_hierarchy import reset_default_hierarchical_action_codebook
 
@@ -609,6 +626,7 @@ def run_match(
         seed=seed,
         version=version,
         deterministic_shuffle=deterministic_shuffle,
+        stage_rules=stage_rules,
     )
     game = Game(create_param=create_param)
     decisions: list[DecisionRecord] = [] if record_decisions else []

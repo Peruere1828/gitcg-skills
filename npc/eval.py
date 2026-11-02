@@ -31,7 +31,7 @@ from typing import Any, Iterable
 
 from common.jsonl import ensure_trailing_newline
 from common.lock import load_engine_lock, runtime_metadata
-from common.paths import data_dir, ensure_dir, reports_dir
+from common.paths import REPO_ROOT, data_dir, ensure_dir, reports_dir
 from envs.decks import deck_spec
 from envs.match import run_match
 from envs.policy import build_policy
@@ -40,6 +40,7 @@ from reps.schema import DeckSpec
 from .objectives import evaluate_stage
 from .policy import npc_policy_for_stage
 from .spec import get_stage, load_stages
+from .stage_rules import stage_rules_json
 
 CONTESTANT_POLICY_SPEC = "contestant"  # npc.contestant.CONTESTANT_POLICY_SPEC
 CONTESTANT_PLAIN_POLICY_SPEC = "contestant_plain"  # same, without objective injection
@@ -54,6 +55,8 @@ class NpcEvalSpec:
     rotation: str | None = None
     tag: str = "npc_eval"
     base_seed: int = 0
+    # A full PvE stage game should include the stage's adventure-challenge rules.
+    stage_rules: bool = True
 
     def task_grid(self) -> list[tuple[str, int]]:
         # ``base_seed`` is folded into every match seed (the ``base_seed + raw``
@@ -80,6 +83,7 @@ class NpcTask:
     deck: dict[str, Any]
     policy0: str = "heuristic"
     rotation: str | None = None
+    stage_rules: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -89,6 +93,7 @@ class NpcTask:
             "deck": self.deck,
             "policy0": self.policy0,
             "rotation": self.rotation,
+            "stage_rules": self.stage_rules,
         }
 
 
@@ -124,6 +129,7 @@ def run_npc_match(
     policy0_spec: str = "heuristic",
     rotation: str | None = None,
     task_index: int = 0,
+    stage_rules: bool = True,
 ) -> dict[str, Any]:
     """Play one contestant-vs-NPC match and return a JSON-safe result row."""
     from common.seeding import derive_seed
@@ -157,6 +163,7 @@ def run_npc_match(
         record_decisions=True,
         record_events=True,
         record_final_state=True,
+        stage_rules=stage_rules_json(stage.name) if stage_rules else None,
     )
     stars = evaluate_stage(stage, record)
     objective_keys = _objective_keys(stars.objectives)
@@ -169,6 +176,7 @@ def run_npc_match(
         "policy0": policy0_spec,
         "rotation": rotation,
         "seed": int(seed),
+        "stage_rules": bool(stage_rules),
         "npc_characters": list(stage.deck_characters),
         "n_objectives": len(stage.objectives),
         "objectives_verified": bool(stage.objectives_verified),
@@ -210,6 +218,7 @@ def _worker(payload: dict[str, Any]) -> dict[str, Any]:
         policy0_spec=payload.get("policy0", "heuristic"),
         rotation=payload.get("rotation"),
         task_index=payload.get("index", payload.get("task_index", 0)),
+        stage_rules=bool(payload.get("stage_rules", True)),
     )
 
 
@@ -289,6 +298,12 @@ def _objective_rates(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
 # --------------------------------------------------------------------------- #
 # spec fingerprint + streaming
 # --------------------------------------------------------------------------- #
+def _sha1_file(path: Path) -> str:
+    if not path.exists():
+        return "missing"
+    return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+
+
 def _spec_fingerprint(spec: NpcEvalSpec) -> str:
     blob = json.dumps(
         {
@@ -302,6 +317,12 @@ def _spec_fingerprint(spec: NpcEvalSpec) -> str:
             "policy0": spec.policy0,
             "rotation": spec.rotation,
             "base_seed": spec.base_seed,
+            "stage_rules": spec.stage_rules,
+            "special_rules": (
+                _sha1_file(REPO_ROOT / "configs" / "npc" / "special_rules.json")
+                if spec.stage_rules
+                else "off"
+            ),
         },
         sort_keys=True,
         ensure_ascii=False,
@@ -423,6 +444,7 @@ def run_npc_eval(
                         policy0_spec=spec.policy0,
                         rotation=spec.rotation,
                         task_index=index,
+                        stage_rules=spec.stage_rules,
                     )
                 )
         else:
@@ -441,6 +463,7 @@ def run_npc_eval(
                     deck=deck_payload,
                     policy0=spec.policy0,
                     rotation=spec.rotation,
+                    stage_rules=spec.stage_rules,
                 )
                 for index, (stage_name, seed) in pending
             ]
@@ -525,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", default="1,2,3", help="comma-separated seeds")
     parser.add_argument("--policy", dest="policy0", default="heuristic", help="contestant policy spec (e.g. 'contestant', 'heuristic', 'expert:<slug>')")
     parser.add_argument("--rotation", default=None, help="NPC rotation name (default: greedy)")
+    parser.add_argument("--no-stage-rules", dest="stage_rules", action="store_false",
+                        help="do not send configs/npc/special_rules.json to the engine")
     parser.add_argument("--tag", default="npc_eval")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--raw", default=None, help="raw JSONL path (enables resume)")
@@ -539,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
         policy0=args.policy0,
         rotation=args.rotation,
         tag=args.tag,
+        stage_rules=args.stage_rules,
     )
     raw_path = Path(args.raw) if args.raw else None
     if raw_path is None and args.run_id is not None:
