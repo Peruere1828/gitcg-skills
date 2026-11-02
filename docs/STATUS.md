@@ -1,4 +1,4 @@
-# STATUS — 当前状态（2026-11-01）
+# STATUS — 当前状态（2026-11-02）
 
 > 只写「现在有效」的事实；历史进 `reports/`，负结果进 `docs/failures/`。
 > 任务与验收见 [`../PLAN.md`](../PLAN.md)，统计口径见 [`EVAL_PROTOCOL.md`](./EVAL_PROTOCOL.md)。
@@ -92,7 +92,8 @@
 
 ## 3.3 四组 10-seed 结果（阶段性，640 局；effort=none）
 
-> 本节是 t5b 之前的可引用结果（commit `f79868f`）；**当前可引用**见 §3.6。
+> 本节是 t5b 之前的可引用结果（commit `f79868f`）；**当前可引用**见 §3.7，
+> §3.6 是泄漏嫌疑的轮 1 结果。
 
 | 组 | 三星率 | 胜率 | 调用/局 | prompt tokens/局 | 缓存命中 | 成本/局 |
 |---|---|---|---|---|---|---|
@@ -129,7 +130,8 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 - **当前配置**：对局 `reasoning_effort=none` + `max_tokens=64`（D10）；思考只用于技能提取/反思（`effort=high`, 8192）。
 - t5 于 **2026-10-31 因额度耗尽中止**：`static` 82/160 行、`llm_empty` 90/160 行；这两个部分 run **不可引用**（复盘见 [`failures/thinking-in-game-cost-blowup.md`](./failures/thinking-in-game-cost-blowup.md)）。
 - 当日日志总花费 **$7.93**，其中 t5 占 **$6.64**；按实测外推，全量 4 组 10 seeds（3 个 LLM 组）约 **$19**，50 seeds/关约 **$96**。
-- 最后可引用结果是 §3.6 的 t5b 五组（2026-11-01）；§3.3 的 640 局降为历史对照。
+- 最后可引用结果是 §3.7 的三轮进化 + 转移测试（2026-11-02）；§3.6 的 t5b 五组降为
+  泄漏嫌疑的轮 1 历史对照，§3.3 的 640 局仍是历史对照。
 
 ## 3.5 吞吐：parked scheduler（可用，未规模化验证）
 
@@ -151,9 +153,12 @@ prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token �
 
 **未验证**：parked 路径在真实 API 下的规模化吞吐与单位时间成本（429 退避继承 `common.llm`，未在该路径压测）；目前只有离线单测/探针证据。
 
-## 3.6 t5b：effort=none 的五组结果（2026-11-01）
+## 3.6 t5b：effort=none 的五组结果（2026-11-01，轮 1，泄漏嫌疑）
 
-**这是当前可引用的主结果**（明细、逐关表、复现命令：[`../reports/t5b_summary.md`](../reports/t5b_summary.md)）。
+**这是轮 1 的结果，保留作历史对照；因提取与评测共用 seeds 0–9，标为 leakage-suspect，
+不再是当前可引用结果。** §3.7 用演进链末端的 `dyn_v3` 做了留出测试；r1 的 `dyn_v1`
+本身没有单独做转移复现（明细、逐关表、复现命令：
+[`../reports/t5b_summary.md`](../reports/t5b_summary.md)）。
 口径：16 关 × seeds **0–9** = 160 局/组，`top_k=5`，deck `superconduct_aggro`，
 engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
 一条命令 `bash data/run_t5b.sh` 跑完（16:32–17:04 UTC），`scripted`/`contestant` 复用 t5 链。
@@ -181,10 +186,56 @@ engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（t
 > 本链路没有留出种子：提取时模型已经看到这 160 局里哪些关卡失败、失败在哪类目标上。
 > 因此 static→dynamic 的 **+0.1250（CI [+0.0075, +0.2425]，accept=True）在 seeds 10–19 的
 > 留出门禁复现之前一律标为 leakage-suspect**，不能作为「技能库提分」的证据。
+> **2026-11-02 更新**：演进链末端的 `dyn_v3` 已在 seeds 10–19 上做了转移测试（§3.7），
+> static→dynamic 只有 +0.0625（CI [−0.0220,+0.1470]，accept=False）；`dyn_v1` 本身仍未单独复现，
+> 因此本节继续标 leakage-suspect，仅作轮 1 历史对照。
 
-**下一步**：用冻结的 `dyn_v1` 在 **seeds 10–19** 上重跑 static 与 dynamic
-（`--seeds 10,11,12,13,14,15,16,17,18,19`，约 $0.7），只有那里的 CI 下界 > 0 才能解除上面这条标注。
-t5 的 effort=low 部分 run（§3.4）仍**不可引用**。
+**后续（2026-11-02，已完成）**：冻结演进链末端的 `dyn_v3`，在 **seeds 10–19** 上重跑
+static / dynamic / llm_empty；结果见 §3.7，static→dynamic 的 CI 仍跨 0。t5 的 effort=low
+部分 run（§3.4）仍**不可引用**。
+
+## 3.7 三轮进化 + 转移测试（2026-11-02）
+
+**当前可引用的主结果**（明细、六行门禁、逐关表、成本：
+[`../reports/evo_summary.md`](../reports/evo_summary.md)）。
+口径：16 关 × seeds **0–9**（训练）/ **10–19**（留出），`top_k=5`，deck `superconduct_aggro`，
+engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
+`bash data/run_evo.sh`，2026-11-02 04:10–04:55 UTC，44m51s。
+
+| 组 | 库 | seeds 0–9 | seeds 10–19 |
+|---|---|---:|---:|
+| static | `static_v1`（v1，27） | 0.3000 | 0.3250 |
+| llm_empty | 空库 | 0.3563 | 0.3688 |
+| dyn_v1 | `dyn_v1`（v2，42） | 0.4250 | — |
+| dyn_v2 | `dyn_v2`（v3，42） | **0.4437** | — |
+| dyn_v3 | `dyn_v3`（v4，44） | 0.4250 | **0.3875** |
+
+（表内为三星率，每组 160 局。转移胜率：static 0.9750 / llm_empty 0.9875 / dyn_v3 0.9812。）
+
+> **一句话判决**：训练集 +0.1250 显著（static→dyn_v3，CI [+0.0176,+0.2324]，accept=True），
+> 转移到 seeds 10–19 只有 +0.0625（CI [−0.0220,+0.1470]，accept=False）→ **尚未成立**。
+
+1. **训练增益没有在留出集上复现。** +0.1250 → +0.0625，正好一半；CI 跨 0。方向仍正，
+   `timmie`/`patton`/`ellin`/`shitou` 等带额外目标项的关卡在涨，但按 `EVAL_PROTOCOL` §4
+   不算证据。相对空库只有 +0.0188（CI [−0.0750,+0.1125]），所以相对 static 的提升主要是
+   把 static 的负作用抹平。
+2. **多轮不单调。** dyn_v2 0.4437 见顶，dyn_v3 在**同一批 seeds 0–9** 回落到 0.4250
+   （−0.0188，n.s.）。轮 3 库 42→44、`top_k=5`；160 局只引用 44 条中的 16 条，
+   `1_chefmao` 占 128/640 次引用，`skill_lan`/`skill_wagner` 一次未被引用——检索被挤占的迹象，
+   不是因果证明。
+3. **手写静态库净负在两个种子集上复现。** 训练 0.3000 < 空库 0.3563，留出 0.3250 < 0.3688；
+   方向一致，两段差异的 CI 都跨 0，所以是方向性发现而非显著结论。后续提分应以 `llm_empty` 为基线，
+   不要拿 static 当基线。
+
+**门禁**（六行，完整表见报告）：训练 dyn_v1→dyn_v2 +0.0188 n.s.、dyn_v2→dyn_v3 −0.0188 n.s.、
+static→dyn_v3 +0.1250 accept；转移 static→dyn_v3 +0.0625 n.s.、llm_empty→dyn_v3 +0.0188 n.s.、
+llm_empty→static −0.0437 n.s.。
+
+**成本**：五个新 run $1.717253 + 两次提取 $0.0181 = **$1.7354**（800 局；不含 r1 的 $1.0995）。
+
+**下一步**：① 增加留出种子数（10 seeds/关的 CI 宽约 0.17，功效不够；按 50 seeds/关口径复测）；
+② 把「提取 → 门禁 → 晋级」拆开，未过线的库只进档案，不要每轮无条件接受提取（r2→r3 训练集
+已是负的）；③ 以 `llm_empty` 为基线，不以 static 为基线。
 
 ## 4. LLM 接入（2026-10-30 实测）
 
