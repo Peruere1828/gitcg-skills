@@ -27,8 +27,8 @@
 | `engine-overlay/overlay/packages/core/src/**` | PvE 冒险挑战关卡规则：`EntityState.stageRule/removable`；`Game.start()` 经正常支援牌打出路径放置初始支援（计入 4 张上限）；`initial_energy`；行动阶段开始的 `element_application` 合成技能；不可移除支援的替换/弃置保护（`state.ts`、`game.ts`、`mutator.ts`、`utils.ts`、`runtime/skill_context.ts`、`base/mutation.ts`、新增 `stage_rule_effects.ts`） | 让关卡特殊规则成为可序列化、可复现的真实引擎状态，而不是 Python 侧近似；无规则属性时行为不变 |
 | `engine-overlay/overlay/packages/cbinding/js/{constant.ts,main.ts}` | 新增字符串 CreateParam 属性 `GITCG_ATTR_CREATEPARAM_STAGE_RULES = 2002`（JSON: `player`/`supports`/`effects`） | 把 `configs/npc/special_rules.json` 的规则从 Python 传入引擎；`gitcg.h` 由 `prepare.ts` 自动重生成，无 C++ 改动 |
 | `engine-overlay/patches/stage-rules.patch` | 上述 core/cbinding 改动的完整 diff（与 `overlay/` 内容一致） | 引擎重克隆后可直接 `git apply` 复现；自动构建走 `overlay/` |
-| `engine-overlay/**/characters/*.gts` | 敌人 `health` 按 D4 规则上调（≤6→6，其余 +2） | 难度标定，让三星率有区分度 |
-| `configs/npc/*.json` | `hp_card` / `lineup[].hp` 同步；`swan` 补目标；`shitou` 修 `win_within_rounds(44)` | 数据一致性 + 任务可判定 |
+| `engine-overlay/**/characters/*.gts` | 敌人 `health` 按 D4 规则上调（≤6→6，其余 +2）。官方可玩角色 2301/2202 保持原版 11/10；PvE 血量 13/12 移到独立 NPC 变体 `*_npc.gts`（9301/9202，独立技能/状态号段） | 难度标定，让三星率有区分度，同时不污染角色卡数据 |
+| `configs/npc/*.json` | `hp_card` / `lineup[].hp` 同步；`swan` 补目标；`shitou` 修 `win_within_rounds(44)`；`hp_table` 指向 NPC 变体文件 | 数据一致性 + 任务可判定 |
 | 删除 | `train/`、`kaggle/`、`scripts/` 训练相关脚本、搜索/分叉模块 | 交付物只保留课程项目需要的部分 |
 | 删除 | 26 个上游遗留测试模块 + `tests/test_belief_root.py` 中 7 个 fork-search 用例 | 这些测试只覆盖已删除的 `train/`、`envs/fork_*`、`envs/cfr_search`、`scripts/*`；留着会让 `pytest -m "not slow"` 收集失败 |
 | `envs/match.py`、`npc/stage_rules.py`、`npc/eval.py` | 新增 `CreateParam` 字符串属性 `ATTR_CREATEPARAM_STAGE_RULES=2002`，按 `configs/npc/special_rules.json` 注入关卡初始支援 / 开局效果 | 让冒险挑战特殊规则真正进入引擎，而不只停留在配置/文档 |

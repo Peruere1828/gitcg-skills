@@ -48,9 +48,10 @@ OBJECTIVE_TYPES = (
     "play_event_cards",
 )
 
-# Engine character (card) ids for the NPC enemy data slugs. These are the
-# official GCG enemy-card ids used by the ported ``.gts`` (PvE-B1) and the two
-# upstream Fatui cards; see ``tests/test_npc_enemies.py``.
+# Engine character (card) ids for the NPC enemy data slugs. The two Fatui entries
+# use dedicated NPC variant cards (9301/9202) so the official playable cards
+# (2301/2202) keep their original HP; see the ``*_npc.gts`` overlay files and
+# ``tests/test_npc_enemies.py``.
 ENEMY_ENGINE_IDS: dict[str, int] = {
     "hydroslime": 3204,
     "electroslime": 3406,
@@ -69,8 +70,8 @@ ENEMY_ENGINE_IDS: dict[str, int] = {
     "hydroabyssmage": 3201,
     "fatuiskirmisheranemoboxervanguard": 3502,
     "fatuiskirmisherhydrogunnerlegionnaire": 3203,
-    "fatuipyroagent": 2301,
-    "mirrormaiden": 2202,
+    "fatuipyroagent": 9301,
+    "mirrormaiden": 9202,
 }
 
 _SKILL_KINDS = ("A", "E", "Q")

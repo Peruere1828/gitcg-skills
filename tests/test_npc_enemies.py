@@ -280,9 +280,9 @@ def test_timaeus_npc_lineup_full_match_is_clean():
 # --------------------------------------------------------------------------- #
 # full Mondstadt/Liyue NPC enemy roster (PLAN §4.4)
 # --------------------------------------------------------------------------- #
-# Character ids are the official GCG enemy-card ids; the two Fatui entries
-# already exist in the upstream data package (engine HP 11/10 vs the NPC data
-# 9/10 for Fatui Pyro Agent) — a documented deviation.
+# Character ids are the NPC enemy-card ids. The two Fatui entries use dedicated
+# NPC variant cards (9301/9202, HP 13/12) so the official playable cards
+# (2301/2202) keep their original HP (11/10).
 ALL_ENEMIES: dict[str, int] = {
     "hydroslime": 3204,
     "electroslime": 3406,
@@ -301,8 +301,8 @@ ALL_ENEMIES: dict[str, int] = {
     "hydro_abyss_mage": 3201,
     "fatui_anemoboxer_vanguard": 3502,
     "fatui_hydrogunner_legionnaire": 3203,
-    "fatui_pyro_agent": 2301,
-    "mirror_maiden": 2202,
+    "fatui_pyro_agent": 9301,
+    "mirror_maiden": 9202,
 }
 
 # Abyss Mage wards: status id attached at battle begin, with 2 element instances.

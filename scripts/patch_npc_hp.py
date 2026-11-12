@@ -4,9 +4,10 @@
 Rule (PLAN.md D4): ``hp <= 6 -> 6``, otherwise ``hp += 2``.
 
 The engine's real HP lives in the compiled data package (``.gts`` files), **not** in
-``configs/npc``: our 17 enemy cards are overlay files, while two enemies
-(``fatui_pyro_agent``, ``mirror_maiden``) come from upstream and are overridden by
-copying their file into the overlay tree (``apply-overlay.sh`` overwrites in place).
+``configs/npc``. Every NPC enemy now has its own overlay card. The two Fatui entries
+use dedicated NPC variants (``fatui_pyro_agent_npc`` / ``mirror_maiden_npc``,
+ids 9301/9202), so the official playable cards 2301/2202 are never patched; this
+script therefore only touches NPC variant files.
 
 The script also repairs the display side (``hp_card`` in the enemy table, ``hp`` in the
 stage lineups) so the configs stop disagreeing with the engine, and writes an audit
@@ -24,7 +25,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 import sys
 from pathlib import Path
 
@@ -38,10 +38,9 @@ AUDIT_JSON = REPO / "configs/npc/hp_table.json"
 ALIASES = {
     "fatuiskirmisheranemoboxervanguard": "fatui_anemoboxer_vanguard",
     "fatuiskirmisherhydrogunnerlegionnaire": "fatui_hydrogunner_legionnaire",
-    "fatuipyroagent": "fatui_pyro_agent",
-    "mirrormaiden": "mirror_maiden",
+    "fatuipyroagent": "fatui_pyro_agent_npc",
+    "mirrormaiden": "mirror_maiden_npc",
 }
-UPSTREAM_ONLY = {"fatuipyroagent", "mirrormaiden"}
 
 
 def camel_to_snake(name: str) -> str:
@@ -60,21 +59,19 @@ def _index(root: Path) -> dict[str, Path]:
     return out
 
 
-def resolve_file(enemy_id: str, engine_root: Path | None) -> tuple[Path | None, str]:
-    """Find the enemy's ``.gts``; returns ``(path, source)``.
+def resolve_file(enemy_id: str, engine_root: Path | None = None) -> tuple[Path | None, str]:
+    """Find the enemy's overlay ``.gts``; returns ``(path, source)``.
 
-    ``source`` is ``overlay`` when we already own the file, ``upstream-override``
-    when it must be copied out of the upstream tree, and ``missing`` otherwise.
-    ``ALIASES`` first, then plain normalised matching (``hydroslime`` == ``hydro_slime``).
+    ``source`` is ``overlay`` when we own the file and ``missing`` otherwise. Every
+    NPC enemy (including the 9301/9202 variants) lives in the overlay tree; the
+    upstream tree is never patched. ``ALIASES`` first, then plain normalised
+    matching (``hydroslime`` == ``hydro_slime``). The ``engine_root`` argument is
+    retained for CLI compatibility and is intentionally unused.
     """
     overlay = _index(OVERLAY_CHARS)
     key = _norm(ALIASES.get(enemy_id.lower(), enemy_id))
     if key in overlay:
         return overlay[key], "overlay"
-    if engine_root is not None and engine_root.exists():
-        upstream = _index(engine_root / "packages/data/src/characters")
-        if key in upstream:
-            return upstream[key], "upstream-override"
     return None, "missing"
 
 
@@ -114,13 +111,11 @@ def stages_of(doc) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--engine-root", default=str(REPO / "build/engine"),
-                    help="materialised engine tree (needed to copy the 2 upstream enemies)")
+                    help="materialised engine tree (kept for compatibility; unused)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--restore", action="store_true")
     ap.add_argument("--force", action="store_true", help="re-apply even if an audit exists")
     args = ap.parse_args(argv)
-
-    engine_root = Path(args.engine_root)
 
     if args.restore:
         if not AUDIT_JSON.exists():
@@ -147,34 +142,33 @@ def main(argv: list[str] | None = None) -> int:
         print("[restore] done")
         return 0
 
-    if AUDIT_JSON.exists() and not args.force:
+    if AUDIT_JSON.exists() and not args.force and not args.dry_run:
         raise SystemExit(f"{AUDIT_JSON} exists -> already applied (use --force or --restore)")
+
+    # Dry-run against an already-patched tree: report the recorded pre-patch HP
+    # instead of treating the patched value as the input (which would print
+    # ``13 -> 15``); nothing is written either way.
+    audit_before: dict[str, int] = {}
+    if args.dry_run and AUDIT_JSON.exists():
+        audit_before = {
+            str(entry["id"]): int(entry["health_before"])
+            for entry in load_json(AUDIT_JSON).get("enemies", ())
+        }
 
     enemy_doc = load_json(ENEMIES_JSON)
     enemies = enemies_of(enemy_doc)
     entries: list[dict] = []
     for enemy in enemies:
         eid = enemy["id"]
-        path, source = resolve_file(eid, engine_root)
+        path, source = resolve_file(eid)
         if path is None:
-            raise SystemExit(
-                f"{eid}: no .gts in overlay and none in {engine_root}; "
-                "copy build/engine from the upstream repository first"
-            )
-        if source == "upstream-override":
-            rel = path.relative_to(engine_root / "packages/data/src/characters")
-            target = OVERLAY_CHARS / rel
-            file_for_audit = target
-            if not args.dry_run:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, target)
-                path = target
-        else:
-            file_for_audit = path
+            raise SystemExit(f"{eid}: no .gts in the overlay tree ({OVERLAY_CHARS})")
+        file_for_audit = path
         text = path.read_text(encoding="utf-8")
         hp = read_health(text)
         if hp is None:
             raise SystemExit(f"{path}: no `health N;` found")
+        hp = audit_before.get(eid, hp)
         target = new_hp(hp)
         if not args.dry_run:
             path.write_text(rewrite_health(text, target), encoding="utf-8")

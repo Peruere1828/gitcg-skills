@@ -24,7 +24,6 @@ datum。而 `assets-manager.getData(id)` 不检查 `r.ok`，会把镜像的 404 
 from __future__ import annotations
 
 import base64
-import json
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -33,7 +32,6 @@ from typing import Any, Iterator
 from common.paths import REPO_ROOT
 
 DEFAULT_GTS_DIR = REPO_ROOT / "engine-overlay" / "overlay" / "packages" / "data" / "src" / "characters"
-HP_TABLE_PATH = REPO_ROOT / "configs" / "npc" / "hp_table.json"
 
 # .gts DSL 里的骰子名 -> @gi-tcg/typings 的 DiceType 数值（enums.ts:
 # DiceRequirementType VOID=0..LEGEND=10；元素骰 1..7、ALIGNED=8）。
@@ -126,52 +124,17 @@ def _dice_costs(body: str) -> list[dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
-def upstream_override_character_ids() -> frozenset[int]:
-    """`hp_table.json` 里 ``source == "upstream-override"`` 的官方角色 engine id。
-
-    这些 `.gts` 是本仓库为 PvE 难度补丁过的**官方可玩角色**（如 2301/2202）：引擎
-    实例用的是难度血量（13/12），但官方静态卡面是原版（11/10）。网页角色卡的
-    CustomData 不能覆盖它们的 datum，否则浏览器详情面板会把难度值当成卡面上限；
-    这里从 `hp_table.json` 的条目定位 `.gts`，再解析 `define character` 的 `@id`
-    （不硬编码 id，补丁表增删条目即可）。
-    """
-    try:
-        table = json.loads(HP_TABLE_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return frozenset()
-    ids: set[int] = set()
-    for enemy in table.get("enemies") or []:
-        if not isinstance(enemy, dict) or enemy.get("source") != "upstream-override":
-            continue
-        relative = enemy.get("file")
-        if not isinstance(relative, str) or not relative:
-            continue
-        try:
-            text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for comment, kind, _body in _iter_blocks(text):
-            if kind != "character":
-                continue
-            definition_id = _comment_field(comment, "id")
-            if definition_id.isdigit():
-                ids.add(int(definition_id))
-    return frozenset(ids)
-
-
-@lru_cache(maxsize=1)
 def npc_custom_data(gts_dir: str | None = None) -> dict[str, Any]:
     """解析 overlay 里的 NPC `.gts` → ``CustomData``（`AssetsManager` 的 `customData` 选项）。
 
-    返回值被缓存（一次解析约 17 个文件）；调用方只读，不要改。
+    返回值被缓存（一次解析约 19 个 overlay 文件）；调用方只读，不要改。官方可玩角色
+    2301/2202 的 overlay 文件就是原版 11/10，NPC 变体 9301/9202 是独立角色，二者都
+    如实进 CustomData，不再做特判过滤。
 
     技能按 **id** 收集；``as Name`` 之类的符号只在**单个文件内**解析（不同文件会重名，
     例如多个 ``Hit``，全局按符号去重会把后一个文件的技能覆盖掉）。
     """
     root = Path(gts_dir) if gts_dir else DEFAULT_GTS_DIR
-    # 官方角色（upstream-override）的 datum 交给浏览器官方静态数据，避免把 PvE
-    # 难度血量（2301=13 / 2202=12）当成角色卡上限；技能仍保留（官方数据也有）。
-    official_override_ids = upstream_override_character_ids()
     skills_by_id: dict[int, dict[str, Any]] = {}   # id -> CustomSkill（全局唯一）
     characters: list[dict[str, Any]] = []
     entities: list[dict[str, Any]] = []
@@ -214,8 +177,6 @@ def npc_custom_data(gts_dir: str | None = None) -> dict[str, Any]:
 
             if kind == "character":
                 if not def_id.isdigit():
-                    continue
-                if int(def_id) in official_override_ids:
                     continue
                 health = re.search(r"health\s+(\d+)\s*;", body)
                 energy = re.search(r"energy\s+(\d+)\s*;", body)

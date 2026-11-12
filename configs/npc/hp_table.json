@@ -1,6 +1,6 @@
 {
   "rule": "hp<=6 -> 6; else hp+2",
-  "note": "engine HP is authoritative; hp_card/lineup.hp mirror it for display + docs",
+  "note": "engine HP is authoritative; hp_card/lineup.hp mirror it for display + docs. Official playable cards 2301/2202 keep their original HP (11/10); PvE difficulty HP lives on the separate NPC variants 9301/9202.",
   "enemies": [
     {
       "id": "hydroslime",
@@ -140,16 +140,18 @@
     },
     {
       "id": "fatuipyroagent",
-      "file": "engine-overlay/overlay/packages/data/src/characters/pyro/fatui_pyro_agent.gts",
-      "source": "upstream-override",
+      "file": "engine-overlay/overlay/packages/data/src/characters/pyro/fatui_pyro_agent_npc.gts",
+      "source": "overlay",
+      "engine_id": 9301,
       "health_before": 11,
       "health_after": 13,
       "hp_card_before": 13
     },
     {
       "id": "mirrormaiden",
-      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/mirror_maiden.gts",
-      "source": "upstream-override",
+      "file": "engine-overlay/overlay/packages/data/src/characters/hydro/mirror_maiden_npc.gts",
+      "source": "overlay",
+      "engine_id": 9202,
       "health_before": 10,
       "health_after": 12,
       "hp_card_before": 12

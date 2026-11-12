@@ -114,7 +114,7 @@ define skill {
 /**
  * @id 2202
  * @name 愚人众·藏镜仕女
- * @hp 12
+ * @hp 10
  * @energy 2
  * @description
  * 一切隐秘，都将深藏于潋光的水镜之中吧…
@@ -123,7 +123,7 @@ define character {
   id 2202 as MirrorMaiden;
   since "v3.3.0";
   tags hydro, fatui;
-  health 12;
+  health 10;
   energy 2;
   skills WaterBall, InfluxBlast, RippledReflection;
 };

@@ -132,7 +132,7 @@ define skill {
 /**
  * @id 2301
  * @name 愚人众·火之债务处理人
- * @hp 13
+ * @hp 11
  * @energy 2
  * @description
  * 「死债不可免，活债更难逃…」
@@ -141,7 +141,7 @@ define character {
   id 2301 as FatuiPyroAgent;
   since "v3.3.0";
   tags pyro, fatui;
-  health 13;
+  health 11;
   energy 2;
   skills Thrust, Prowl, BladeAblaze, StealthMaster;
 };

@@ -7,7 +7,7 @@
   "field_notes": {
     "cost": "e.g. 'Cryo1+Unaligned2' / 'Cryo3+Energy2'",
     "effect": "official Chinese description (in-game text)",
-    "hp_card": "card HP; equals the HP used by the PvE stages (confirmed for Timaeus 3/8/8)",
+    "hp_card": "NPC enemy card HP; equals the HP used by the PvE stages (confirmed for Timaeus 3/8/8). Official playable character cards keep their original HP in engine data (2301=11 / 2202=10); PvE HP is on the separate NPC variants 9301/9202.",
     "energy": "Elemental Burst energy cost cap (A/E each +1, Q consumes it)",
     "charge_rule": "A/E each grant +1 energy; Q consumes it; cap = energy"
   },

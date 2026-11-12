@@ -85,9 +85,9 @@ def test_every_stage_references_known_enemy_engine_ids():
 def test_chinese_name_resolves_to_engine_id():
     assert engine_id_for_name("火斧丘丘暴徒") == 3302
     assert engine_id_for_name("冰箭丘丘人") == 3102
-    assert engine_id_for_name("愚人众·火之债务处理人") == 2301
+    assert engine_id_for_name("愚人众·火之债务处理人") == 9301
     # English names resolve too.
-    assert engine_id_for_name("Mirror Maiden") == 2202
+    assert engine_id_for_name("Mirror Maiden") == 9202
     with pytest.raises(KeyError):
         engine_id_for_name("不存在的敌人")
     # Every stage lineup's Chinese name resolves to that entry's engine id.
@@ -130,7 +130,7 @@ def test_stage_damage_table_is_a_subset_scoped_to_lineup():
 def test_stage_deck_characters_expand_counts():
     assert get_stage("timmie").deck_characters == (3302, 3302)
     assert get_stage("timaeus").deck_characters == (3102, 3101, 3302)
-    assert get_stage("chefmao").deck_characters == (2301, 2202)
+    assert get_stage("chefmao").deck_characters == (9301, 9202)
     assert get_stage("wagner").reserve_characters == (3402, 3402)
 
 

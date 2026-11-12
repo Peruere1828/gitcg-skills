@@ -13,22 +13,24 @@ from web.npc_assets import (
     ENTITY_TYPES,
     npc_custom_data,
     npc_custom_data_summary,
-    upstream_override_character_ids,
 )
 
 
-def test_upstream_override_characters_are_not_overridden():
-    """官方可玩角色（2301/2202）不塞进 CustomData，浏览器回退官方卡面血量。
+def test_official_and_npc_variant_hp_are_distinct():
+    """官方卡与 NPC 变体是两张不同的牌，CustomData 如实反映各自的 HP。
 
-    `.gts` 的 health 是 PvE 难度值（2301=13 / 2202=12），官方角色卡是 11/10；
-    CustomData 若覆盖角色 datum，详情面板会把难度值当成卡面上限。
+    官方可玩角色卡 2301/2202 的 overlay 文件就是原版 11/10；PvE 难度血量
+    13/12 属于独立的 NPC 变体 9301/9202。不再需要按 id 过滤官方卡。
     """
-    overrides = upstream_override_character_ids()
-    assert {2301, 2202} <= overrides, "应从 hp_table 的 upstream-override 条目解析出 ids"
-    ids = {ch["id"] for ch in npc_custom_data()["characters"]}
-    assert not ids & overrides, f"官方角色不应出现在 CustomData：{sorted(ids & overrides)}"
-    # NPC 专属角色仍必须由 CustomData 提供（官方镜像没有它们）。
-    assert {3302, 3101} <= ids
+    by_id = {ch["id"]: ch for ch in npc_custom_data()["characters"]}
+    assert by_id[9301]["hp"] == 13, "火债 NPC 变体应是 13 血"
+    assert by_id[9202]["hp"] == 12, "镜女 NPC 变体应是 12 血"
+    assert 3302 in by_id
+    # overlay 里的官方角色卡仍是原版血量（如果文件仍在）。
+    if 2301 in by_id:
+        assert by_id[2301]["hp"] == 11
+    if 2202 in by_id:
+        assert by_id[2202]["hp"] == 10
 
 
 def test_custom_data_has_all_npc_characters_and_skills():

@@ -1126,11 +1126,15 @@ def test_npc_decks_endpoint():
         assets = payload["assets"]
         assert len(assets["characters"]) >= 17
         assert all(ch["name"] and ch["skills"] for ch in assets["characters"])
-        # 官方可玩角色（2301/2202）交给官方静态数据（角色卡 11/10），
-        # CustomData 只保留官方镜像没有的 NPC 专属角色。
+        # 官方卡（2301/2202，11/10）与 NPC 变体（9301/9202，13/12）是两张牌；
+        # CustomData 现在如实包含 overlay 里的全部角色（含两张 NPC 变体）。
         custom_ids = {ch["id"] for ch in assets["characters"]}
-        assert 2301 not in custom_ids and 2202 not in custom_ids
+        assert 9301 in custom_ids and 9202 in custom_ids
         assert 3302 in custom_ids
+        # liusu 的阵容引用的是 NPC 变体 9301，而不是官方角色卡 2301。
+        liusu = next(d for d in payload["decks"] if d["slug"] == "liusu")
+        assert 9301 in liusu["characters"]
+        assert 2301 not in liusu["characters"]
         # 返回的是牌组对象（NPC 角色编不出分享码，前端直传）
         timmie = next(d for d in payload["decks"] if d["slug"] == "timmie")
         assert timmie["n_on_field"] == 2 and timmie["n_support"] == 0
