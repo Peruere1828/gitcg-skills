@@ -151,6 +151,24 @@ _LLM_LIBRARY_LABELS = {
     "llm_empty": "llm_empty（空库）",
 }
 
+# 网页专用渲染/过滤在 `web.llm_render`（避免改动 skillloop 的实验口径）。这里用
+# 惰性再导出，让 `web.ai_rpc_server.WebStateRenderer` 等可被直接引用，同时默认
+# 路径（占位策略）仍不提前导入 reps/skillloop。
+_LAZY_WEB_LLM_EXPORTS = {
+    "WEB_TACTICS",
+    "WebStateRenderer",
+    "filter_library_for_web",
+    "is_web_skill",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_WEB_LLM_EXPORTS:
+        from web import llm_render
+
+        return getattr(llm_render, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 def parse_llm_spec(spec: str | None) -> tuple[str, str | None] | None:
     """解析 `llm:<library>[#deck=<slug>]`；非 llm spec 返回 None。
@@ -179,16 +197,31 @@ def _library_roots() -> list[Path]:
 
 
 def _library_meta(path: Path) -> dict[str, Any]:
-    """只读 library.json 的 meta/version（避免为一个 label 构造整个 SkillLibrary）。"""
+    """只读 library.json 的 meta/version（避免为一个 label 构造整个 SkillLibrary）。
+
+    ``applied_skills`` / ``filtered_out`` 按网页过滤口径（``is_web_skill``：rule 层
+    与通用 ``strat_*``，剔除 mulligan / ``规则_目标_*``）直接数 JSON 条目，不构造
+    Skill 对象。
+    """
     import json as _json
+
+    from web.llm_render import is_web_skill
 
     try:
         payload = _json.loads((path / "library.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    skills = [item for item in (payload.get("skills") or []) if isinstance(item, dict)]
+    applied = sum(
+        1
+        for item in skills
+        if is_web_skill(str(item.get("skill_id") or ""), str(item.get("layer") or ""))
+    )
     return {
         "version": int(payload.get("library_version") or 0),
-        "skills": len(payload.get("skills") or []),
+        "skills": len(skills),
+        "applied_skills": applied,
+        "filtered_out": len(skills) - applied,
         "meta": dict(payload.get("meta") or {}),
     }
 
@@ -202,6 +235,8 @@ def _library_info(path: Path, selection: str) -> dict[str, Any]:
         "path": os.path.relpath(path, _REPO_ROOT),
         "version": int(payload.get("version") or 0),
         "skills": int(payload.get("skills") or 0),
+        "applied_skills": int(payload.get("applied_skills") or 0),
+        "filtered_out": int(payload.get("filtered_out") or 0),
         "built_at": meta.get("built_at"),
         "kind": meta.get("kind"),
     }
@@ -231,6 +266,8 @@ def resolve_llm_library(selection: str) -> dict[str, Any] | None:
             "path": None,
             "version": 0,
             "skills": 0,
+            "applied_skills": 0,
+            "filtered_out": 0,
             "built_at": None,
             "kind": "llm_empty",
         }
@@ -499,7 +536,12 @@ class LLMPolicy:
                 from common.llm import build_llm_client
                 from envs.policy import _asset_catalog, build_policy
                 from skillloop.agent import AgentConfig, SkillAgentPolicy
-                from skillloop.render import StateRenderer, TaskSpec
+                from skillloop.render import TaskSpec
+                from web.llm_render import (
+                    WEB_TACTICS,
+                    WebStateRenderer,
+                    filter_library_for_web,
+                )
 
                 client = (
                     self._client_factory()
@@ -510,8 +552,21 @@ class LLMPolicy:
                     raise RuntimeError("LLM 不可用（.env 未配置 key/base_url/model）")
                 self.base_spec = self._scripted_spec()
                 base = build_policy(self.base_spec, seed=self.seed, role=self.role)
-                library = load_llm_library(self.selection)
-                renderer = StateRenderer(_asset_catalog(), opponent_name="对手")
+                # 关卡特化技能（skill_* / tempo_budget_* / frontload_*）只按
+                # objective_types 命中，在普通网页对局里会注入「起手换牌」「五回合
+                # 窗口」等无关建议；网页层统一过滤。
+                library = filter_library_for_web(load_llm_library(self.selection))
+                # rules_note 非空时 SkillAgentPolicy 不再自动拼 library.rules_text()，
+                # 所以规则层与网页战术必须在这里合并（none 库只有网页战术）。
+                rules_note = "\n".join(
+                    part
+                    for part in (
+                        library.rules_text() if library is not None else "",
+                        WEB_TACTICS,
+                    )
+                    if part
+                )
+                renderer = WebStateRenderer(_asset_catalog(), opponent_name="对手")
                 task = TaskSpec(
                     stage="web",
                     display="网页对局",
@@ -525,6 +580,7 @@ class LLMPolicy:
                     renderer=renderer,
                     task=task,
                     library=library,
+                    rules_note=rules_note,
                     config=AgentConfig(model=None, max_calls_per_game=80, top_k=5),
                 )
                 _warn(
@@ -569,12 +625,19 @@ class LLMPolicy:
                     "used_skills": list(getattr(decision, "used", ()) or ()),
                     "system_hash": getattr(decision, "system_hash", "") or "",
                     "llm_calls": int(getattr(decision, "http_calls", 0) or 0),
+                    "request": getattr(decision, "request", "") or method,
+                    "n_candidates": getattr(decision, "n_candidates", None),
+                    # 模型选中的**候选下标**（不是引擎 chosenActionIndex），可空。
+                    "model_choice": getattr(decision, "choice", None),
                 }
             else:
                 self.last_decision = {
                     "used_skills": [],
                     "system_hash": getattr(policy, "_system_hash", "") or "",
                     "llm_calls": 0,
+                    "request": method,
+                    "n_candidates": None,
+                    "model_choice": None,
                 }
             return resp
         except Exception as exc:  # noqa: BLE001
@@ -1412,6 +1475,9 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                 llm_extra["used_skills"] = list(decision_info.get("used_skills") or ())
                 llm_extra["system_hash"] = decision_info.get("system_hash") or ""
                 llm_extra["llm_calls"] = int(decision_info.get("llm_calls") or 0)
+                llm_extra["request"] = decision_info.get("request") or method
+                llm_extra["n_candidates"] = decision_info.get("n_candidates")
+                llm_extra["model_choice"] = decision_info.get("model_choice")
                 llm_extra["library"] = getattr(seat.policy, "library_info", None)
             self._log_decision(
                 session=session,

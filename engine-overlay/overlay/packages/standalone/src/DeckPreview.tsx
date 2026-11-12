@@ -16,6 +16,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js";
 import type { Deck } from "@gi-tcg/core";
 import {
+  AssetsManager,
   DEFAULT_ASSETS_MANAGER,
   type CustomData,
 } from "@gi-tcg/assets-manager";
@@ -27,15 +28,23 @@ export interface DeckPreviewProps {
   deck: Deck;
   /** NPC 的 CustomData：官方数据里没有的 NPC 角色从这找名字 */
   npcAssets?: CustomData;
+  /** 带 NPC/引擎数据的 AssetsManager（例如 2301 hp=13）；缺省用官方镜像 */
+  assetsManager?: AssetsManager;
 }
 
 /** 角色/卡牌缩略图；缺图（含 NPC id）时 onError 隐藏，避免裂图 */
-function Thumbnail(props: { id: number; name: string; width: number }) {
+function Thumbnail(props: {
+  id: number;
+  name: string;
+  width: number;
+  assetsManager?: AssetsManager;
+}) {
   return (
     <img
-      src={DEFAULT_ASSETS_MANAGER.getImageUrlSync(props.id, {
-        thumbnail: true,
-      })}
+      src={(props.assetsManager ?? DEFAULT_ASSETS_MANAGER).getImageUrlSync(
+        props.id,
+        { thumbnail: true },
+      )}
       alt={props.name}
       draggable="false"
       style={{
@@ -54,10 +63,13 @@ function Thumbnail(props: { id: number; name: string; width: number }) {
 }
 
 export function DeckPreview(props: DeckPreviewProps) {
+  // 传了带 NPC/引擎数据的 manager 就优先用它（名字/图/静态血量都以引擎为准）。
+  const assetsManager = () => props.assetsManager ?? DEFAULT_ASSETS_MANAGER;
   // prepareForSync 完成后置 true，触发名字/图片重算（同步 API 依赖缓存）
   const [assetsReady, setAssetsReady] = createSignal(false);
   onMount(() => {
-    void DEFAULT_ASSETS_MANAGER.prepareForSync()
+    void assetsManager()
+      .prepareForSync()
       .catch(() => undefined)
       .finally(() => setAssetsReady(true));
   });
@@ -73,7 +85,7 @@ export function DeckPreview(props: DeckPreviewProps) {
     return props.deck.characters.map((id) => ({
       id,
       name:
-        DEFAULT_ASSETS_MANAGER.getNameSync(id) ??
+        assetsManager().getNameSync(id) ??
         npcCharacter(id)?.name ??
         `角色#${id}`,
     }));
@@ -89,7 +101,7 @@ export function DeckPreview(props: DeckPreviewProps) {
     return [...counts.entries()].map(([id, count]) => ({
       id,
       count,
-      name: DEFAULT_ASSETS_MANAGER.getNameSync(id) ?? `卡牌#${id}`,
+      name: assetsManager().getNameSync(id) ?? `卡牌#${id}`,
     }));
   });
 
@@ -125,7 +137,12 @@ export function DeckPreview(props: DeckPreviewProps) {
                     gap: "0.25rem",
                   }}
                 >
-                  <Thumbnail id={ch.id} name={ch.name} width={36} />
+                  <Thumbnail
+                    id={ch.id}
+                    name={ch.name}
+                    width={36}
+                    assetsManager={assetsManager()}
+                  />
                   <span>{ch.name}</span>
                 </div>
               )}
@@ -152,7 +169,12 @@ export function DeckPreview(props: DeckPreviewProps) {
                   }}
                 >
                   <span style={{ color: "#666" }}>×{card.count}</span>
-                  <Thumbnail id={card.id} name={card.name} width={30} />
+                  <Thumbnail
+                    id={card.id}
+                    name={card.name}
+                    width={30}
+                    assetsManager={assetsManager()}
+                  />
                   <span>{card.name}</span>
                 </div>
               )}

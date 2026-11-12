@@ -60,10 +60,36 @@
 | `static` | `data/skills/static_v1`（27 条） | 规则层；缺失时退回 `kind=rules` 中 `built_at` 最新的库 |
 | `dynamic` | `kind=evolved` 中 **`built_at` 最新**者（当前 `dyn_v4`，40 条） | 注意按 built_at 选，不是目录名/version |
 
-`GET /ai` 报告当前引擎/库（`/ai?session=` 报该会话实际用的座位），`GET /health` 仍是
-存活探针。LLM 不可用（`.env` 没 key/base_url/model）时 `/session` 直接把 AI 座位
+网页层对库和提示词做了这些事（均只在 `web/`，不改 `skillloop` 的实验口径）：
+
+- **过滤关卡特化技能**：保留 `layer == "rule"` 与 `strat_*`，但剔除
+  `strat_mulligan`（只在起手换牌阶段有意义）和所有 `规则_目标_*`（PvE 目标块）；
+  `skill_*`、`tempo_budget_*`、`frontload_*` 等按关卡目标（`objective_types`）命中的
+  命名技能也会丢弃，避免把「起手换牌」「五回合窗口」之类的建议注入普通对局。
+  `dyn_v4` 40 条过滤后剩 19 条，`static_v1` 27 条剩 19 条。
+- **注入网页战术**（`web/llm_render.py: WEB_TACTICS`）：普通攻击不附着元素、优先
+  元素技能/反应、切人成本、爆发与击杀优先级、候选编号不代表优先级等。规则层与
+  战术合并后作为 `rules_note`，`none` 库也带战术。系统角色文案也换成网页对局
+  （不再自称「单人 PvE 关卡 / 三星目标」）。
+- **状态行附着可读**：aura id 映射为元素名（`附着:火` / `无附着`），其余保持父类
+  格式与顺序。
+- **候选行带效果与反应预览**：`WebStateRenderer` 在技能候选中把「使用技能」换成
+  「普通攻击/元素战技/元素爆发/被动」，追加一行效果描述（截断 ~80 字），并从描述
+  解析「造成N点X元素伤害 / 物理伤害」给出「将附着X」或「将对附着Y的出战角色触发
+  融化/蒸发/…」；打牌候选追加卡牌描述；切人只标注「切换出战角色」，解析失败或
+  切人不编造伤害。
+- **决策日志可审计**：LLM 步骤的 `decisions.jsonl` 追加 `request`、`n_candidates`、
+  `model_choice`（模型候选下标，可为 `null`；不是引擎 `chosenActionIndex`）。
+
+`GET /ai` 报告当前引擎/库（`/ai?session=` 报该会话实际用的座位），`library` 里新增
+`applied_skills`（过滤后条数）与 `filtered_out`（丢弃条数）两个字段，前端可忽略。
+`GET /health` 仍是存活探针。LLM 不可用（`.env` 没 key/base_url/model）时 `/session` 直接把 AI 座位
 改派回 `expert:<slug>`/`heuristic`，不会每步都走 fallback；决策日志里 LLM 步骤额外
-带 `used_skills` / `system_hash` / `llm_calls` / `library`。
+带 `used_skills` / `system_hash` / `llm_calls` / `library` /
+`request` / `n_candidates` / `model_choice`。
+
+组牌器与配置页的两个牌组预览也已改用同一份带 `customData` 的 `AssetsManager`，
+所以 2301 等 NPC 卡牌的静态详情显示引擎 `.gts` 的 13 血，而不是官方镜像的 11。
 
 reps/torch 只在请求模型策略时延迟导入，默认路径仍是零依赖。任何加载 /
 转换 / `choose()` / 非法动作码失败都写 stderr 并回退占位策略，handler 不 500

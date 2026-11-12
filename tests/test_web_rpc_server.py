@@ -1595,8 +1595,264 @@ def test_llm_decision_log_has_audit_fields(captured, tmp_path, monkeypatch):
         assert decision["system_hash"]
         assert decision["llm_calls"] == 1
         assert decision["library"]["resolved"] == "dyn_v4"
+        # P4：可审计字段（模型请求/候选数/模型选中的候选下标）。
+        assert decision["request"] == "action"
+        assert decision["n_candidates"] >= 2
+        assert decision["model_choice"] == 0
+        assert policy.last_decision["request"] == "action"
+        assert policy.last_decision["n_candidates"] == decision["n_candidates"]
+        assert policy.last_decision["model_choice"] == 0
         # 旧字段保持不变
         assert decision["type"] == "decision"
         assert decision["fallback"] is False
+    finally:
+        server.close()
+
+
+# --------------------------------------------------------------------------- #
+# 网页专用渲染 / 战术 / 技能库过滤
+# --------------------------------------------------------------------------- #
+def test_web_state_renderer_skill_candidate_has_type_and_description():
+    from types import SimpleNamespace
+
+    from reps.schema import DecisionType, LowLevelActionSpec, OptionKind
+
+    try:
+        from agents.scripted.assets import load_assets
+
+        assets = load_assets()
+        assets.skill(23012)  # 伺机而动：造成1点火元素伤害
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"assets 缓存不可用：{exc}")
+
+    renderer = srv.WebStateRenderer(assets)
+    context = SimpleNamespace(player_view=None, acting_player=0)
+    use_skill = LowLevelActionSpec(
+        action_code=1,
+        request_type=DecisionType.ACTION,
+        kind=OptionKind.ACTION_USE_SKILL,
+        label="",
+        subject_definition_id=23012,
+        used_dice=(3, 3, 3),
+    )
+    line = renderer.describe_candidate(context, use_skill, 3)
+    assert "元素战技" in line
+    assert "使用技能" not in line  # 类型标签替代了泛化标签
+    assert "造成1点火元素伤害" in line
+    assert "将附着火" in line  # 无状态时至少给出附着提示
+    assert line.startswith("[3] 元素战技：")
+
+    switch = LowLevelActionSpec(
+        action_code=2,
+        request_type=DecisionType.ACTION,
+        kind=OptionKind.ACTION_SWITCH_ACTIVE,
+        label="",
+        subject_definition_id=23012,
+    )
+    switch_line = renderer.describe_candidate(context, switch, 0)
+    assert "切换出战角色" in switch_line
+    assert "伤害" not in switch_line  # 不编造伤害
+
+
+def _web_state_view(*, opp_aura: int = 0):
+    """Minimal masked-state shape for ``describe_state`` / reaction tests."""
+    from types import SimpleNamespace
+
+    def character(definition_id: int, *, aura: int = 0, active: bool = False):
+        return SimpleNamespace(
+            definition_id=definition_id,
+            health=10,
+            max_health=10,
+            energy=0,
+            max_energy=3,
+            aura=aura,
+            is_active=active,
+            defeated=False,
+        )
+
+    me = SimpleNamespace(
+        characters=[character(1403, aura=3, active=True)],
+        dice=[3, 3, 8],
+        hand_cards=[],
+        declared_end=False,
+    )
+    opp = SimpleNamespace(
+        characters=[character(3302, aura=opp_aura, active=True)],
+        hand_cards=[],
+        dice=[],
+    )
+    return SimpleNamespace(
+        round_number=2,
+        phase="action",
+        current_turn=0,
+        players=[me, opp],
+    )
+
+
+def test_web_state_renderer_maps_aura_ids_to_elements():
+    from types import SimpleNamespace
+
+    try:
+        from agents.scripted.assets import load_assets
+
+        assets = load_assets()
+        assets.character(1403)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"assets 缓存不可用：{exc}")
+
+    renderer = srv.WebStateRenderer(assets)
+    text = renderer.describe_state(
+        SimpleNamespace(player_view=_web_state_view(opp_aura=3), acting_player=0)
+    )
+    assert "附着:火" in text
+    assert " 3" not in text  # 不再出现裸 aura 整数
+    text0 = renderer.describe_state(
+        SimpleNamespace(player_view=_web_state_view(opp_aura=0), acting_player=0)
+    )
+    assert "无附着" in text0
+
+
+def test_web_state_renderer_previews_reactions():
+    from types import SimpleNamespace
+
+    from reps.schema import DecisionType, LowLevelActionSpec, OptionKind
+
+    try:
+        from agents.scripted.assets import load_assets
+
+        assets = load_assets()
+        assets.skill(23012)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"assets 缓存不可用：{exc}")
+
+    renderer = srv.WebStateRenderer(assets)
+    skill = LowLevelActionSpec(
+        action_code=1,
+        request_type=DecisionType.ACTION,
+        kind=OptionKind.ACTION_USE_SKILL,
+        label="",
+        subject_definition_id=23012,
+        used_dice=(3, 3, 3),
+    )
+    # 对方出战带冰附着（aura=1），火技能 → 融化。
+    melting = renderer.describe_candidate(
+        SimpleNamespace(player_view=_web_state_view(opp_aura=1), acting_player=0),
+        skill,
+        0,
+    )
+    assert "将对附着冰的出战角色触发融化" in melting
+    # 无附着 → 只提示附着。
+    attaching = renderer.describe_candidate(
+        SimpleNamespace(player_view=_web_state_view(opp_aura=0), acting_player=0),
+        skill,
+        0,
+    )
+    assert "将附着火" in attaching
+    assert "触发" not in attaching.split("（")[-1]
+
+
+def test_filter_library_for_web_drops_stage_specific_skills():
+    from skillloop.library import SkillLibrary
+
+    root = Path(srv._REPO_ROOT) / "data" / "skills"
+    dynamic = SkillLibrary.load(root / "dyn_v4")
+    filtered = srv.filter_library_for_web(dynamic)
+    ids = set(filtered.skills)
+
+    for dropped in (
+        "skill_timmie",
+        "tempo_budget_for_round_cap_shitou",
+        "frontload_reaction_into_kill_line_shitou",
+        "strat_mulligan",
+        "规则_目标_胜利",
+        "规则_目标_回合上限",
+    ):
+        assert dropped in dynamic.skills
+        assert dropped not in ids
+    for kept in (
+        "rule_reaction",
+        "rule_switch",
+        "strat_reaction",
+        "strat_switch_cost",
+    ):
+        assert kept in ids
+    assert 0 < len(filtered) < len(dynamic)
+    assert filtered.version == dynamic.version
+    assert filtered.meta == dynamic.meta
+
+    # static_v1 也含 strat_mulligan 与 规则_目标_*，同样会被剔除。
+    static = SkillLibrary.load(root / "static_v1")
+    static_filtered = srv.filter_library_for_web(static)
+    assert 0 < len(static_filtered) < len(static)
+    assert "strat_mulligan" not in static_filtered.skills
+    assert not any(sid.startswith("规则_目标_") for sid in static_filtered.skills)
+
+    assert srv.filter_library_for_web(None) is None
+    empty = SkillLibrary.from_skills([], version=0)
+    assert srv.filter_library_for_web(empty) is empty
+
+
+def test_llm_policy_prompt_has_web_tactics_and_filtered_library(captured):
+    from common.llm import MockLLMClient
+
+    entry = captured["action"]
+
+    def make_policy(selection: str, deck: str | None) -> srv.LLMPolicy:
+        return srv.LLMPolicy(
+            selection,
+            deck,
+            seed=1,
+            role="web0",
+            fallback=srv.Policy(strategy="random", seed=1),
+            client_factory=lambda: MockLLMClient(['{"choice": 0, "used": []}']),
+        )
+
+    policy = make_policy("dynamic", _POOL_DECK)
+    policy.decide(0, "action", _payload(entry), _state(entry))
+    agent = policy._policy
+    assert agent.library is not None
+    assert all(
+        skill.layer == "rule" or skill.skill_id.startswith("strat_")
+        for skill in agent.library
+    )
+    assert "strat_mulligan" not in agent.library.skills
+    assert not any(sid.startswith("规则_目标_") for sid in agent.library.skills)
+    system = agent._system["content"]
+    assert "网页对局的助手" in system
+    assert "普通攻击只造成物理伤害" in system
+    assert "rule_reaction" in system or "strat_reaction" in system
+    # 网页版不再用 PvE 关卡/三星目标框架。
+    assert "三星" not in system
+    assert "单人 PvE" not in system
+    # 关卡特化 / mulligan 技能已过滤，不得出现在 stable prefix 里。
+    assert "五回合窗口" not in system
+    assert "tempo_budget_for_round_cap" not in system
+    assert "frontload_reaction_into_kill_line" not in system
+    assert "strat_mulligan" not in system
+
+    # none 库也必须带网页战术（rules_note 不能为空）。
+    none_policy = make_policy("none", None)
+    none_policy.decide(0, "action", _payload(entry), _state(entry))
+    none_system = none_policy._policy._system["content"]
+    assert "普通攻击只造成物理伤害" in none_system
+    assert none_policy._policy.library is None
+
+
+def test_ai_endpoint_reports_applied_and_filtered_counts(monkeypatch):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        status, out = server.request("GET", "/ai")
+        assert status == 200
+        library = out["library"]
+        assert library["resolved"] == "dyn_v4"
+        assert library["skills"] == 40
+        assert library["filtered_out"] > 0
+        assert library["applied_skills"] == library["skills"] - library["filtered_out"]
+
+        # static_v1 的 strat_mulligan 与 规则_目标_* 同样会被剔除。
+        extra = srv.resolve_llm_library("static")
+        assert extra["skills"] == 27
+        assert 0 < extra["applied_skills"] < extra["skills"]
+        assert extra["applied_skills"] == extra["skills"] - extra["filtered_out"]
     finally:
         server.close()

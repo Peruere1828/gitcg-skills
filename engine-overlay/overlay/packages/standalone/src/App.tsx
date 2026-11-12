@@ -40,7 +40,11 @@ import { IS_BETA, SERVER_HOST, WEB_CLIENT_BASE_PATH } from "@gi-tcg/config";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import "@gi-tcg/deck-builder/style.css";
 import "@gi-tcg/state-editor/style.css";
-import { DEFAULT_ASSETS_MANAGER, type CustomData } from "@gi-tcg/assets-manager";
+import {
+  AssetsManager,
+  DEFAULT_ASSETS_MANAGER,
+  type CustomData,
+} from "@gi-tcg/assets-manager";
 import { GameStateEditor } from "@gi-tcg/state-editor";
 
 enum GameMode {
@@ -263,6 +267,16 @@ export function App() {
   const npcLineups = createMemo(
     () => (npcList()?.decks ?? []).map((d) => d.characters ?? []),
   );
+
+  // C3/P5：NPC/引擎数据的 AssetsManager。组牌器和牌组预览原本回退官方镜像
+  // （2301 静态 hp=11），换成它以后静态详情也显示引擎 .gts 的 13。
+  const npcAssetsManager = createMemo(() => {
+    const assets = npcList()?.assets;
+    if (!assets?.characters?.length) {
+      return DEFAULT_ASSETS_MANAGER;
+    }
+    return new AssetsManager({ language: "CHS", customData: [assets] });
+  });
 
   const deckOrEmpty = (code: string): Deck => {
     try {
@@ -862,6 +876,7 @@ export function App() {
                     title="我的牌组"
                     deck={npcPick() ?? deckOrEmpty(myDeckCode())}
                     npcAssets={npcList()?.assets}
+                    assetsManager={npcAssetsManager()}
                   />
                 </div>
                 <div style={{ flex: "1 1 0", "min-width": "0" }}>
@@ -869,6 +884,7 @@ export function App() {
                     title={aiOpponent() ? "AI 牌组" : "对面牌组"}
                     deck={deckOrEmpty(otherDeckCode())}
                     npcAssets={npcList()?.assets}
+                    assetsManager={npcAssetsManager()}
                   />
                 </div>
               </div>
@@ -1074,6 +1090,7 @@ export function App() {
           <DeckBuilder
             class="deck-builder"
             deck={deckBuilderValue()}
+            assetsManager={npcAssetsManager()}
             onChangeDeck={setDeckBuilderValue}
           />
         </Show>
