@@ -19,8 +19,8 @@
 #   POLICY        AI 座位的策略 spec（默认 llm:dynamic：LLM 技能智能体 +
 #                 最新进化技能库；也可 llm:none / llm:llm_empty / llm:static，
 #                 或脚本 expert:<slug> / heuristic）
-#   AI_DECK       桥声明的 AI 牌组 slug（默认 superconduct_aggro；评价协议下
-#                 由关卡 loadout/stage-decks 覆盖）
+#   AI_DECK       仅非评价调试用：桥声明的 AI 牌组 slug（默认空；评价协议下
+#                 由关卡 loadout/stage-decks 自动决定，不要设置）
 #   SEED          策略种子（默认 20261112）
 #   CONDA_ENV     Python 环境（默认 gitcg-skill）
 #   STAGE_DECKS   关卡->牌组映射（默认 configs/stage_decks.json）
@@ -45,7 +45,7 @@ cd "$REPO_ROOT"
 PORT="${PORT:-7001}"
 BRIDGE_PORT="${BRIDGE_PORT:-8770}"
 POLICY="${POLICY:-llm:dynamic}"
-AI_DECK="${AI_DECK:-superconduct_aggro}"
+AI_DECK="${AI_DECK:-}"
 SEED="${SEED:-20261112}"
 CONDA_ENV="${CONDA_ENV:-gitcg-skill}"
 # 严格对齐实际评测：默认值与 data/runs/v2_dynamic.jsonl.meta.json 一致。
@@ -67,11 +67,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION})"
+AI_DECK_ARG=()
+if [ -n "$AI_DECK" ]; then AI_DECK_ARG=(--ai-deck "$AI_DECK"); fi
+echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION})"
 setsid conda run --no-capture-output -n "$CONDA_ENV" \
   python web/ai_rpc_server.py \
   --host 127.0.0.1 --port "$BRIDGE_PORT" \
-  --policy "$POLICY" --ai-deck "$AI_DECK" --seed "$SEED" \
+  --policy "$POLICY" "${AI_DECK_ARG[@]}" --seed "$SEED" \
   --stage-decks "$STAGE_DECKS" --loadout-root "$LOADOUT_ROOT" \
   --card-version "$CARD_VERSION" &
 BRIDGE_PID=$!

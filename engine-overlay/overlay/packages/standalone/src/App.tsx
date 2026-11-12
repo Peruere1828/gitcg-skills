@@ -62,6 +62,13 @@ const INIT_DECK1 =
 const EMPTY_DECK: Deck = { characters: [], cards: [] };
 
 /**
+ * 未完善入口开关：主流程固定为「人类执 NPC + AI 执选定牌组 + 固定版本/先手」。
+ * 反选、分享码、版本/先手选择、多人、导入日志/摆盘器、自对弈、技能库切换等
+ * 入口保留代码但默认隐藏；改成 true 可恢复全部调试入口。
+ */
+const SHOW_UNFINISHED = false;
+
+/**
  * 评价协议：`GET /npc-decks` 每条阵容附带的评测口径（后端契约）。
  * 旧版桥没有 eval 字段 → 保持 undefined，前端所有回填/警告安全跳过。
  */
@@ -273,7 +280,7 @@ export function App() {
   // 默认走**同源** `/bridge`（vite 反代到本机 Python 桥）：局域网另一台机器访问
   // 本页面时，`127.0.0.1` 指向的是那台机器；同源相对路径才能落到这个前端所在的
   // 主机上，也省掉 CORS。
-  const [aiOpponent, setAiOpponent] = createSignal(false);
+  const [aiOpponent, setAiOpponent] = createSignal(true);
   const [aiServerUrl, setAiServerUrl] = createSignal(
     `${window.location.origin}/bridge`,
   );
@@ -359,15 +366,17 @@ export function App() {
 
   /**
    * 评价协议：选了 NPC 阵容就按它的 `eval` 回填 AI 牌组分享码与卡池版本。
-   * 旧版桥没有 `eval` → 全部安全跳过；用户手改过 AI 牌组 → 不覆盖。
+   * 旧版桥没有 `eval` → 版本回落到 CURRENT_VERSION；用户手改过 AI 牌组 →
+   * 不覆盖牌组，但版本仍跟随所选 NPC（固定游戏版本）。
    */
   const applyNpcEval = (deck: NpcDeck | null) => {
     const evaluation = deck?.eval;
-    if (!evaluation || otherDeckEdited()) {
-      // 缺 eval（旧版桥）或用户手改过 AI 牌组 → 不动版本/牌组。
+    if (!evaluation) {
+      // 缺 eval（旧版桥）或未选 NPC → 固定版本回落到引擎当前版本。
+      setVersion(CURRENT_VERSION);
       return;
     }
-    if (evaluation.characters?.length) {
+    if (!otherDeckEdited() && evaluation.characters?.length) {
       const code = encodeDeck({
         characters: evaluation.characters,
         cards: evaluation.cards ?? [],
@@ -580,19 +589,14 @@ export function App() {
   });
 
   /**
-   * 评价牌组一致性（非阻塞警告）：优先比对桥声明的 AI 牌组 slug；桥没声明
-   * 就比对当前 AI 牌组内容。缺 `eval` 的旧版桥什么都不提示。
+   * 评价牌组一致性（非阻塞警告）：**只看实际上报的 AI 牌组内容**。
+   * 评价协议下 `--ai-deck` 是可选的调试声明，不代表本局牌组（关卡
+   * loadout/stage-decks 才是权威），因此不再拿它的 slug 和 eval.deck 比较。
    */
   const evalDeckWarning = createMemo(() => {
     const evaluation = npcPick()?.eval;
     if (!evaluation?.deck) {
       return null;
-    }
-    const declared = aiDeckSlug();
-    if (declared) {
-      return declared === evaluation.deck
-        ? null
-        : `桥的 AI 牌组是 ${declared}，评价要求 ${evaluation.deck}`;
     }
     const characters = evaluation.characters;
     if (!characters?.length) {
@@ -605,6 +609,46 @@ export function App() {
       ? null
       : `当前 AI 牌组与评价牌组 ${evaluation.deck} 不一致`;
   });
+
+  /** 只读展示 `/ai` 当前技能库（主流程不再用下拉切换） */
+  const aiLibraryInfoText = createMemo(() => {
+    const status = aiStatus();
+    if (!status) {
+      return aiStatusError() ? `不可用（${aiStatusError()}）` : "";
+    }
+    if (status.mode !== "llm") {
+      return `脚本模式（${status.spec}） · 技能库不适用`;
+    }
+    const library = status.library;
+    if (!library) {
+      return "技能库：未知";
+    }
+    return `library ${library.selection}（${library.resolved}，v${library.version}，${library.skills} 条，built_at ${library.built_at}）`;
+  });
+
+  /** 只读展示 `/ai` 的 stage/protocol/parity（评价协议状态） */
+  const aiProtocolReadonlyText = createMemo(() => {
+    const status = aiStatus();
+    if (!status) {
+      return "";
+    }
+    const parts: string[] = [];
+    if (status.stage) {
+      parts.push(`stage=${status.stage}`);
+    }
+    if (status.protocol) {
+      parts.push(`protocol=${status.protocol}`);
+    }
+    if (status.parity !== null) {
+      parts.push(`parity=${status.parity}`);
+    }
+    return parts.length > 0 ? `/ai：${parts.join(" · ")}` : "";
+  });
+
+  /** 主流程开始条件：必须选 NPC 阵容（人类执 NPC）且 AI 牌组非空 */
+  const canStart = createMemo(
+    () => npcPick() !== null && otherDeckCode().trim().length > 0,
+  );
 
   /** `POST /ai-library`：切换技能库；失败回滚下拉并提示错误 */
   const changeAiLibrary = async (next: string) => {
@@ -783,30 +827,33 @@ export function App() {
     setMode(GameMode.Standalone);
   };
 
-  /** 开局（D18 流程：人选牌 → AI 看牌反选 → 定先手） */
+  /**
+   * 开局：人类执所选 NPC 阵容（seat 1），AI 执「AI 牌组」输入框里的牌组
+   * （seat 0，固定先手）。主流程不再反选、也不再自动取桥的 AI 牌组；
+   * `chooseCounterPick` / `fetchAiDeck` / `resolveHumanSeat` 仅保留给隐藏入口。
+   */
   const startGame = async () => {
+    if (!npcPick()) {
+      alert("请先选择 NPC 阵容（人类执 NPC）");
+      return;
+    }
+    if (!otherDeckCode().trim()) {
+      alert("请先填写 AI 牌组");
+      return;
+    }
     const mine = myDeck();
     if (!mine) {
       return;
     }
-    let theirs = otherDeck();
+    const theirs = otherDeck();
     if (!theirs) {
       return;
     }
-    const sessionId = newSessionId();
-    if (aiOpponent() && !otherDeckEdited() && !otherDeckFromEval()) {
-      // 没手改过对面牌组 → 让桥按我的牌组反选一次（结果回填并用于本局）。
-      // 评价牌组由关卡 `eval` 固定，不参与反选。
-      const pick = await chooseCounterPick(sessionId);
-      if (pick) {
-        theirs = { characters: pick.characters, cards: pick.cards };
-      }
-    }
     setGameCfg({
-      sessionId,
+      sessionId: newSessionId(),
       myDeck: mine,
       otherDeck: theirs,
-      humanSeat: resolveHumanSeat(),
+      humanSeat: 1,
     });
     setMode(GameMode.Standalone);
   };
@@ -828,19 +875,21 @@ export function App() {
             </label>
             <div class="tab__content config-panel">
               <div class="config-panel__title">牌组配置</div>
-              <div class="config-panel__deck">
-                <label>我的牌组</label>
-                <input
-                  type="text"
-                  disabled={!!npcPick()}
-                  value={
-                    npcPick()
-                      ? `NPC·${npcPick()!.display}（出战 ${npcPick()!.n_on_field}／预备 ${npcPick()!.n_support}）`
-                      : myDeckCode()
-                  }
-                  onInput={(e) => setMyDeckCode(e.currentTarget.value)}
-                />
-              </div>
+              <Show when={SHOW_UNFINISHED}>
+                <div class="config-panel__deck">
+                  <label>我的牌组</label>
+                  <input
+                    type="text"
+                    disabled={!!npcPick()}
+                    value={
+                      npcPick()
+                        ? `NPC·${npcPick()!.display}（出战 ${npcPick()!.n_on_field}／预备 ${npcPick()!.n_support}）`
+                        : myDeckCode()
+                    }
+                    onInput={(e) => setMyDeckCode(e.currentTarget.value)}
+                  />
+                </div>
+              </Show>
               <div class="config-panel__deck">
                 <label>{aiOpponent() ? "AI 牌组" : "对面牌组"}</label>
                 <input
@@ -853,22 +902,24 @@ export function App() {
                     setCounterPick(null);
                   }}
                 />
-                <button
-                  type="button"
-                  disabled={!aiOpponent()}
-                  title="按我的牌组用对位矩阵挑一套（D19）"
-                  onClick={() => void chooseCounterPick()}
-                >
-                  AI 反选
-                </button>
-                <button
-                  type="button"
-                  disabled={!aiOpponent()}
-                  title="用桥 --ai-deck / --policy expert:<slug> 声明的牌组"
-                  onClick={() => void fetchAiDeck()}
-                >
-                  取 AI 牌组
-                </button>
+                <Show when={SHOW_UNFINISHED}>
+                  <button
+                    type="button"
+                    disabled={!aiOpponent()}
+                    title="按我的牌组用对位矩阵挑一套（D19）"
+                    onClick={() => void chooseCounterPick()}
+                  >
+                    AI 反选
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!aiOpponent()}
+                    title="用桥 --ai-deck / --policy expert:<slug> 声明的牌组"
+                    onClick={() => void fetchAiDeck()}
+                  >
+                    取 AI 牌组
+                  </button>
+                </Show>
               </div>
               <div class="config-panel__deck">
                 <label>NPC 阵容</label>
@@ -879,6 +930,8 @@ export function App() {
                     if (!slug) {
                       setNpcPick(null);
                       setOtherDeckFromEval(false);
+                      // 未选 NPC → 版本回落到 CURRENT_VERSION。
+                      applyNpcEval(null);
                       return;
                     }
                     const found = npcList()?.decks.find(
@@ -889,7 +942,7 @@ export function App() {
                     applyNpcEval(found ?? null);
                   }}
                 >
-                  <option value="">（不用 NPC 阵容，用上面的分享码）</option>
+                  <option value="">（请选择 NPC 阵容，人类执 NPC）</option>
                   <For each={npcList()?.decks ?? []}>
                     {(d) => (
                       <option value={d.slug}>
@@ -908,107 +961,125 @@ export function App() {
               </div>
               <div class="config-panel__deck">
                 <label>先手</label>
-                <select
-                  value={firstTurn()}
-                  onChange={(e) =>
-                    setFirstTurn(e.target.value as FirstTurn)
-                  }
-                >
-                  <option value="random">随机</option>
-                  <option value="human">
-                    {aiOpponent() ? "人类先手" : "我先手"}
-                  </option>
-                  <option value="other">
-                    {aiOpponent() ? "AI 先手" : "对面先手"}
-                  </option>
-                </select>
-                <span>（引擎 seat0 恒先手；选「随机」则开局时掷一次）</span>
+                <span>
+                  固定：AI 参赛者先手（seat 0），人类 NPC 座位 seat 1
+                </span>
+                <Show when={SHOW_UNFINISHED}>
+                  <select
+                    value={firstTurn()}
+                    onChange={(e) =>
+                      setFirstTurn(e.target.value as FirstTurn)
+                    }
+                  >
+                    <option value="random">随机</option>
+                    <option value="human">
+                      {aiOpponent() ? "人类先手" : "我先手"}
+                    </option>
+                    <option value="other">
+                      {aiOpponent() ? "AI 先手" : "对面先手"}
+                    </option>
+                  </select>
+                  <span>（引擎 seat0 恒先手；选「随机」则开局时掷一次）</span>
+                </Show>
               </div>
               <div class="config-panel__deck">
                 <label>游戏版本</label>
-                <select
-                  value={version()}
-                  onChange={(e) => setVersion(e.target.value as Version)}
-                >
-                  <For each={VERSIONS}>
-                    {(ver) => <option value={ver}>{ver}</option>}
-                  </For>
-                </select>
+                <span>
+                  {version()}（只读；评价协议下取自所选 NPC 阵容）
+                </span>
+                <Show when={SHOW_UNFINISHED}>
+                  <select
+                    value={version()}
+                    onChange={(e) => setVersion(e.target.value as Version)}
+                  >
+                    <For each={VERSIONS}>
+                      {(ver) => <option value={ver}>{ver}</option>}
+                    </For>
+                  </select>
+                </Show>
               </div>
               <div class="config-panel__deck">
-                <label>
+                <label>AI 对手</label>
+                <span>固定开启（同源 HTTP 桥 {aiServerUrl()}）</span>
+                <Show when={SHOW_UNFINISHED}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={aiOpponent()}
+                      onChange={(e) => {
+                        const on = e.currentTarget.checked;
+                        setAiOpponent(on);
+                        if (on) {
+                          void loadAiStatus();
+                        } else {
+                          setAiDeckSlug(null);
+                        }
+                      }}
+                    />{" "}
+                    AI 对手（HTTP 桥）
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={aiOpponent()}
-                    onChange={(e) => {
-                      const on = e.currentTarget.checked;
-                      setAiOpponent(on);
-                      if (on) {
-                        void fetchAiDeck();
-                        void loadAiStatus();
-                      } else {
-                        setAiDeckSlug(null);
-                      }
-                    }}
-                  />{" "}
-                  AI 对手（HTTP 桥）
-                </label>
-                <input
-                  type="text"
-                  disabled={!aiOpponent()}
-                  value={aiServerUrl()}
-                  onInput={(e) => setAiServerUrl(e.currentTarget.value)}
-                  placeholder={`${window.location.origin}/bridge`}
-                />
-                <label>
-                  <input
-                    type="checkbox"
+                    type="text"
                     disabled={!aiOpponent()}
-                    checked={aiSelfPlay()}
-                    onChange={(e) => setAiSelfPlay(e.currentTarget.checked)}
-                  />{" "}
-                  双方 AI 自对弈
-                </label>
+                    value={aiServerUrl()}
+                    onInput={(e) => setAiServerUrl(e.currentTarget.value)}
+                    placeholder={`${window.location.origin}/bridge`}
+                  />
+                  <label>
+                    <input
+                      type="checkbox"
+                      disabled={!aiOpponent()}
+                      checked={aiSelfPlay()}
+                      onChange={(e) => setAiSelfPlay(e.currentTarget.checked)}
+                    />{" "}
+                    双方 AI 自对弈
+                  </label>
+                </Show>
               </div>
               <div
                 class="config-panel__deck"
                 style={{ "align-items": "center" }}
               >
                 <label>AI 技能库</label>
-                <select
-                  disabled={
-                    aiLibraryBusy() ||
-                    (aiStatus() !== null && aiStatus()!.mode !== "llm") ||
-                    aiStatus()?.llm_available === false
-                  }
-                  // options 是异步拉到的：value 之外再给 option 标 selected，
-                  // 否则浏览器会在选项出现前把 value 重置成第一项（显示成 none）。
-                  value={aiLibrarySelection()}
-                  onChange={(e) =>
-                    void changeAiLibrary(e.currentTarget.value)
-                  }
-                >
-                  <Show when={aiOptions().length === 0}>
-                    <option value="">（桥未连接）</option>
+                <span>{aiLibraryInfoText() || "（桥未连接）"}</span>
+                <Show when={SHOW_UNFINISHED}>
+                  <select
+                    disabled={
+                      aiLibraryBusy() ||
+                      (aiStatus() !== null && aiStatus()!.mode !== "llm") ||
+                      aiStatus()?.llm_available === false
+                    }
+                    // options 是异步拉到的：value 之外再给 option 标 selected，
+                    // 否则浏览器会在选项出现前把 value 重置成第一项（显示成 none）。
+                    value={aiLibrarySelection()}
+                    onChange={(e) =>
+                      void changeAiLibrary(e.currentTarget.value)
+                    }
+                  >
+                    <Show when={aiOptions().length === 0}>
+                      <option value="">（桥未连接）</option>
+                    </Show>
+                    <For each={aiOptions()}>
+                      {(opt) => (
+                        <option
+                          value={opt.value}
+                          selected={opt.value === aiLibrarySelection()}
+                        >
+                          {opt.label}
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                  <Show when={aiLibraryNote()}>
+                    <span style={{ color: "#2e7d32" }}>
+                      （{aiLibraryNote()}）
+                    </span>
                   </Show>
-                  <For each={aiOptions()}>
-                    {(opt) => (
-                      <option
-                        value={opt.value}
-                        selected={opt.value === aiLibrarySelection()}
-                      >
-                        {opt.label}
-                      </option>
-                    )}
-                  </For>
-                </select>
-                <Show when={aiLibraryNote()}>
-                  <span style={{ color: "#2e7d32" }}>（{aiLibraryNote()}）</span>
-                </Show>
-                <Show when={aiLibraryError()}>
-                  <span style={{ color: "#b00020" }}>
-                    （切换失败：{aiLibraryError()}）
-                  </span>
+                  <Show when={aiLibraryError()}>
+                    <span style={{ color: "#b00020" }}>
+                      （切换失败：{aiLibraryError()}）
+                    </span>
+                  </Show>
                 </Show>
               </div>
               <div
@@ -1018,10 +1089,23 @@ export function App() {
                 <Show when={aiEngineText()}>
                   <span>{aiEngineText()}</span>
                 </Show>
+                <Show when={aiProtocolReadonlyText()}>
+                  <span>{aiProtocolReadonlyText()}</span>
+                </Show>
                 <span>{evalProtocolText()}</span>
                 <Show when={evalDeckWarning()}>
                   <span style={{ color: "#b00020" }}>
                     牌组警告：{evalDeckWarning()}
+                  </span>
+                </Show>
+                <Show when={!npcPick()}>
+                  <span style={{ color: "#b00020" }}>
+                    请先选择 NPC 阵容（人类执 NPC）
+                  </span>
+                </Show>
+                <Show when={npcPick() && !otherDeckCode().trim()}>
+                  <span style={{ color: "#b00020" }}>
+                    请填写 AI 牌组后再开始
                   </span>
                 </Show>
               </div>
@@ -1035,8 +1119,11 @@ export function App() {
               >
                 <div style={{ flex: "1 1 0", "min-width": "0" }}>
                   <DeckPreview
-                    title="我的牌组"
-                    deck={npcPick() ?? deckOrEmpty(myDeckCode())}
+                    title="人类（NPC）牌组"
+                    deck={
+                      npcPick() ??
+                      (SHOW_UNFINISHED ? deckOrEmpty(myDeckCode()) : EMPTY_DECK)
+                    }
                     npcAssets={npcList()?.assets}
                     assetsManager={npcAssetsManager()}
                   />
@@ -1051,45 +1138,32 @@ export function App() {
                 </div>
               </div>
               <div class="config-panel__description">
-                点击下方按钮开始对局：本页面永远是**我**的棋盘，对面座位按「先手」与
-                AI 开关决定（AI 模式不弹窗、对面交给 Python 桥；双人模式弹窗显示对面）。
-                <br />
-                （若弹窗不显示为浏览器阻止，请允许本页面使用弹出式窗口。）
+                点击「开始对局」：人类执所选 NPC 阵容（seat 1），AI 执「AI 牌组」
+                输入框中的参赛者牌组（seat 0，固定先手）；对面座位由同源 Python
+                桥（{aiServerUrl()}）托管。
                 <Show when={aiOpponent()}>
-                  <br />
-                  <strong>
-                    AI 对手模式：对面座位由 {aiServerUrl()} 的 Python 服务托管。
-                  </strong>
-                  <Show when={aiDeckSlug()}>
+                  <Show when={npcPick()?.eval?.deck || aiDeckSlug()}>
                     <br />
-                    AI 卡组：<code>{aiDeckSlug()}</code>（可「取 AI 牌组」回填到
-                    「AI 牌组」，与桥的 <code>--policy</code>/<code>--ai-deck</code>{" "}
-                    对齐）。
+                    AI 卡组：
+                    <code>{npcPick()?.eval?.deck ?? aiDeckSlug()}</code>
                   </Show>
                 </Show>
                 <Show when={counterPick()}>
                   <br />
                   反选：<code>{counterPick()!.slug}</code>（
                   {counterPick()!.method}）— {counterPick()!.reason}
-                  <Show when={counterPick()!.policy_applied === false}>
-                    <br />
-                    注：桥的 <code>--policy</code> 不是 <code>expert:*</code>
-                    （deck-specific），所以只换牌组、不换策略
-                    （{counterPick()!.base_policy ?? "占位"}）。
-                  </Show>
                 </Show>
                 <Show when={npcPick() && npcList()}>
-                  <br />
-                  <strong>NPC 阵容近似说明：</strong>
-                  <For
-                    each={Object.values(npcList()?.semantics ?? {})}
-                  >
-                    {(line) => (
-                      <>
-                        <br />· {line}
-                      </>
-                    )}
-                  </For>
+                  <details style={{ "margin-top": "0.35rem" }}>
+                    <summary>NPC 阵容近似说明</summary>
+                    <For each={Object.values(npcList()?.semantics ?? {})}>
+                      {(line) => (
+                        <>
+                          <br />· {line}
+                        </>
+                      )}
+                    </For>
+                  </details>
                 </Show>
                 <Show when={IS_BETA}>
                   <br />
@@ -1099,36 +1173,58 @@ export function App() {
                 </Show>
               </div>
               <div class="config-panel__button-group">
-                <button onClick={() => void startGame()}>开始对局</button>
                 <button
-                  onClick={async () => {
-                    const imported = await importLog().catch(alert);
-                    if (imported) {
-                      enterGame(imported);
-                    }
-                  }}
+                  disabled={!canStart()}
+                  title={
+                    canStart()
+                      ? "开始对局"
+                      : "请先选择 NPC 阵容并填写 AI 牌组"
+                  }
+                  onClick={() => void startGame()}
                 >
-                  导入日志
+                  开始对局
                 </button>
-                <button onClick={openEditor}>摆盘器</button>
+                <Show when={SHOW_UNFINISHED}>
+                  <button
+                    onClick={async () => {
+                      const imported = await importLog().catch(alert);
+                      if (imported) {
+                        enterGame(imported);
+                      }
+                    }}
+                  >
+                    导入日志
+                  </button>
+                  <button onClick={openEditor}>摆盘器</button>
+                </Show>
               </div>
             </div>
-            <input
-              class="tab__input"
-              type="radio"
-              name="gameModeTab"
-              id="multiplayerInput"
-            />
-            <label class="tab__header" for="multiplayerInput">
-              <a href={`${SERVER_HOST}${WEB_CLIENT_BASE_PATH}`} target="_blank">
-                多人对战
-              </a>
-            </label>
-            <div class="tab__content config-panel" />
+            <Show when={SHOW_UNFINISHED}>
+              <>
+                <input
+                  class="tab__input"
+                  type="radio"
+                  name="gameModeTab"
+                  id="multiplayerInput"
+                />
+                <label class="tab__header" for="multiplayerInput">
+                  <a
+                    href={`${SERVER_HOST}${WEB_CLIENT_BASE_PATH}`}
+                    target="_blank"
+                  >
+                    多人对战
+                  </a>
+                </label>
+                <div class="tab__content config-panel" />
+              </>
+            </Show>
             <div class="tab__spacer" />
           </div>
-          <h3>友情链接</h3>
-          <ul>
+          <Show when={SHOW_UNFINISHED}>
+            <h3>友情链接</h3>
+          </Show>
+          <Show when={SHOW_UNFINISHED}>
+            <ul>
             <li>
               获取牌组码：
               <a
@@ -1214,7 +1310,8 @@ export function App() {
               </a>
               ）
             </li>
-          </ul>
+            </ul>
+          </Show>
         </Match>
         <Match when={mode() === GameMode.Standalone}>
           <Show when={gameCfg()}>

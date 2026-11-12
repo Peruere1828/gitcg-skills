@@ -64,30 +64,27 @@ package.json 只导出 `dist/`，Vite dev 无法直接解析其源码，因此�
 
 ## 起局
 
-1. 浏览器打开 `http://localhost:5173/`。
-2. **双人类（上游默认）**：直接点「开始对局」，先手方棋盘在弹窗、后手方在本页。
-   （需要浏览器允许弹出窗口。）
-3. **AI 对手（HTTP 桥）**：勾选「AI 对手（HTTP 桥）」，地址填
-   `http://127.0.0.1:8770`；先起 Python 服务：
+1. 浏览器打开 `http://localhost:5173/`（或 `scripts/serve_web_demo.sh` 的 7001）。
+2. **评价协议调试（推荐）**：先在「NPC 阵容」选关卡（人类执该 NPC 座位）；页面
+   自动回填 AI 参赛者的关卡牌组、卡池版本（如 `v3.3.0`）和关卡特殊规则。勾
+   「AI 对手（HTTP 桥）」后开始；AI 走 `skillloop.run.build_policy` 的同一套
+   策略/提示词/库/loadout，下方「AI 决策」面板显示每步引用的技能。
+   - 想零看管跑完整局时可勾「双方 AI 自对弈」：NPC 座位走真实 `npc:<stage>`；
+     人类手动打时**不要勾**。
+   - 评价协议下 AI 牌组固定为 `eval.deck`，不要手改；`--ai-deck` 仅非评价调试用。
+3. **非评价手动调试**：不选 NPC 阵容、直接贴两套分享码；此时没有关卡 TaskSpec/
+   规则/版本约束，`/ai.parity` 为 false，不能当作评测数据。
+4. **双人类（上游默认）**：不勾 AI 桥，直接开始；先手方棋盘在弹窗、后手方在本页
+   （需要浏览器允许弹出窗口）。
+5. 「摆盘器」「导入日志」「查看历史/从此处继续」等上游功能保持可用。
 
-   ```sh
-   conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
-       --policy expert:superconduct_aggro
-   ```
+Python 桥（评价协议示例，和 `data/runs/v2_dynamic` 对齐）：
 
-   然后按 D18 流程配牌（配完点「开始对局」）：
-   - **我的牌组**：贴分享码，或在「NPC 阵容」下拉里选一套 NPC 阵容（C3，16 关全可选，
-     人数不为 3 的阵容原样给；选中后输入框显示 `NPC·<关卡名>`，不走分享码）。
-     **NPC 阵容不带行动牌（`cards=[]`）**，所以这一侧开局没有手牌、只能用角色技能和
-     骰子——这是刻意对齐游戏内「NPC 无手牌」，不是 bug；NPC 的**名字/技能描述/骰子费用**
-     由桥的 `/npc-decks` `assets` 字段带过来（解析自 `.gts`，`web/npc_assets.py`），
-   - **AI 牌组**：点「AI 反选」（C1，按我的牌组用对位矩阵挑）或「取 AI 牌组」
-     （T3，用桥 `--ai-deck`/`--policy expert:<slug>` 声明的那套）；**没手动改过 AI
-     牌组时，点「开始对局」会自动再反选一次**；
-   - **先手**：人类先手 / AI 先手 / 随机（引擎 seat0 恒先手，这里决定谁坐先手位）；
-   - 本页面永远是**我**的棋盘；AI 模式下对面座位交给桥（不弹窗）。
-   再勾「双方 AI 自对弈」可让两边都交给 Python，便于零看管跑完整局。
-4. 「摆盘器」「导入日志」「查看历史/从此处继续」等上游功能保持可用。
+```sh
+conda run -n gitcg-skill python web/ai_rpc_server.py --port 8770 \
+    --policy llm:dynamic --stage-decks configs/stage_decks.json \
+    --loadout-root reports/loadouts/v4 --card-version v3.3.0
+```
 
 ## HTTP 桥协议
 
@@ -140,21 +137,22 @@ package.json 只导出 `dist/`，Vite dev 无法直接解析其源码，因此�
 `seq` 基线、故障局 `io_error` 归档、`deck_mismatch`/`seat_specs` 落盘）。
 协议与近似语义见 `web/README.md`。
 
-**新增（2026-11-12）**：
+**新增 / 当前（2026-11-12）**：
 
-- **LLM 技能智能体** `--policy llm:<none|llm_empty|static|dynamic>`：只有
-  `meta.ai_seat` 那侧走 `skillloop.agent.SkillAgentPolicy`（其它座位仍派脚本）；
-  `dynamic` 按 `built_at` 取最新进化库。页面「AI 技能库」下拉可切（`POST /ai-library`，
-  下一局生效），状态行显示实际解析到的库；`GET /ai` 是机器可读版本。
-- **牌组预览**：配置页并排显示我的牌组 / AI 牌组（角色与行动牌的缩略图、名字、
-  牌数），NPC 角色名从 `/npc-decks` 的 `assets` 回退。
-- **自对弈观战**：`observeIo` 把通知同时喂给棋盘（此前双方 AI 时棋盘停在「正在等待…」）。
+- **严格对齐评测**：LLM 策略由 `skillloop.run.build_policy` 构造（关卡 TaskSpec、
+  plain `StateRenderer`、era/expert base、未过滤库、cap16、原顺序）；页面按
+  `/npc-decks.eval` 自动回填 AI 参赛者牌组、卡池版本、关卡特殊规则；
+  **人类执 NPC 座位，AI 执参赛者**。
+- **自对弈**：`observeIo` 把通知同时喂给棋盘；NPC 座位走真实 `npc:<stage>`。
+- **牌组预览**：配置页并排显示双方牌组（NPC 角色名从 `/npc-decks` 的 `assets` 回退）。
+- **AI 决策监控**：`AiDecisionPanel` 轮询 `/ai-decisions`，显示 AI 每步引用的技能
+  （`used_skill_names`）、技能库版本、候选下标/耗时，用于检查自进化经验。
 
 **下一步**：
 
 1. **组牌器直通**：在 `@gi-tcg/deck-builder` 里选完直接回填「我的牌组」
    （现在要手动贴分享码）。
-2. **LLM 辅助档**：`agents/llm_assist.build_llm_assist_policy`（脚本先提议、LLM 重排）
-   是另一种模式，尚未接线；与上面的「LLM 直接决策」分开报分、不进口径验收。
-3. **`/notify` 降流量**：每步一次全量状态（一局数千条）→ seq/节流/合并。
-4. **e2e 固化**：把无头 Chromium 冒烟（NPC 阵容 × 先手 × 反选）落成仓库脚本。
+2. **`/notify` 降流量**：每步一次全量状态（一局数千条）→ seq/节流/合并。
+3. **e2e 固化**：把无头 Chromium 冒烟（NPC 阵容 × 先手 × 评价牌组）落成仓库脚本。
+4. **可选**：`agents/llm_assist.build_llm_assist_policy`（脚本先提议、LLM 重排）
+   是另一种模式，尚未接线；与「LLM 直接决策」分开报分、不进口径验收。

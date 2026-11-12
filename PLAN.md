@@ -19,6 +19,8 @@
 | D9 | 2026-10-30 | 「静态 skill」= **游戏规则 + 手写的简单打牌策略**；「动态 skill」= 同一底座 + 可增删的策略 | 课程要求的分组定义；静态组可复现、不含学到的内容 |
 | D10 | 2026-11-01 | 对局决策回退到 `reasoning_effort=none`（`max_tokens=64`）；思考只用于技能提取/反思（`effort=high`, `max_tokens=8192`） | **暂时回退**：off 时 15 completion tokens/次、$0.004/局；on(low) 时 1215 tokens/次、$0.040/局，成本 10× 而无质量证据。重新开启必须以成对 A/B 证明收益 |
 | D11 | 2026-11-01 | 运行器提供 `GITCG_LLM_BUDGET_USD` 硬上限：滑动窗口维持 `workers` 局在飞，每完成一局即检查累计 `cost_usd`，触顶后不再启动新局；已在飞的局跑完、已完成的行照常落盘，有预算时 summary 记 `budget_usd` / `spent_usd`，触顶时加 `aborted: "budget"`。上限只对**本次调用**生效：resume / 重跑时 `spent` 从 0 重计，不跨调用累计。`scripts/estimate_cost.py --rows <run>.jsonl` 加 `--games N` 或 `--per-stage-seeds N --stages 16`，从实测逐局成本外推全量 | t5 烧到额度耗尽才停（当日 $7.93）；成本约束必须是运行时门禁而非文档约定 |
+| D12 | 2026-11-12 | 引擎数据把「官方角色卡」与「NPC 变体」拆成两张牌：官方 2301/2202 保持版本卡面值（v3.3.0 下 2301=10；v7.1.0 下 11），新增 NPC 变体 9301/9202（13/12，独立技能/状态号段），`ENEMY_ENGINE_IDS` 指向变体 | 全局 `.gts` 血量补丁会污染玩家牌组里的角色卡；理论/实际都是两张牌，拆开后 PvE 难度与角色卡数据各归其位 |
+| D13 | 2026-11-12 | 网页调试必须严格复现 `skillloop.run` 评测协议：关卡 TaskSpec、未过滤库、era/expert base、cap16、原顺序、stage_decks/loadout/card_version/特殊规则/NPC policy；移除 web-only 战术/过滤/重排/cap24；新增只读 `/ai-decisions` 监控面板 | 网页只是 human 扮 NPC 的调试接口，必须能忠实观察自进化经验；web-only 行为会让调试点与实际评测不一致 |
 
 ## 1. 任务定义
 
@@ -30,7 +32,8 @@ task = (stage, deck, seed)
 
 - 16 关，敌人由确定性 `NpcPolicy`（greedy + rotation）驱动，玩家恒为先手；
 - 失败判据：未三星（含未通关、目标未达成、超回合）；
-- 我方牌组限定在 `configs/pools/` 的蒙德/璃月早期卡池（见 D4 的难度标定）。
+- 评测牌组由 `configs/stage_decks.json` / loadout 固定（时代牌组，卡池 `v3.3.0`）；
+  `configs/pools/` 的旧池仍用于历史实验/对照。
 
 ## 2. 难度标定（D4）
 
@@ -49,6 +52,10 @@ task = (stage, deck, seed)
    （`reports/calibration/thresholds.json`）：脚本/参照策略的胜局回合 P70 为 6–9，
    说明 5 回合本身就是一个需要**主动加速**的技能目标。
 5. 验收区间：纯脚本组 **30–45%**、参照组 **35–50%**，且**未饱和**（留 ≥50pp 空间）。
+
+> 2026-11-12（D12）：血量只作用于 **NPC 变体**（9301/9202）；官方角色卡
+> 2301/2202 恢复版本卡面值（v3.3.0 下 2301=10；v7.1.0 下 11）。上表的
+> 「原 HP → 新 HP」读作「NPC 敌人原 HP → NPC 变体 HP」。
 
 ## 3. 技能（Skill）
 

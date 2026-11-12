@@ -44,8 +44,14 @@ cd ~/projects/gitcg-skills
 python -m npc.eval --stages timmie --deck superconduct_aggro \
     --policy expert:superconduct_aggro --seeds 1,2 --workers 2 --tag smoke
 
-# 四组实验（待实现）
-python -m skillloop.run --group scripted --seeds 50
+# 四组实验（按实验协议；库/关卡牌组/loadout 按 run 配置）
+python -m skillloop.run --group scripted --stages all --seeds 1 --workers 4
+python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
+    --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
+    --card-version v3.3.0 --stages all --seeds 1 --workers 4
+
+# 网页调试：人类扮 NPC、AI 跑实际评测协议 + 决策/技能监控
+bash scripts/serve_web_demo.sh   # http://<本机IP>:7001/
 ```
 
 ## 4. 目录

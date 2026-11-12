@@ -1,4 +1,10 @@
-# STATUS — 当前状态（2026-11-02）
+# STATUS — 当前状态（2026-11-12）
+
+> **2026-11-12 当前状态**：引擎已按「官方角色卡 vs NPC 变体」重链（2301/2202 恢复
+> 版本卡面值，NPC 9301/9202 承载 13/12 难度血量）。网页调试已严格对齐
+> `skillloop.run`（关卡 TaskSpec、未过滤库、era/expert base、cap16、原顺序、
+> stage_decks/loadout/v3.3.0、NPC policy），并新增 `/ai-decisions` 监控面板用于
+> 人类扮 NPC 时检查 AI 引用的技能。历史 LLM 组数值仍以文中「待重跑」标注为准。
 
 > **2026-11-02 更正**：`record_decisions=False` 的判定 bug 已修复；本文中所有「装备/事件目标恒为 false」的结论是**测量假象**，不是行为。受影响关卡的数值待重跑。
 >
@@ -15,16 +21,16 @@
 | 环境层 | `envs/ reps/ npc/ coach/ agents/ eval/ common/ web/ configs/ engine-overlay/` 原样快照 |
 | 已删除 | `train/`、`kaggle/`、`scripts/` 训练脚本、`envs/cfr_*`、`envs/fork_*`、`agents/neural.py` |
 | conda env | `gitcg-skill`（Python 3.12，`gitcg==0.21.0`，numpy，pytest；**无 torch**） |
-| 引擎 | 上游 overlay 版 `libgitcg.so`（快照时的构建）；血量补丁后**待重链** |
+| 引擎 | 已重链并装入 `gitcg-skill`：overlay 数据 + NPC 变体（9301/9202）；官方角色卡 2301/2202 保持版本卡面值 |
 
 ## 2. 难度标定（D4）
 
 - 规则：敌人血量 **≤6 → 6，其余 +2**；审计快照 `configs/npc/hp_table.json`（19 类敌人 / 16 关）。
-- 已改：17 个 overlay `.gts`；2 个上游敌人（`fatui_pyro_agent` 11→13、`mirror_maiden` 10→12）
-  已复制为 overlay 覆盖文件。
-- 发现并修正：`fatuipyroagent` 的 `hp_card` 原记 9，引擎实际 11（配置与引擎不一致）。
-- 待办：增量重链 `libgitcg.so` → 装进 `gitcg-skill` → 用 `contestant` 跑 24 seeds → 重标
-  `win_within_rounds`（P70）→ 记录新基线。
+- 已改：17 个 overlay `.gts`；两个上游 Fatui 敌人已拆成**独立 NPC 变体**
+  `9301`（13 HP）/ `9202`（12 HP），官方角色卡 2301/2202 恢复版本卡面值。
+- `hp_table.json` 的审计目标改为 NPC 变体文件；`npc_enemies_all.json` 的 `hp_card`
+  表示 NPC 敌人卡血量（13/12），官方角色卡 HP 以引擎/版本数据为准。
+- 引擎已重链并装入 `gitcg-skill`；难度基线/阈值标定见 `reports/calibration/`。
 
 ## 3. 基线（10 seeds × 16 关 = 160 局；**阈值统一 5**）
 
