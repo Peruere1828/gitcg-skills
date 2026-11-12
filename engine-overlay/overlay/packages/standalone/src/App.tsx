@@ -134,9 +134,14 @@ export function App() {
   const [counterPick, setCounterPick] = createSignal<CounterPick | null>(null);
   // 先手三选：人类 / AI / 随机
   const [firstTurn, setFirstTurn] = createSignal<FirstTurn>("random");
-  // WS8/D18 overlay：AI 对手（HTTP 桥）开关与地址
+  // WS8/D18 overlay：AI 对手（HTTP 桥）开关与地址。
+  // 默认走**同源** `/bridge`（vite 反代到本机 Python 桥）：局域网另一台机器访问
+  // 本页面时，`127.0.0.1` 指向的是那台机器；同源相对路径才能落到这个前端所在的
+  // 主机上，也省掉 CORS。
   const [aiOpponent, setAiOpponent] = createSignal(false);
-  const [aiServerUrl, setAiServerUrl] = createSignal("http://127.0.0.1:8770");
+  const [aiServerUrl, setAiServerUrl] = createSignal(
+    `${window.location.origin}/bridge`,
+  );
   const [aiSelfPlay, setAiSelfPlay] = createSignal(false);
   // T3：桥声明的 AI 座位牌组 slug（拿到后回填到「AI 牌组」）
   const [aiDeckSlug, setAiDeckSlug] = createSignal<string | null>(null);
@@ -216,7 +221,9 @@ export function App() {
       const code = encodeDeck({ characters: data.characters, cards: data.cards });
       if (code) {
         setOtherDeckCode(code);
-        setOtherDeckEdited(false);
+        // 桥声明的牌组是**显式选择**：标记手改过，开局时不再被自动反选覆盖
+        // （否则 expert:<slug> 的牌组会被反选成别的池内套，脚本专家被改派）。
+        setOtherDeckEdited(true);
       }
       setAiDeckSlug(data.slug);
     } catch (e) {
@@ -583,7 +590,7 @@ export function App() {
                   disabled={!aiOpponent()}
                   value={aiServerUrl()}
                   onInput={(e) => setAiServerUrl(e.currentTarget.value)}
-                  placeholder="http://127.0.0.1:8770"
+                  placeholder={`${window.location.origin}/bridge`}
                 />
                 <label>
                   <input

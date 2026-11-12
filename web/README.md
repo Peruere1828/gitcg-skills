@@ -150,21 +150,43 @@ notify_seq / latency_ms / policy / fallback / error / response`（`state_seq` �
 
 ```sh
 # 占位策略（零依赖）：
-conda run -n gitcg python web/ai_rpc_server.py --port 8770 --strategy random --seed 1
+conda run -n gitcg-skill python web/ai_rpc_server.py --port 8770 --strategy random --seed 1
 
 # 模型桥：用训练好的 CVPN 驱动 AI 座位（checkpoint 自带 encoder 配置）：
-conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
+conda run -n gitcg-skill python web/ai_rpc_server.py --port 8770 \
     --policy "neural:data/checkpoints/curve_dfbcsa_e15_d128_n48000.pt#t=0.2" \
     --ai-deck superconduct_aggro
 
 # 脚本专家（牌组自动对齐 + 逐决策日志）：
-conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
+conda run -n gitcg-skill python web/ai_rpc_server.py --port 8770 \
     --policy expert:superconduct_aggro
 
 # 另开一个终端：
 bash engine-overlay/scripts/standalone.sh dev   # 会先 apply overlay 再起 dev server
 # 浏览器 http://localhost:5173/ 勾「AI 对手（HTTP 桥）」（自动取 AI 牌组回填）+「双方 AI 自对弈」
 ```
+
+### 单端口观战部署（AI vs NPC）
+
+`scripts/serve_web_demo.sh` 一次起好前端 + 桥，并把 `/bridge/*` 反代到桥
+（vite 的 `proxy`），所以浏览器只访问前端端口：
+
+```sh
+bash scripts/serve_web_demo.sh                  # 前台；PORT=7001 是默认值
+# 后台常驻：
+setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null &
+```
+
+浏览器打开 `http://<本机IP>:7001/`（局域网另一台机器也能访问）：
+
+1. 「NPC 阵容」选一个关卡 —— 这成为**我的座位**（NPC 阵容，桥自动改派 `heuristic`）；
+2. 勾「AI 对手（HTTP 桥）」+「双方 AI 自对弈」—— 桥的 `--policy expert:<slug>`
+   驱动对面座位，牌组由 `/ai-deck` 自动回填；
+3. 「开始对局」实时观战（`observeIo` 把通知同时喂给棋盘，否则自对弈时棋盘会停在
+   「正在等待…」）。
+
+可用 `PORT` / `BRIDGE_PORT` / `POLICY` / `SEED` / `CONDA_ENV` 覆盖默认值，
+例如 `POLICY=heuristic bash scripts/serve_web_demo.sh`。
 
 CORS 默认只放行本机 Origin（`localhost`/`127.0.0.1`/`::1`）；如需其他来源
 （例如经局域网 IP 访问 dev server）用 `--cors-origin <origin|*>` 显式放行。

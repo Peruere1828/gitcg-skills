@@ -30,6 +30,18 @@ const ASSETS_BASE_URL =
   process.env.DEFAULT_STATIC_DATA_API_BASE_URL ??
   "https://gi-tcg-assets-api-hf.guyutongxue.site/";
 
+// --- WS8/D18 overlay 改动：同源反代 Python 桥 --------------------------------
+// 前端默认桥地址是 `/bridge`（见 App.tsx），这里把 `/bridge/*` 去掉前缀后转给
+// 本机 `web/ai_rpc_server.py`。`BRIDGE_URL` 可覆盖（例如桥起在别的端口）。
+const BRIDGE_URL = process.env.BRIDGE_URL ?? "http://127.0.0.1:8770";
+const bridgeProxy = {
+  "/bridge": {
+    target: BRIDGE_URL,
+    changeOrigin: false,
+    rewrite: (path: string) => path.replace(/^\/bridge/, ""),
+  },
+};
+
 export default defineConfig({
   esbuild: {
     target: "ES2020",
@@ -47,6 +59,16 @@ export default defineConfig({
     // 收敛为 localhost/127.0.0.1，故这里暴露 dev server 不额外放大风险。
     host: process.env.HOST ?? true,
     port: Number(process.env.PORT ?? 5173),
+    // WS8/D18 overlay：把 Python 桥（web/ai_rpc_server.py）挂在同源 `/bridge`
+    // 下，单端口部署——浏览器只访问本页面端口，桥的请求由 dev server 反代到
+    // 127.0.0.1:8770。这样局域网访问只需放行本页面端口，也不必配 CORS。
+    proxy: bridgeProxy,
+  },
+  // `standalone.sh preview`（构建产物）同样走同源反代。
+  preview: {
+    host: process.env.HOST ?? true,
+    port: Number(process.env.PORT ?? 4173),
+    proxy: bridgeProxy,
   },
   plugins: [
     gts(),

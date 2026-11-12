@@ -74,6 +74,31 @@ export interface StandaloneParentProps {
 /** 续局的 seq 基线：座位 -> 该座位上一局最后一个已应用的 seq */
 type SeqBaseline = Partial<Record<0 | 1, number>>;
 
+/**
+ * WS8/D18 overlay：自对弈观战用——决策走 `main`（AI 桥），通知同时喂给
+ * `observer`（棋盘）。
+ *
+ * 「双方 AI 自对弈」若直接把本窗口座位的 io 换成 AI 桥的 io，`Chessboard` 绑定的
+ * `uiIo` 就收不到任何通知，棋盘会永远停在「正在等待…」——对局其实在跑，只是看不见。
+ * 这里只把 **notify** 转发给观察者，`rpc` 仍只问主 io，避免观战 UI 抢走决策。
+ */
+function observeIo(
+  main: CancellablePlayerIO,
+  observer: CancellablePlayerIO,
+): CancellablePlayerIO {
+  return {
+    notify: (notification) => {
+      main.notify(notification);
+      observer.notify(notification);
+    },
+    rpc: (request) => main.rpc(request),
+    cancelRpc: () => {
+      main.cancelRpc?.();
+      observer.cancelRpc?.();
+    },
+  };
+}
+
 /** `/session` 返回的 `seq_base`（字符串键的 JSON 对象）→ 座位表 */
 function parseSeqBase(raw: unknown): SeqBaseline {
   const out: SeqBaseline = {};
@@ -486,7 +511,8 @@ export function StandaloneParent(props: StandaloneParentProps) {
       };
       game.players[OTHER_WHO].io = seatIo(OTHER_WHO);
       if (props.aiSelfPlay) {
-        game.players[HUMAN_WHO].io = seatIo(HUMAN_WHO);
+        // 决策交给桥，通知同时喂给棋盘，观战时能实时看到 AI 出牌。
+        game.players[HUMAN_WHO].io = observeIo(seatIo(HUMAN_WHO), uiIo);
       } else {
         game.players[HUMAN_WHO].io = uiIo;
       }
