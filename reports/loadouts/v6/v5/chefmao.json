@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_timmie",
+    "skill_marjorie",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "5回合内胜利且阵亡<2：用五回合节奏预算与行动预算统一分配，集火残血、先附着再补元素，并保护低血量角色。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "d4e2cb80c101",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

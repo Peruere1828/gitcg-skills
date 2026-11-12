@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_timmie",
+    "skill_marjorie",
+    "strat_focus_fire",
+    "strat_reaction",
+    "rule_reaction"
+  ],
+  "rationale": "5回合内胜利且阵亡<2，需节奏预算与集中击倒；先附着再补元素触发反应，快速斩杀火斧丘丘暴徒。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "8750140cadbd",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

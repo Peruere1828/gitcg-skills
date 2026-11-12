@@ -94,9 +94,9 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 | `scripted` | 80 | 57 | **71.25%** | $0 | 固定脚本 |
 | `llm_empty` | 80 | 42 | **52.50%** | $0.147 | 仅 17 条 rule |
 | `static` | 80 | 46 | **57.50%** | $0.153 | static_v1 + loadouts/v1 |
-| `dynamic` | — | — | — | — | 未跑（待下一步） |
+| `dynamic` | 80 | 41 | **51.25%** | $0.173 | dyn_v4 + loadouts/v4（round1） |
 
-- 0 error / 0 truncated（三组均 80 valid）。
+- 0 error / 0 truncated（四组各 80 valid）。
 - LLM 组 4 workers；平均 ~80 s/局、~26 calls/局；无 429/回退。
 - 配对 vs `scripted`（同 stage/seed，n=80 对；`scripts.compare_groups`）：
   - `llm_empty` Δ = **−0.1875**，CI [−0.3987, +0.0237] → 跨 0，不采纳；
@@ -104,13 +104,26 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 - 5 seeds 的 CI 很宽，**不作显著性/胜率结论**；`dynamic` 未跑，四组完整对比待补。
 - 原始行：`data/runs/v3_{scripted,llm_empty,static}.jsonl`；比较：`reports/compare/v3_scripted_vs_*.json`。
 
+### dynamic 迭代（2026-11-12，未达标）
+
+- dyn_v4 → dyn_v5 → dyn_v6，3 轮/12 seeds（6 并发，预算 <$0.5）：
+  round1 41/80=51.25%、round2 31/64=48.44%、round3 20/48=41.67%；
+  累计 **92/192=47.92%**，scripted 同 12 seeds **124/192=64.58%**。
+- 剩余 3 seeds（48 局）即使全 3★，dynamic 上限 140/240=58.33% < scripted
+  1–15 的 159/240=66.25%，目标已数学上不可达；停止第 4 轮。
+- 复盘 prompt 已增强（牌组/特殊规则/现有技能、stage_specific 绑定 stages、
+  loadout 只列适用技能），但第 2/3 轮反而下降；瓶颈在 LLM 逐动作决策，不在技能文本。
+- 负结果与复现：[`failures/dynamic-vs-scripted-20261112.md`](./failures/dynamic-vs-scripted-20261112.md)。
+
 ## 7. 下一步
 
-1. 用 **6 workers** 跑 `dynamic` 的 seeds 1–5，补齐四组同口径对比。
-2. 5 seeds 结果只作冒烟；全量按 50 seeds/关、6 workers 跑，预算按
+1. dynamic 迭代停留在 3 轮/12 seeds（目标未达）；不要继续消耗预算刷同一架构。
+2. 若要继续冲 scripted，先改**共享评测协议/智能体**（expert 提议 + LLM 重排，
+   或共享 in-game prompt 加候选效果/反应），再重跑基线；见负结果报告。
+3. 5 seeds 结果只作冒烟；全量按 50 seeds/关、6 workers 跑，预算按
    `EVAL_PROTOCOL.md §6` 分组设置。
-3. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。
-4. 摘要进 `reports/`（带 stage/seeds/n/group/library_version/model/date），
+4. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。
+5. 摘要进 `reports/`（带 stage/seeds/n/group/library_version/model/date），
    失败进 `docs/failures/`。
 
 ## 8. 历史

@@ -9,6 +9,7 @@ from npc.spec import get_stage
 from skillloop.library import SkillLibrary
 from skillloop.loadout import (
     Loadout,
+    build_messages,
     engine_lock_hash,
     load_loadouts,
     load_stage_decks,
@@ -18,7 +19,7 @@ from skillloop.loadout import (
     stage_context,
     stage_task,
 )
-from skillloop.schema import Skill
+from skillloop.schema import Skill, SkillConditions
 
 
 class _Config:
@@ -188,6 +189,69 @@ def test_save_load_round_trip_records_library_and_engine(tmp_path):
     assert loadout_matches(loadout, library_version=7, engine_lock=engine_lock_hash())
     assert not loadout_matches(loadout, library_version=8, engine_lock=engine_lock_hash())
     assert not loadout_matches(loadout, library_version=7, engine_lock="stale")
+
+
+def _stage_scoped_library() -> SkillLibrary:
+    return SkillLibrary.from_skills([
+        Skill("rule_one", "规则", "通用规则", layer="rule"),
+        Skill("chefmao_specific", "主厨专用", "只用于 chefmao",
+              conditions=SkillConditions(stages=("chefmao",), round_max=5),
+              layer="stage_specific"),
+        Skill("liusu_specific", "流苏专用", "只用于 liusu",
+              conditions=SkillConditions(stages=("liusu",), round_max=5),
+              layer="stage_specific"),
+        Skill("generic_strategy", "通用策略", "所有关卡都可用",
+              conditions=SkillConditions(), layer="strategy"),
+    ], version=9)
+
+
+def test_prompt_lists_only_skills_applicable_to_current_stage():
+    library = _stage_scoped_library()
+    _system, user = build_messages(
+        get_stage("chefmao"), library, "keqing_jihua", max_skills=3
+    )
+    text = user["content"]
+    assert "chefmao_specific | stage_specific" in text
+    assert "liusu_specific" not in text          # other stage's stage_specific
+    assert "rule_one | rule" in text             # rule layer still applicable
+    assert "generic_strategy | strategy" in text
+    assert "当前关卡适用 3 条" in text
+
+
+def test_out_of_scope_ids_are_dropped_and_valid_ids_kept():
+    library = _stage_scoped_library()
+    client = _Client(['{"skills": ["chefmao_specific", "liusu_specific"]}'])
+    loadout = plan_loadout(
+        get_stage("chefmao"), library, "keqing_jihua", client, max_skills=2
+    )
+    assert loadout.fallback is False
+    assert loadout.skills == ("chefmao_specific",)
+
+
+def test_all_out_of_scope_ids_fall_back_to_bm25():
+    library = _stage_scoped_library()
+    client = _Client([
+        '{"skills": ["liusu_specific"]}',
+        '{"skills": ["liusu_specific"]}',
+    ])
+    loadout = plan_loadout(
+        get_stage("chefmao"), library, "keqing_jihua", client, max_skills=2
+    )
+    assert len(client.calls) == 2
+    assert loadout.fallback is True
+    assert "out_of_scope:liusu_specific" in loadout.rationale
+    assert "liusu_specific" not in loadout.skills
+    assert set(loadout.skills) <= {"rule_one", "chefmao_specific", "generic_strategy"}
+
+
+def test_current_stage_specific_skill_can_be_selected():
+    library = _stage_scoped_library()
+    client = _Client(['{"skills": ["chefmao_specific"]}'])
+    loadout = plan_loadout(
+        get_stage("chefmao"), library, "keqing_jihua", client, max_skills=1
+    )
+    assert loadout.fallback is False
+    assert loadout.skills == ("chefmao_specific",)
 
 
 def test_load_stage_decks_tolerates_missing_entries(tmp_path):

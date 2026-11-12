@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "shitou_keqing_stay_active_hydro_electro_shitou",
+    "frontload_reaction_into_kill_line_shitou",
+    "shitou_damage_first_per_round_budget_shitou",
+    "tempo_budget_for_round_cap_shitou",
+    "strat_focus_fire"
+  ],
+  "rationale": "本关需5回合内胜利并触发2次反应；开局水附着使刻晴雷技能自动感电，优先保证刻晴技能骰子、反应前置到击杀线，并按回合预算集火残血。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5be9880f3884",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

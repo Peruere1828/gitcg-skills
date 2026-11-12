@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "wagner_free_weapon_first_action_wagner",
+    "skill_wagner",
+    "skill_timaeus",
+    "noelle_burst_dice_budget_kill_line_wagner",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "本关需5回合内胜利且打出武器牌，瓦格纳支援可免费装备，优先保留武器并首动作打出；配合装备前置与回合预算控制，诺艾尔骰子预算保障输出节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "44a4a0e223fe",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "marjorie_linghua_opener_two_skills_before_events_marjorie",
+    "marjorie_round4_xingqiu_switch_must_attack_then_back_marjorie",
+    "skill_marjorie_no_idle_switch_use_xingqiu_hydro_freeze_marjorie",
+    "skill_marjorie",
+    "strat_focus_fire"
+  ],
+  "rationale": "选绫华起手技能、第4轮行秋切人必接技能、禁止空过切人三条关卡专属，加行动预算与集火残血，贴合5回合速杀且少阵亡。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "652f06f059d3",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

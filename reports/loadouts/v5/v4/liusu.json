@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "liusu_hydro_aura_electro_first_liusu",
+    "liusu_burst_curve_keqing_then_fischl_liusu",
+    "skill_liusu",
+    "规则_目标_回合上限",
+    "规则_目标_元素爆发"
+  ],
+  "rationale": "本关每轮自动附水，雷技能直接感电；选两条关卡专属编排爆发曲线与感电优先，配合短回合爆发并入斩杀线及回合/爆发目标规则。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "3c72eadec493",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

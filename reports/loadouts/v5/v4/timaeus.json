@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "skill_timaeus",
+    "timaeus_r1_artifact_via_timaeus_then_no_more_equip_timaeus",
+    "timaeus_keqing_bennett_overload_kill_route_timaeus",
+    "skill_buyun",
+    "strat_focus_fire"
+  ],
+  "rationale": "限5回合且需打圣遗物：优先蒂玛乌斯免费装备路线，配合刻晴班尼特超载击杀线与回合预算节奏，集火残血。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "edade6884de0",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

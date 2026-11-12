@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Sequence
 
 from common.llm import extract_json_object
@@ -29,19 +29,35 @@ from skillloop.schema import Skill, SkillConditions
 
 SYSTEM = (
     "你是《七圣召唤》PvE 的策略教练。你接下来写的内容会**原样进入未来对局的系统提示**，"
-    "直接改变模型的动作选择。你会看到某个关卡的失败统计和代表局回放"
-    "（同一关卡的失败局与三星局对照）。"
-    "请基于这些回放，写出你认为最能让自己下次打对的提示词："
+    "直接改变模型的动作选择。你会看到某个关卡的失败统计、固定牌组（角色/卡牌）、"
+    "关卡特殊规则、当前技能库中与本关相关或通用的技能，以及失败局与三星局的代表回放。"
+    "请基于这些证据，写出你认为最能让自己下次打对的提示词："
+    "每关最多 2 条；每条必须是「触发条件 → 具体动作/优先级」的可执行规则，1–3 句。"
     "可以是指令、判断条件、优先级、具体出手序列、反例、自查清单，任何形式都行；"
-    "越具体、越可执行越好（可以写长）。"
-    "不要复述关卡目标，不要写空泛的「要重视 X」。"
-    "允许你指出上一版技能里哪条是错的/有害的，并给出替代写法。"
+    "越具体、越可执行越好。"
+    "禁止空泛的「要重视/注意」；不要复述关卡目标，也不要复述回放中的单局操作。"
+    "必须结合固定牌组的角色/卡牌和关卡特殊规则来写，可以引用角色/卡牌名。"
+    "如果当前技能库中的某条技能错误或有害，写一条清晰可执行的替代；"
+    "skill_name 必须唯一、具体。"
+    "conditions 只填能从本关匹配的 objective_types/enemies/round_max；"
+    "layer 用 stage_specific（本关专用）或 strategy（跨关通用）。"
     "回放只用于定位问题，不要编造数据。"
-    "只输出 JSON 数组，元素形如："
+    "只输出 JSON 数组，不要输出 JSON 以外的内容；元素形如："
     '{"skill_name": "...", "description": "（将来原样注入的提示词正文）", '
     '"conditions": {"objective_types": ["..."], "round_max": 3}, '
     '"layer": "strategy" 或 "stage_specific"}'
 )
+
+# Deck facts / special-rules blocks are rendered into the same statistics line;
+# keep them bounded so one verbose deck cannot crowd out the replay contrast.
+DECK_FACTS_LIMIT = 360
+SPECIAL_RULES_LIMIT = 400
+
+
+def _compact(text: str, limit: int) -> str:
+    """Flatten whitespace and truncate a prompt-bound fact block."""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
 @dataclass(frozen=True)
@@ -78,15 +94,33 @@ class StageProfile:
     failed_objectives: dict[str, int]
     objectives: tuple[str, ...] = ()
     replays: list[ReplaySample] = field(default_factory=list)
+    # Facts about the fixed contestant deck for this stage (rendered by the
+    # caller that has the deck registry; extraction itself stays offline).
+    deck: str = ""
+    deck_facts: str = ""
+    # Human-readable stage special rules (initial supports / action-phase
+    # effects), omitted from the prompt when empty.
+    special_rules: str = ""
+    # Already rendered lines ``[id] name: description`` for the relevant
+    # non-rule skills in the base library (rules already arrive via rules_note).
+    existing_skills: tuple[str, ...] = ()
 
     def as_text(self) -> str:
         failed = "，".join(f"{key} 失败 {count}/{self.n}" for key, count in
                            sorted(self.failed_objectives.items(), key=lambda kv: -kv[1]))
-        return (
+        text = (
             f"关卡 {self.stage}：三星率 {self.three_star_rate:.2f}（n={self.n}），"
             f"平均回合 {self.mean_rounds:.1f}；未达成目标：{failed or '无'}；"
             f"关卡目标：{'；'.join(self.objectives) or '（未知）'}"
         )
+        if self.deck or self.deck_facts:
+            deck_line = f"固定牌组：{self.deck or '（未知）'}"
+            if self.deck_facts:
+                deck_line += f"；角色/卡牌：{_compact(self.deck_facts, DECK_FACTS_LIMIT)}"
+            text += "；" + deck_line
+        if self.special_rules:
+            text += "；关卡特殊规则：" + _compact(self.special_rules, SPECIAL_RULES_LIMIT)
+        return text
 
 
 def _row_rounds(item: dict[str, Any]) -> float:
@@ -239,6 +273,10 @@ def build_prompt(profile: StageProfile, *, rules_note: str = "") -> list[dict[st
             replay.as_text(index) for index, replay in enumerate(profile.replays)
         )
         parts.append("\n\n".join(blocks))
+    if profile.existing_skills:
+        lines = ["当前技能库中与本关相关/通用的技能（可批判、可替换；不要重复）："]
+        lines.extend(f"- {entry}" for entry in profile.existing_skills)
+        parts.append("\n".join(lines))
     if rules_note:
         parts.append("已知规则：\n" + rules_note)
     return [
@@ -281,6 +319,11 @@ def parse_skills(raw: str | None, *, stage: str) -> list[Skill]:
         layer = str(item.get("layer") or "strategy")
         if layer not in ("strategy", "stage_specific"):
             layer = "strategy"
+        if layer == "stage_specific":
+            # A stage-specific skill must never leak into another stage, even if
+            # the model wrote other/empty ``stages``. Keep the retrieval-relevant
+            # objective/enemy/round conditions it did provide.
+            conditions = replace(conditions, stages=(stage,))
         skill_id = f"{_slug(name)}_{stage}"
         out.append(
             Skill(

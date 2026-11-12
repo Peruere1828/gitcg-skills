@@ -1,0 +1,17 @@
+{
+  "stage": "ellin",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_marjorie",
+    "skill_uncletian",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "5回合内胜利且阵亡<2，需统一行动预算抢伤害节奏、集火残血、先附着再反应，并保护低血量角色避免阵亡。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "d10405e0e85b",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

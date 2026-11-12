@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "blanche_energy2_burst_by_round2_blanche",
+    "skill_liusu",
+    "skill_blanche",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "本关初始能量+2且需5回合内胜利并用爆发，优先选爆发前置与短回合斩杀节奏，配合集火残血快速击倒。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "fb8bc0f30162",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

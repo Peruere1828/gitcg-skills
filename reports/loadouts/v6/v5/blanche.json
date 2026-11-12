@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "blanche_energy2_burst_by_round2_blanche",
+    "skill_liusu",
+    "skill_uncletian",
+    "strat_reaction",
+    "strat_focus_fire"
+  ],
+  "rationale": "初始能量+2使爆发第2轮可成，配合5回合节奏与集火反应快速击倒。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "a131ca11363c",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

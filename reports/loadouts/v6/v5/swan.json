@@ -1,0 +1,17 @@
+{
+  "stage": "swan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_swan",
+    "tempo_budget_for_round_cap_shitou",
+    "strat_focus_fire",
+    "strat_reaction",
+    "rule_reaction"
+  ],
+  "rationale": "5回合内胜利需抢节奏：选压回合节奏与回合预算策略，集火残血快速减员，先附着再补元素触发反应提高伤害。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9908ef95cbd3",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

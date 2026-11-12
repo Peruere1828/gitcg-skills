@@ -109,12 +109,30 @@ def engine_lock_hash() -> str:
 
 
 def stage_context(stage: NpcStage) -> dict[str, Any]:
-    """Retrieval context matching ``SkillAgentPolicy._context_dict``."""
+    """Stage-level retrieval context (same shape as ``SkillAgentPolicy._context_dict``).
+
+    ``round`` is the stage's own round cap (``None`` without one): loadout planning
+    is per stage, so a ``round_max`` skill that fits the cap applies for the whole
+    stage. In-game retrieval still passes the live round number.
+    """
+    max_rounds = next(
+        (objective.n for objective in stage.objectives
+         if objective.type == "win_within_rounds" and objective.n is not None),
+        None,
+    )
     return {
         "stage": stage.name,
         "objective_types": tuple(objective.type for objective in stage.objectives),
-        "round": None,
+        "enemies": tuple(
+            entry.id for entry in (*stage.lineup, *stage.reserve)
+        ),
+        "round": max_rounds,
     }
+
+
+def applicable_skills(stage: NpcStage, library: SkillLibrary) -> list[Any]:
+    """Active skills whose conditions match this stage (rule layer included)."""
+    return library.applicable(stage_context(stage))
 
 
 def _objective_detail(objective: NpcObjective) -> ObjectiveDetail:
@@ -199,26 +217,32 @@ def _deck_block(deck: str) -> list[str]:
     ]
 
 
-def _skills_block(library: SkillLibrary) -> list[str]:
+def _skills_block(skills: Sequence[Any]) -> list[str]:
     lines = []
-    for skill in library:
+    for skill in skills:
         lines.append(
             f"- {skill.skill_id} | {skill.layer} | {skill.skill_name} | "
             f"{_one_line(skill.description)}"
         )
-    return lines or ["- （技能库为空）"]
+    return lines or ["- （本关无适用技能）"]
 
 
 def build_messages(stage: NpcStage, library: SkillLibrary, deck: str, *, max_skills: int) -> tuple[dict[str, str], dict[str, str]]:
-    """System + user prompt. Kept separate so ``prompt_hash`` can cover both."""
+    """System + user prompt. Kept separate so ``prompt_hash`` can cover both.
+
+    Only skills applicable to **this stage** are listed (rule layer included), so
+    the model cannot pick a stage-specific skill that belongs to another stage.
+    """
+    applicable = applicable_skills(stage, library)
     lines = [
         f"关卡：{stage.display or stage.name}（{stage.name}）",
         "三星目标：",
         *_objectives_block(stage),
         f"敌方阵容：{_enemies_block(stage)}",
         *_deck_block(deck),
-        f"技能库 v{library.version}（共{len(library)}条；最多选 {max_skills} 条；id 必须来自下列清单）：",
-        *_skills_block(library),
+        f"技能库 v{library.version}（共{len(library)}条，当前关卡适用 "
+        f"{len(applicable)} 条；最多选 {max_skills} 条；id 必须来自下列清单）：",
+        *_skills_block(applicable),
         '输出严格 JSON：{"skills": ["<id>", ...], "rationale": "<80字以内>"}',
     ]
     system = {"role": "system", "content": LOADOUT_SYSTEM}
@@ -241,11 +265,15 @@ def _parse_skills(
     payload: dict[str, Any] | None,
     library: SkillLibrary,
     max_skills: int,
+    *,
+    allowed: set[str] | None = None,
 ) -> tuple[tuple[str, ...], str, str | None]:
     """Return ``(skills, rationale, error)``; error is ``None`` when valid.
 
-    Deduplication and the cap are normalisation. An unknown id is a validation
-    failure: silently dropping it would change what the model asked for.
+    Ids outside the prompt's allowed set (or unknown to the library) are dropped;
+    if every id was dropped the reply is a validation failure so ``plan_loadout``
+    can retry and ultimately fall back to BM25. Duplicates and the cap are
+    normalisation.
     """
     if payload is None:
         return (), "", "unparseable"
@@ -253,13 +281,20 @@ def _parse_skills(
     if not isinstance(raw, list):
         return (), "", "skills_not_list"
     selected: list[str] = []
+    discarded: list[str] = []
     for item in raw:
         if not isinstance(item, str) or not item.strip():
             return (), "", "skill_id_not_string"
+        if allowed is not None and item not in allowed:
+            discarded.append(item)
+            continue
         if item not in library.skills:
-            return (), "", f"unknown_skill:{item}"
+            discarded.append(item)
+            continue
         if item not in selected:
             selected.append(item)
+    if not selected and discarded:
+        return (), "", f"out_of_scope:{discarded[0]}"
     rationale = payload.get("rationale")
     return tuple(selected[: max(0, int(max_skills))]), (rationale if isinstance(rationale, str) else ""), None
 
@@ -296,6 +331,9 @@ def plan_loadout(
     the library's BM25 top-k for the stage with ``fallback=True``. The fallback is
     deterministic, so a failed model call still produces a reproducible run.
     """
+    allowed = {
+        skill.skill_id for skill in applicable_skills(stage, library)
+    }
     system, user = build_messages(stage, library, deck, max_skills=max_skills)
     messages = [system, user]
     prompt_hash = _prompt_hash(messages)
@@ -315,7 +353,9 @@ def plan_loadout(
         except Exception as exc:  # a broken client must degrade, not abort planning
             raw = None
             last_error = f"client_error:{type(exc).__name__}"
-        skills, rationale, error = _parse_skills(extract_json_object(raw), library, max_skills)
+        skills, rationale, error = _parse_skills(
+            extract_json_object(raw), library, max_skills, allowed=allowed
+        )
         if error is None:
             return Loadout(
                 stage=stage.name,

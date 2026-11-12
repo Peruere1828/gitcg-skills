@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_protect_low_hp",
+    "rule_end_round"
+  ],
+  "rationale": "5回合内胜利需抢节奏：优先即时伤害与集火残血，先附着再反应；同时阵亡<2需保护低血量角色，无收益时早结束回合抢先后手。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5e1810d2dda9",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

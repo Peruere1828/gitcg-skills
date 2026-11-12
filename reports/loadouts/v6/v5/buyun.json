@@ -1,0 +1,17 @@
+{
+  "stage": "buyun",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "skill_buyun",
+    "frontload_reaction_into_kill_line_shitou",
+    "规则_目标_元素反应",
+    "strat_focus_fire",
+    "strat_reaction"
+  ],
+  "rationale": "5回合内胜利且需2次元素反应，优先按回合预算抢节奏，把反应前置到击杀线，集火残血并先附着后补元素。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "d0a4ac917102",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

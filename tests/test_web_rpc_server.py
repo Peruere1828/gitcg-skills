@@ -1695,7 +1695,11 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
     """loadout.deck > stage_decks > 网页上报牌组；pinned_skills 原样进策略。"""
     from common.llm import MockLLMClient
 
-    config = srv.WebEvalConfig(loadout_root=os.path.join(REPO_ROOT, "reports", "loadouts"))
+    # 必须用 run-specific 的 v4 根：reports/loadouts 根下还有 v5/v1 等其它库版本，
+    # load_loadouts 会按最高 library_version 选到与 dyn_v4 不匹配的文件。
+    config = srv.WebEvalConfig(
+        loadout_root=os.path.join(REPO_ROOT, "reports", "loadouts", "v4")
+    )
     policy = srv.LLMPolicy(
         "dynamic",
         "natlan_battleship",  # 网页上报的牌组应被 loadout/stage_decks 覆盖

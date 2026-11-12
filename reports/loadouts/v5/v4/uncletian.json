@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "event_count_from_spare_dice_not_supports_uncletian",
+    "keqing_talent_into_burst_by_r4_uncletian",
+    "strat_focus_fire",
+    "strat_reaction"
+  ],
+  "rationale": "选回合上限即时伤害、事件牌边角骰兑现、刻晴天赋爆发节奏，配合集火残血与先附着后补元素，覆盖5回合胜利与2事件牌目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "0425b926ceaf",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

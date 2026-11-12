@@ -1,0 +1,17 @@
+{
+  "stage": "jifang",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_marjorie",
+    "skill_timmie",
+    "strat_focus_fire",
+    "strat_reaction",
+    "规则_目标_少被击倒"
+  ],
+  "rationale": "5回合内胜利且阵亡<2，需统一分配行动预算、集中击倒并先附着后反应，同时保护低血量角色。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "da08400e4f5c",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

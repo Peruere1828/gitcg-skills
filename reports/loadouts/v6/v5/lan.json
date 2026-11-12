@@ -1,0 +1,17 @@
+{
+  "stage": "lan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "lan_keqing_star_blade_opening_no_slow_setup_lan",
+    "lan_two_reactions_by_round3_with_kathryne_swap_lan",
+    "frontload_reaction_into_kill_line_shitou",
+    "skill_lan",
+    "strat_reaction"
+  ],
+  "rationale": "刻晴开局抢节奏、前3轮用凯瑟琳切人完成2次反应，配合反应前置与限回合抢节奏策略，覆盖三星目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "a9ef517c51db",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

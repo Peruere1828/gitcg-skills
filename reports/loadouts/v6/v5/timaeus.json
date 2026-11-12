@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "skill_timaeus",
+    "timaeus_r1_artifact_via_timaeus_then_no_more_equip_timaeus",
+    "timaeus_keqing_bennett_overload_kill_route_timaeus",
+    "skill_buyun",
+    "strat_focus_fire"
+  ],
+  "rationale": "圣遗物目标前置+蒂玛乌斯免费打出，刻晴班尼特超载击杀线，按5回合预算抢节奏集火。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "144b19cc3e64",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

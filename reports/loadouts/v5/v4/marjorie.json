@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "skill_marjorie",
+    "skill_marjorie_linghua_talent_once_no_weapon_midgame_marjorie",
+    "skill_marjorie_no_idle_switch_use_xingqiu_hydro_freeze_marjorie",
+    "rule_reaction",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利且阵亡<2，选玛乔丽预算策略与两条专属绫华/行秋冻结节奏，配合元素反应与集火残血，兼顾速杀与保命。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "3d8856f2ac61",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

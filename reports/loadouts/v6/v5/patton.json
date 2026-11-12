@@ -1,0 +1,17 @@
+{
+  "stage": "patton",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "rule_end_round",
+    "skill_uncletian",
+    "strat_focus_fire",
+    "tempo_budget_for_round_cap_shitou"
+  ],
+  "rationale": "5回合内胜利且需触发元素反应：选反应规则、回合上限节奏预算、即时伤害集中击倒、集火残血与结束回合规则，压缩铺垫抢击杀。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "6f4238de3561",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_timmie",
+    "skill_marjorie",
+    "strat_focus_fire",
+    "strat_reaction",
+    "rule_reaction"
+  ],
+  "rationale": "5回合内胜利且阵亡<2，需节奏预算与集中击倒；菲谢尔/柯莱/刻晴可雷草反应，先附着再补元素，优先集火残血。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "bbd2ed0e745a",
+  "fallback": false,
+  "library_version": 5,
+  "engine_lock": "d3961dd5d34d"
+}
