@@ -1,0 +1,17 @@
+{
+  "stage": "ellin",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_protect_low_hp",
+    "strat_end_round",
+    "strat_switch_cost",
+    "strat_equipment_timing",
+    "strat_mulligan"
+  ],
+  "rationale": "fallback: unknown_skill:rule_目标_回合上限",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5ab099c94864",
+  "fallback": true,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

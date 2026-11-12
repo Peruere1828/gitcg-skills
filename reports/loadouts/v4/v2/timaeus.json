@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "skill_timaeus",
+    "rule_equipment",
+    "strat_equipment_timing",
+    "skill_buyun",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利并打出圣遗物，选支线前置与装备时机，配合回合预算倒推和集火残血，压缩节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "2ad9a59bc249",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

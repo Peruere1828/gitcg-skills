@@ -2,7 +2,7 @@
 
 The 20 preset expert decks are built from post-v3.3 card sets and saturate the 16-stage benchmark (best deck wins 100% of screen games on all 16 stages). This report uses **official v3.3-era share-code decks**, decoded and engine-validated at `version="v3.3.0"`.
 
-- Generated: 2026-11-02 10:37
+- Generated: 2026-11-02 11:02
 - Era version: `v3.3.0` (`CreateParam(version=...)`, engine-enforced)
 - Deck source: **share_code** (`/home/ubuntuaaa/projects/gitcg-skills/configs/era_decks.json`)
 - Input list: `/home/ubuntuaaa/projects/gitcg-skills/data/era_decks.txt`
@@ -14,6 +14,8 @@ The 20 preset expert decks are built from post-v3.3 card sets and saturate the 1
 - Judging: `record_decisions=True`, `record_events=True`, `record_final_state=True` (required by the equipment/event/reaction objectives).
 - Engine lock `d3961dd5d34d`, HP table `0bbae5d8798a`, stage JSON `da3ad153e409`, assets `6b13d08f6419`
 - Ranking: three-star rate first, then win rate, mean stars, mean rounds (fewer is better), deck name.
+
+**Pooled over the whole matrix (all decks, all stages, all seeds):** 400 games, 3★ 177/400 (44%), mean rounds 6.0, mean rounds among 3★ 4.2 over 177 3★ games. This line mixes deck strength; the per-deck pooled rows are in §3.1. Rounds are only comparable inside the 3★ subset (see `docs/EVAL_PROTOCOL.md`).
 
 > **Pool size: 5 deck(s).** The original target was 8-12; this run uses every valid code currently in `data/era_decks.txt`. Add more codes and re-run `--all` if the article provides them.
 
@@ -146,15 +148,38 @@ Cells are `wins/5 · three-stars/5` over the 5 matrix seeds. Counts, not percent
 
 ### 3.1 Per-deck aggregate
 
-Pooled over all 16 stages x 5 matrix seeds. `mean stage 3★` averages the per-stage rates (each stage weighs equally).
+Pooled over all 16 stages x 5 matrix seeds. `mean stage 3★` averages the per-stage rates (each stage weighs equally). Rounds are reported twice: over every game and, under the user's rule (`在达成三星的前提下，越少回合越好`), over three-star games only, with the number of 3★ games in parentheses.
 
-| rank | deck | 3★ | win | mean stars | mean rounds | mean stage 3★ |
-|---|---|---|---|---|---|---|
-| 1 | keqing_jihua | 55/80 (69%) | 78/80 (98%) | 2.58 | 4.6 | 69% |
-| 2 | keqing_shuanghuo | 35/80 (44%) | 76/80 (95%) | 2.25 | 6.6 | 44% |
-| 3 | linghua_yongdong | 33/80 (41%) | 72/80 (90%) | 2.19 | 6.6 | 41% |
-| 4 | nvpu_shuangyan_era | 31/80 (39%) | 80/80 (100%) | 2.30 | 6.2 | 39% |
-| 5 | ganyu_shuanglei | 23/80 (29%) | 79/80 (99%) | 2.12 | 6.0 | 29% |
+| rank | deck | 3★ | win | mean stars | mean rounds (all) | mean rounds (3★ only) | mean stage 3★ |
+|---|---|---|---|---|---|---|---|
+| 1 | keqing_jihua | 55/80 (69%) | 78/80 (98%) | 2.58 | 4.6 | 3.8 (55) | 69% |
+| 2 | keqing_shuanghuo | 35/80 (44%) | 76/80 (95%) | 2.25 | 6.6 | 4.5 (35) | 44% |
+| 3 | linghua_yongdong | 33/80 (41%) | 72/80 (90%) | 2.19 | 6.6 | 4.2 (33) | 41% |
+| 4 | nvpu_shuangyan_era | 31/80 (39%) | 80/80 (100%) | 2.30 | 6.2 | 4.4 (31) | 39% |
+| 5 | ganyu_shuanglei | 23/80 (29%) | 79/80 (99%) | 2.12 | 6.0 | 4.6 (23) | 29% |
+
+### 3.2 Rounds per stage
+
+Cell = `mean rounds (all games) / mean rounds among 3★ (n 3★ games)`. The left number is context only: a fast loss is not a fast clear. Rounds are comparable between decks only within the 3★ subset.
+
+| stage | keqing_jihua | ganyu_shuanglei | linghua_yongdong | keqing_shuanghuo | nvpu_shuangyan_era |
+|---|---|---|---|---|---|
+| blanche | 6.8 / 5.0 (1) | 7.6 / — (0) | 8.0 / — (0) | 8.2 / — (0) | 8.2 / — (0) |
+| buyun | 9.4 / — (0) | 7.8 / — (0) | 11.6 / — (0) | 8.2 / — (0) | 6.4 / 4.0 (1) |
+| chefmao | 4.0 / 4.0 (5) | 5.4 / 5.0 (3) | 5.2 / 4.0 (2) | 5.4 / 5.0 (3) | 5.0 / 4.3 (3) |
+| ellin | 4.4 / 4.0 (4) | 8.2 / 5.0 (2) | 4.8 / 4.5 (4) | 5.0 / 4.3 (3) | 6.2 / 4.5 (2) |
+| irontonguetian | 3.8 / 3.8 (5) | 6.4 / — (0) | 5.2 / 4.7 (3) | 6.0 / 5.0 (1) | 6.0 / 5.0 (1) |
+| jifang | 3.2 / 3.2 (5) | 3.6 / 3.6 (5) | 4.8 / 3.7 (3) | 4.4 / 4.4 (5) | 5.8 / 3.5 (2) |
+| lan | 4.8 / 4.5 (4) | 6.4 / — (0) | 6.4 / 5.0 (2) | 11.4 / — (0) | 7.8 / 5.0 (1) |
+| liusu | 3.6 / 3.6 (5) | 6.4 / 5.0 (1) | 4.8 / 4.0 (4) | 5.2 / 4.7 (3) | 5.4 / 4.7 (3) |
+| marjorie | 5.8 / 5.0 (1) | 5.8 / 5.0 (2) | 6.0 / 4.7 (3) | 6.8 / — (0) | 7.0 / 5.0 (1) |
+| patton | 3.8 / 3.8 (5) | 6.4 / 4.0 (1) | 4.2 / 3.5 (4) | 4.2 / 4.2 (5) | 4.6 / 4.2 (4) |
+| shitou | 4.4 / 4.4 (5) | 7.0 / — (0) | 9.2 / 4.0 (1) | 6.6 / 5.0 (2) | 8.8 / — (0) |
+| swan | 3.4 / 3.4 (5) | 5.0 / 4.8 (4) | 4.8 / 4.0 (3) | 4.4 / 4.4 (5) | 6.4 / 5.0 (2) |
+| timaeus | 5.4 / — (0) | 6.6 / — (0) | 9.2 / — (0) | 6.2 / — (0) | 6.6 / — (0) |
+| timmie | 3.6 / 3.6 (5) | 5.8 / 5.0 (1) | 6.0 / 5.0 (1) | 4.8 / 4.8 (5) | 5.4 / 4.8 (4) |
+| uncletian | 3.6 / 3.6 (5) | 5.2 / 4.8 (4) | 11.8 / — (0) | 14.4 / — (0) | 5.4 / 4.3 (3) |
+| wagner | 3.0 / — (0) | 3.0 / — (0) | 3.6 / 4.0 (3) | 4.2 / 3.7 (3) | 4.0 / 3.8 (4) |
 
 ## 4. Rounds diagnostic
 
@@ -196,24 +221,24 @@ A normal game should finish well under 10 rounds. The engine caps at 15 rounds; 
 
 The pick is the best deck **among decks that satisfy the stage's card-type objective** (ranking as above). A deck that cannot satisfy the objective is never recommended, even if it is stronger. The last column flags a deliberate difficulty trade-off when the strength-only pick and the satisfying pick differ by more than 15pp win rate.
 
-| stage | recommended deck | win | 3★ | mean rounds | objective coverage | strength-only pick | win-rate gap | trade-off? |
-|---|---|---|---|---|---|---|---|---|
-| blanche | **keqing_jihua** | 5/5 (100%) | 1/5 (20%) | 6.8 | n/a | keqing_jihua | 0pp | no (same deck) |
-| buyun | **nvpu_shuangyan_era** | 5/5 (100%) | 1/5 (20%) | 6.4 | n/a | nvpu_shuangyan_era | 0pp | no (same deck) |
-| chefmao | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 4.0 | n/a | keqing_jihua | 0pp | no (same deck) |
-| ellin | **keqing_jihua** | 5/5 (100%) | 4/5 (80%) | 4.4 | n/a | keqing_jihua | 0pp | no (same deck) |
-| irontonguetian | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.8 | n/a | keqing_jihua | 0pp | no (same deck) |
-| jifang | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.2 | n/a | keqing_jihua | 0pp | no (same deck) |
-| lan | **keqing_jihua** | 5/5 (100%) | 4/5 (80%) | 4.8 | n/a | keqing_jihua | 0pp | no (same deck) |
-| liusu | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | n/a | keqing_jihua | 0pp | no (same deck) |
-| marjorie | **linghua_yongdong** | 4/5 (80%) | 3/5 (60%) | 6.0 | n/a | linghua_yongdong | 0pp | no (same deck) |
-| patton | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.8 | n/a | keqing_jihua | 0pp | no (same deck) |
-| shitou | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 4.4 | n/a | keqing_jihua | 0pp | no (same deck) |
-| swan | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.4 | n/a | keqing_jihua | 0pp | no (same deck) |
-| timaeus | **keqing_jihua** | 5/5 (100%) | 0/5 (0%) | 5.4 | artifact 2/1 | keqing_jihua | 0pp | no (same deck) |
-| timmie | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | n/a | keqing_jihua | 0pp | no (same deck) |
-| uncletian | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | event 20/2 | keqing_jihua | 0pp | no (same deck) |
-| wagner | **nvpu_shuangyan_era** | 5/5 (100%) | 4/5 (80%) | 4.0 | weapon 2/1 | nvpu_shuangyan_era | 0pp | no (same deck) |
+| stage | recommended deck | win | 3★ | mean rounds (all) | mean rounds (3★ only) | objective coverage | strength-only pick | win-rate gap | trade-off? |
+|---|---|---|---|---|---|---|---|---|---|
+| blanche | **keqing_jihua** | 5/5 (100%) | 1/5 (20%) | 6.8 | 5.0 (1) | n/a | keqing_jihua | 0pp | no (same deck) |
+| buyun | **nvpu_shuangyan_era** | 5/5 (100%) | 1/5 (20%) | 6.4 | 4.0 (1) | n/a | nvpu_shuangyan_era | 0pp | no (same deck) |
+| chefmao | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 4.0 | 4.0 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| ellin | **keqing_jihua** | 5/5 (100%) | 4/5 (80%) | 4.4 | 4.0 (4) | n/a | keqing_jihua | 0pp | no (same deck) |
+| irontonguetian | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.8 | 3.8 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| jifang | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.2 | 3.2 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| lan | **keqing_jihua** | 5/5 (100%) | 4/5 (80%) | 4.8 | 4.5 (4) | n/a | keqing_jihua | 0pp | no (same deck) |
+| liusu | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | 3.6 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| marjorie | **linghua_yongdong** | 4/5 (80%) | 3/5 (60%) | 6.0 | 4.7 (3) | n/a | linghua_yongdong | 0pp | no (same deck) |
+| patton | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.8 | 3.8 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| shitou | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 4.4 | 4.4 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| swan | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.4 | 3.4 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| timaeus | **keqing_jihua** | 5/5 (100%) | 0/5 (0%) | 5.4 | — (0) | artifact 2/1 | keqing_jihua | 0pp | no (same deck) |
+| timmie | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | 3.6 (5) | n/a | keqing_jihua | 0pp | no (same deck) |
+| uncletian | **keqing_jihua** | 5/5 (100%) | 5/5 (100%) | 3.6 | 3.6 (5) | event 20/2 | keqing_jihua | 0pp | no (same deck) |
+| wagner | **nvpu_shuangyan_era** | 5/5 (100%) | 4/5 (80%) | 4.0 | 3.8 (4) | weapon 2/1 | nvpu_shuangyan_era | 0pp | no (same deck) |
 
 No stage has a >15pp win-rate gap between the best deck and the best objective-satisfying deck on this pool.
 

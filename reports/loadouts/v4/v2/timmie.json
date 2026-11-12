@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_timmie",
+    "skill_marjorie",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "五回合内胜利且阵亡<2：用节奏预算与行动分配压缩铺场，集火残血、先附着再反应提速，并保护低血量角色避免阵亡。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "4cc3b2265231",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

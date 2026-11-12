@@ -1,0 +1,17 @@
+{
+  "stage": "swan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_swan",
+    "skill_uncletian",
+    "strat_focus_fire",
+    "strat_reaction",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "5回合内胜利需抢节奏：优先即时伤害与集火残血，先附着再补元素触发反应，压缩铺垫投入。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "454f08b274b0",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

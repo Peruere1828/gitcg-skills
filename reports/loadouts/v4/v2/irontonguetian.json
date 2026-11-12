@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_irontonguetian",
+    "skill_liusu",
+    "rule_burst",
+    "strat_focus_fire",
+    "strat_reaction"
+  ],
+  "rationale": "关卡需5回合内胜利并使用元素爆发，选爆发前置规划与爆发并入斩杀线，配合爆发规则、集火残血和先附着再补元素，压缩节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "dbdfe3f07b02",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

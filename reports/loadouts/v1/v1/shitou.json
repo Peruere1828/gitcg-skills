@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "rule_switch",
+    "strat_focus_fire",
+    "rule_end_round"
+  ],
+  "rationale": "三星需2次元素反应且5回合内速胜：选反应规则与先附着再补元素策略，配合集火残血、必要换人及无收益即结束回合抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c14c53d693f3",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

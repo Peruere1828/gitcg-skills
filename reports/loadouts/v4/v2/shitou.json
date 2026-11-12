@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "frontload_reaction_into_kill_line_shitou",
+    "tempo_budget_for_round_cap_shitou",
+    "规则_目标_元素反应",
+    "strat_reaction",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利并触发2次元素反应，优先选反应前置与节奏预算技能，配合先附着再补元素、集火残血，确保短回合内完成击杀与反应目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9f305d0a5b90",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

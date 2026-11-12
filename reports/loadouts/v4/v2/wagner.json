@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "skill_wagner",
+    "skill_timaeus",
+    "skill_blanche",
+    "strat_focus_fire",
+    "rule_equipment"
+  ],
+  "rationale": "关卡要求打出武器牌且5回合内胜利，优先装备目标前置与支线截止策略，配合限回合节奏与集火残血，装备规则确保理解打出方式。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9c0bb46705a2",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_burst",
+    "rule_reaction",
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "5回合内胜利需爆发斩杀与元素反应提速；集火残血减少行动数，爆发时机规则确保1次爆发目标达成。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "ac2ecc6b028a",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

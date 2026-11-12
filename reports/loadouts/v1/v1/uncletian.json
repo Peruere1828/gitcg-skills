@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_dice",
+    "rule_reaction",
+    "strat_reaction",
+    "规则_目标_事件牌",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡需5回合内胜利并打出2张事件牌；选骰子经济、元素反应规则与先附着再补元素策略，以及事件牌和回合上限目标提示。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "932ccb3b36a0",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "strat_focus_fire",
+    "rule_burst",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "冰水队靠冻结/融化反应提速，5回合内需集火残血；爆发留斩杀，少被击倒需保护低血量角色。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "4a1deac71dbd",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,217 @@
+{
+  "a": {
+    "path": "data/runs/v2_llm_empty.jsonl",
+    "label": "llm_empty"
+  },
+  "b": {
+    "path": "data/runs/v2_static.jsonl",
+    "label": "static"
+  },
+  "value": "three_star",
+  "gate": {
+    "mean_delta": -0.05,
+    "ci_low": -0.1876,
+    "ci_high": 0.0876,
+    "n_stages": 16,
+    "n_pairs": 80,
+    "dropped_pairs": 0,
+    "accept": false,
+    "per_stage": [
+      {
+        "stage": "blanche",
+        "n": 5,
+        "rate_a": 0.2,
+        "rate_b": 0.0,
+        "delta": -0.2
+      },
+      {
+        "stage": "buyun",
+        "n": 5,
+        "rate_a": 0.0,
+        "rate_b": 0.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "chefmao",
+        "n": 5,
+        "rate_a": 1.0,
+        "rate_b": 1.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "ellin",
+        "n": 5,
+        "rate_a": 0.8,
+        "rate_b": 1.0,
+        "delta": 0.2
+      },
+      {
+        "stage": "irontonguetian",
+        "n": 5,
+        "rate_a": 0.2,
+        "rate_b": 0.4,
+        "delta": 0.2
+      },
+      {
+        "stage": "jifang",
+        "n": 5,
+        "rate_a": 1.0,
+        "rate_b": 1.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "lan",
+        "n": 5,
+        "rate_a": 0.2,
+        "rate_b": 0.0,
+        "delta": -0.2
+      },
+      {
+        "stage": "liusu",
+        "n": 5,
+        "rate_a": 0.6,
+        "rate_b": 0.4,
+        "delta": -0.2
+      },
+      {
+        "stage": "marjorie",
+        "n": 5,
+        "rate_a": 0.6,
+        "rate_b": 0.6,
+        "delta": 0.0
+      },
+      {
+        "stage": "patton",
+        "n": 5,
+        "rate_a": 1.0,
+        "rate_b": 1.0,
+        "delta": 0.0
+      },
+      {
+        "stage": "shitou",
+        "n": 5,
+        "rate_a": 0.0,
+        "rate_b": 0.6,
+        "delta": 0.6
+      },
+      {
+        "stage": "swan",
+        "n": 5,
+        "rate_a": 1.0,
+        "rate_b": 0.8,
+        "delta": -0.2
+      },
+      {
+        "stage": "timaeus",
+        "n": 5,
+        "rate_a": 0.6,
+        "rate_b": 0.0,
+        "delta": -0.6
+      },
+      {
+        "stage": "timmie",
+        "n": 5,
+        "rate_a": 1.0,
+        "rate_b": 0.8,
+        "delta": -0.2
+      },
+      {
+        "stage": "uncletian",
+        "n": 5,
+        "rate_a": 0.4,
+        "rate_b": 0.2,
+        "delta": -0.2
+      },
+      {
+        "stage": "wagner",
+        "n": 5,
+        "rate_a": 0.8,
+        "rate_b": 0.8,
+        "delta": 0.0
+      }
+    ]
+  },
+  "rounds_gate": {
+    "mean_delta": 0.0778,
+    "ci_low": -0.2756,
+    "ci_high": 0.4311,
+    "n_stages": 9,
+    "n_pairs": 35,
+    "n_dropped": 45,
+    "n_all_pairs": 80,
+    "n_rounds_pairs": 80,
+    "dropped_not_three_star": 45,
+    "dropped_missing_rounds": 0,
+    "insufficient": false,
+    "reason": "",
+    "accept": false,
+    "mean_rounds_a": 5.45,
+    "mean_rounds_b": 5.775,
+    "mean_rounds_delta": 0.325,
+    "per_stage": [
+      {
+        "stage": "chefmao",
+        "n": 5,
+        "rounds_a": 4.4,
+        "rounds_b": 4.6,
+        "delta": 0.2
+      },
+      {
+        "stage": "ellin",
+        "n": 4,
+        "rounds_a": 4.0,
+        "rounds_b": 4.25,
+        "delta": 0.25
+      },
+      {
+        "stage": "jifang",
+        "n": 5,
+        "rounds_a": 4.0,
+        "rounds_b": 3.8,
+        "delta": -0.2
+      },
+      {
+        "stage": "liusu",
+        "n": 2,
+        "rounds_a": 4.0,
+        "rounds_b": 4.5,
+        "delta": 0.5
+      },
+      {
+        "stage": "marjorie",
+        "n": 2,
+        "rounds_a": 4.5,
+        "rounds_b": 5.0,
+        "delta": 0.5
+      },
+      {
+        "stage": "patton",
+        "n": 5,
+        "rounds_a": 4.2,
+        "rounds_b": 4.4,
+        "delta": 0.2
+      },
+      {
+        "stage": "swan",
+        "n": 4,
+        "rounds_a": 4.75,
+        "rounds_b": 5.0,
+        "delta": 0.25
+      },
+      {
+        "stage": "timmie",
+        "n": 4,
+        "rounds_a": 4.5,
+        "rounds_b": 4.5,
+        "delta": 0.0
+      },
+      {
+        "stage": "wagner",
+        "n": 4,
+        "rounds_a": 4.5,
+        "rounds_b": 3.5,
+        "delta": -1.0
+      }
+    ]
+  }
+}

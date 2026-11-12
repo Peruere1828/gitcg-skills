@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_end_round",
+    "strat_switch_cost",
+    "strat_protect_low_hp",
+    "strat_equipment_timing",
+    "strat_mulligan"
+  ],
+  "rationale": "fallback: unknown_skill:rule_目标_回合上限",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "fe7490f2d878",
+  "fallback": true,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "patton",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_reaction",
+    "strat_end_round",
+    "strat_mulligan",
+    "strat_equipment_timing",
+    "strat_dice_economy"
+  ],
+  "rationale": "fallback: unknown_skill:rule_目标_元素反应",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9517f0cfa548",
+  "fallback": true,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

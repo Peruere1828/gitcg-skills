@@ -1,0 +1,17 @@
+{
+  "stage": "jifang",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_marjorie",
+    "skill_uncletian",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "5回合内胜利且阵亡<2次，需统一行动预算：优先即时伤害与集火残血，先附着再反应，低血量角色及时保护。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "14bba61cd78a",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

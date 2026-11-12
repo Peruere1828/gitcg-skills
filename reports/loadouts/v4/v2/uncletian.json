@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "skill_blanche",
+    "规则_目标_事件牌",
+    "strat_mulligan",
+    "strat_focus_fire"
+  ],
+  "rationale": "5回合内胜利需抢节奏：选即时伤害与集中击倒策略，事件牌目标提醒留骰打出2张，起手保留低费与事件牌，集火残血减少敌方行动。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9091cdc30fab",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

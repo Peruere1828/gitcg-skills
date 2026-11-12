@@ -1,0 +1,17 @@
+{
+  "stage": "patton",
+  "deck": "keqing_jihua",
+  "skills": [
+    "frontload_reaction_into_kill_line_shitou",
+    "skill_lan",
+    "strat_focus_fire",
+    "strat_reaction",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "5回合内胜利且需1次元素反应：前置反应到击杀线，抢节奏只做即时输出，集火残血，先附着再补元素，严守回合上限。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "0e9819207658",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

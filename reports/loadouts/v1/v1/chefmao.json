@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "strat_focus_fire",
+    "rule_end_round",
+    "strat_end_round"
+  ],
+  "rationale": "雷草双元素易触发激化/超载等反应，先附着再补元素可快速集火残血；5回合内需抢节奏，无收益即结束回合抢先手。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "fbba6815de4c",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

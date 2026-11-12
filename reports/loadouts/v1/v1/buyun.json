@@ -1,0 +1,17 @@
+{
+  "stage": "buyun",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "rule_switch",
+    "strat_focus_fire",
+    "rule_end_round"
+  ],
+  "rationale": "三星需5回合内胜利并触发2次元素反应；选反应规则与先附着再补元素策略，配合集火残血、必要换人和及时结束回合抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "9672e79ede32",
+  "fallback": false,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "skill_liusu",
+    "skill_irontonguetian",
+    "rule_burst",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利并使用元素爆发，优先选爆发与短回合斩杀线相关技能，配合集火残血快速击倒。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "100e0017d390",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

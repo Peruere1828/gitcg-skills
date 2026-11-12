@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "strat_end_round",
+    "strat_burst_timing",
+    "strat_reaction",
+    "strat_mulligan",
+    "strat_equipment_timing"
+  ],
+  "rationale": "fallback: unknown_skill:rule_目标_回合上限",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "8b5c456be457",
+  "fallback": true,
+  "library_version": 1,
+  "engine_lock": "d3961dd5d34d"
+}

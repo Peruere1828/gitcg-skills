@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_liusu",
+    "rule_burst",
+    "rule_reaction",
+    "strat_focus_fire",
+    "tempo_budget_for_round_cap_shitou"
+  ],
+  "rationale": "关卡需5回合内胜利并使用1次元素爆发，选爆发并入斩杀线、爆发规则、元素反应与集火残血，配合回合预算压缩节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "31c082b95e54",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}
