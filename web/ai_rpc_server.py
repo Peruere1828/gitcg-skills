@@ -47,8 +47,10 @@
 #       LLM 策略**严格对齐 `skillloop.run.build_policy`**：关卡 TaskSpec、
 #       plain StateRenderer、era/expert base、未过滤技能库、candidate_cap=16、
 #       引擎原候选顺序。`none` / `llm_empty` 都映射到 runner 的 `llm_empty`
-#       （LLM + 空库）；`static` 用 `data/skills/static_v1`，`dynamic` 取
-#       `meta.kind=="evolved"` 中 `built_at` 最新的库（当前 dyn_v4）。
+#       （LLM + **仅游戏规则** `data/skills/rules_v1`，17 条 rule；不含策略/关卡特化）；
+#       `static` 用 `data/skills/static_v1`（17 rule + 10 strategy）；`dynamic`
+#       用 `data/skills/dyn_v4`（17 rule + 23 strategy）。loadout 只对
+#       static/dynamic 生效。
 #       牌组优先级：loadout > `--stage-decks` > 网页上报的 AI deck。
 #       LLM 需要仓库根 `.env` 里的 key/base_url/model；不可用时 AI 座位退回
 #       `resolve_base_policy`（era/expert；未知牌组用 heuristic）并在 `/session`
@@ -147,20 +149,22 @@ _RESUME_SEQ_GAP = 1_000_000
 # protobuf-ts 的 toJson 都可能出现），用于识别终局。
 _END_PHASES = {"PHASE_TYPE_GAME_END", "GAME_END", "gameEnd", 5}
 
-# LLM 策略的四个技能库选项（`llm:<library>`）。none 不注入任何技能/规则；
-# llm_empty 是 ②′ 的空库组；static 是规则层；dynamic 取 built_at 最新的进化库。
+# LLM 策略的四个技能库选项（`llm:<library>`）。none / llm_empty 都表示
+# 「LLM + 仅游戏规则」（`data/skills/rules_v1`，17 条 rule）；static 是规则 +
+# 手写静态策略（static_v1）；dynamic 是规则 + 动态策略（dyn_v4）。
 LLM_LIBRARY_CHOICES = ("none", "llm_empty", "static", "dynamic")
 _SKILLS_ROOT = os.path.join(_REPO_ROOT, "data", "skills")
 _LLM_LIBRARY_LABELS = {
-    "none": "none（无技能库）",
-    "llm_empty": "llm_empty（空库）",
+    "none": "none（仅游戏规则）",
+    "llm_empty": "llm_empty（仅游戏规则）",
 }
 
 # 与 ``skillloop.run`` 严格对齐的评测配置。网页端只是调试接口：策略、提示词、
 # 技能库、基础策略、候选顺序/上限全部由 ``skillloop.run.build_policy`` 决定。
 DEFAULT_STAGE_DECKS = os.path.join(_REPO_ROOT, "configs", "stage_decks.json")
 DEFAULT_ERA_DECKS = os.path.join(_REPO_ROOT, "configs", "era_decks.json")
-_LIBRARY_GROUPS = ("static", "dynamic")
+_LIBRARY_GROUPS = ("llm_empty", "static", "dynamic")
+_LOADOUT_GROUPS = ("static", "dynamic")
 _PROTOCOL_NAME = "skillloop.run"
 
 
@@ -235,7 +239,16 @@ def _selection_group(selection: str | None) -> str | None:
 
 
 def resolve_library_root(selection: str | None, override: str | None = None) -> str | None:
-    """Library directory for a selection (``None`` for none/llm_empty)."""
+    """Library directory for a selection.
+
+    ``none``/``llm_empty`` resolve to the fixed rules library; ``override`` is only
+    honoured for static/dynamic (llm_empty must stay comparable across runs).
+    """
+    if selection in ("none", "llm_empty"):
+        info = resolve_llm_library(selection)
+        if info is None or not info.get("path"):
+            raise RuntimeError(f"技能库 {selection!r} 未解析到目录")
+        return str(_abs_path(info["path"]))
     if selection not in _LIBRARY_GROUPS:
         return None
     if override:
@@ -325,30 +338,26 @@ def _newest_library(kind: str) -> Path | None:
 
 
 def resolve_llm_library(selection: str) -> dict[str, Any] | None:
-    """把库选择解析成可序列化的描述；none 返回 None，未知选择也返回 None。"""
-    if selection == "none":
-        return None
-    if selection == "llm_empty":
-        return {
-            "selection": "llm_empty",
-            "resolved": "llm_empty",
-            "path": None,
-            "version": 0,
-            "skills": 0,
-            "applied_skills": 0,
-            "filtered_out": 0,
-            "built_at": None,
-            "kind": "llm_empty",
-        }
-    if selection == "static":
+    """把库选择解析成可序列化的描述；未知选择返回 None。
+
+    ``none``/``llm_empty`` = LLM + 仅游戏规则，固定使用 ``data/skills/rules_v1``
+    （17 条 rule）；它们不是「无提示词」。
+    """
+    if selection in ("none", "llm_empty"):
+        path = Path(_SKILLS_ROOT) / "rules_v1"
+    elif selection == "static":
         preferred = Path(_SKILLS_ROOT) / "static_v1"
         path = preferred if (preferred / "library.json").is_file() else _newest_library("rules")
     elif selection == "dynamic":
-        path = _newest_library("evolved")
+        preferred = Path(_SKILLS_ROOT) / "dyn_v4"
+        path = preferred if (preferred / "library.json").is_file() else _newest_library("evolved")
     else:
         _warn(f"未知 LLM 技能库选择 {selection!r}；可选：{list(LLM_LIBRARY_CHOICES)}")
         return None
-    return _library_info(path, selection) if path is not None else None
+    if path is None or not (path / "library.json").is_file():
+        _warn(f"技能库选择 {selection!r} 未解析到目录")
+        return None
+    return _library_info(path, selection)
 
 
 def llm_library_options() -> list[dict[str, str]]:
@@ -377,7 +386,7 @@ def _loadout_for_stage(
     Unlike the runner this is a *debug* bridge: a missing or stale loadout warns
     and falls back to the stage deck instead of aborting the session.
     """
-    if not config.loadout_root or selection not in _LIBRARY_GROUPS:
+    if not config.loadout_root or selection not in _LOADOUT_GROUPS:
         return None, None, None
     try:
         from skillloop.library import SkillLibrary
@@ -1830,7 +1839,7 @@ class State:
             base_parsed = parse_llm_spec(self.base_spec)
             selection = base_parsed[0] if base_parsed is not None else None
         library = resolve_llm_library(selection) if selection is not None else None
-        if selection in _LIBRARY_GROUPS and self.eval_config.library_override:
+        if selection in _LOADOUT_GROUPS and self.eval_config.library_override:
             override = _abs_path(self.eval_config.library_override)
             if (override / "library.json").is_file():
                 library = _library_info(override, selection)
@@ -1845,7 +1854,7 @@ class State:
 
         group = _selection_group(selection) if selection is not None else None
         library_root: str | None = None
-        if selection in _LIBRARY_GROUPS:
+        if group is not None:
             try:
                 library_root = _display_path(
                     resolve_library_root(selection, self.eval_config.library_override)
@@ -2608,8 +2617,10 @@ def main() -> None:
             "策略 spec；留空则用 --strategy 占位策略。"
             " 脚本：expert:<slug> | heuristic | legal_random | random；"
             " LLM 技能智能体：llm:<library>，library ∈ "
-            "none（无技能库）| llm_empty（②′ 空库）| static（data/skills/static_v1，缺省退回最新 rules 库）"
-            " | dynamic（data/skills 下 meta.kind=evolved 中 built_at 最新者，当前 dyn_v4）。"
+            "none / llm_empty（data/skills/rules_v1，仅游戏规则，17 条 rule）"
+            " | static（data/skills/static_v1，17 rule + 10 strategy）"
+            " | dynamic（data/skills/dyn_v4，17 rule + 23 strategy）。"
+            " loadout 只对 static/dynamic 生效。"
             " 例：--policy llm:dynamic。LLM 不可用时 AI 座位自动退回脚本策略；"
             " 需要仓库根 .env 里的 LLM key/base_url/model。"
         ),

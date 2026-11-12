@@ -1,16 +1,6 @@
 # STATUS — 当前状态（2026-11-12）
 
-> **2026-11-12 当前状态**：引擎已按「官方角色卡 vs NPC 变体」重链（2301/2202 恢复
-> 版本卡面值，NPC 9301/9202 承载 13/12 难度血量）。网页调试已严格对齐
-> `skillloop.run`（关卡 TaskSpec、未过滤库、era/expert base、cap16、原顺序、
-> stage_decks/loadout/v3.3.0、NPC policy），并新增 `/ai-decisions` 监控面板用于
-> 人类扮 NPC 时检查 AI 引用的技能。历史 LLM 组数值仍以文中「待重跑」标注为准。
-
-> **2026-11-02 更正**：`record_decisions=False` 的判定 bug 已修复；本文中所有「装备/事件目标恒为 false」的结论是**测量假象**，不是行为。受影响关卡的数值待重跑。
->
-> 免费基线（`scripted` / `contestant`，同 seeds，不调模型）已重放：**0.4250**（68/160）、**0.4813**（77/160）；LLM 组（§3.3/§3.6/§3.7）尚未重跑，数字暂不可引用。
-
-> 只写「现在有效」的事实；历史进 `reports/`，负结果进 `docs/failures/`。
+> 只写「现在有效」的事实；历史结果见 [`../reports/`](../reports/)，负结果见 [`failures/`](./failures/)。
 > 任务与验收见 [`../PLAN.md`](../PLAN.md)，统计口径见 [`EVAL_PROTOCOL.md`](./EVAL_PROTOCOL.md)。
 
 ## 1. 仓库与环境
@@ -19,276 +9,96 @@
 |---|---|
 | 仓库 | `~/projects/gitcg-skills`，从上游 `genshin-GITCG@98b4dfa` 快照（2026-10-28） |
 | 环境层 | `envs/ reps/ npc/ coach/ agents/ eval/ common/ web/ configs/ engine-overlay/` 原样快照 |
-| 已删除 | `train/`、`kaggle/`、`scripts/` 训练脚本、`envs/cfr_*`、`envs/fork_*`、`agents/neural.py` |
 | conda env | `gitcg-skill`（Python 3.12，`gitcg==0.21.0`，numpy，pytest；**无 torch**） |
-| 引擎 | 已重链并装入 `gitcg-skill`：overlay 数据 + NPC 变体（9301/9202）；官方角色卡 2301/2202 保持版本卡面值 |
+| 算力 | 本机 6C/12T；实验限 6–8 worker，`OMP_NUM_THREADS=1` |
+| LLM | OpenAI 兼容端点，模型 `deepseek-v4.1-flash`；`temperature=0`，对局 `reasoning_effort=none` |
 
-## 2. 难度标定（D4）
+## 2. 引擎与血量
 
-- 规则：敌人血量 **≤6 → 6，其余 +2**；审计快照 `configs/npc/hp_table.json`（19 类敌人 / 16 关）。
-- 已改：17 个 overlay `.gts`；两个上游 Fatui 敌人已拆成**独立 NPC 变体**
-  `9301`（13 HP）/ `9202`（12 HP），官方角色卡 2301/2202 恢复版本卡面值。
-- `hp_table.json` 的审计目标改为 NPC 变体文件；`npc_enemies_all.json` 的 `hp_card`
-  表示 NPC 敌人卡血量（13/12），官方角色卡 HP 以引擎/版本数据为准。
-- 引擎已重链并装入 `gitcg-skill`；难度基线/阈值标定见 `reports/calibration/`。
+- 引擎已重链并装入 `gitcg-skill`，overlay + NPC 变体生效，版本记入 `configs/engine.lock`。
+- **官方角色卡** 2301/2202 保持版本卡面值（`v3.3.0` 下 2301=10；`v7.1.0` 下 11）。
+- **NPC 变体** 9301/9202 承载 13/12 难度血量；血量规则「≤6→6，其余 +2」，
+  审计快照 `configs/npc/hp_table.json`（19 类敌人 / 16 关）。
+- 网页调试严格对齐 `skillloop.run`：关卡 TaskSpec、未过滤库、era/expert base、cap16、
+  原顺序、`stage_decks`/loadout/`card_version`/`stage_rules`/NPC policy；人类执 NPC，
+  `/ai-decisions` 监控 AI 引用。入口 `bash scripts/serve_web_demo.sh`。
 
-## 3. 基线（10 seeds × 16 关 = 160 局；**阈值统一 5**）
+## 3. 评测口径
 
-| 组 | 三星率 | 胜率 | 说明 |
-|---|---|---|---|
-| scripted | **0.4250** | 0.944 | 纯脚本；修复判定后 68/160（旧 0.3812） |
-| contestant | **0.4813** | 0.950 | 手写目标注入（仅 irontonguetian/liusu +0.20）；修复判定后 77/160（旧 0.4062） |
+- **16 关**；每关牌组固定于 `configs/stage_decks.json`（era 牌组）。
+- **按关配对**比较；建议 **50 seeds/关**（先 3–5 seeds 冒烟）。
+- 主指标：**三星率**；次指标：逐目标达成、LLM calls/局、token/局。
+- 只在同 `stage / deck / card_version / stage_rules / loadout` 下比较。
+- 固定卡池 `--card-version v3.3.0`，启用关卡特殊规则 `--stage-rules`。
+- 每局记录 `stage/seed/deck/group/library_version/model/prompt_hash`；
+  原始 JSONL 落 `data/`，聚合摘要进 `reports/`。成本门禁见 `EVAL_PROTOCOL.md §6`。
 
-> 阈值改回 5 后（D7），旧判定下两组为 0.3812 / 0.4062；修复判定后同 seeds 免费重放为
-> **0.4250 / 0.4813**（+7 / +12 局，0 局下降）。`blanche`/`wagner` 仍为 0；`timaeus`/`uncletian`
-> 的 0 是判定假象，已随修复消失。旧标定结果（P70=6–9）留档在
-> `reports/calibration/thresholds.json`，仅作难度画像。
+## 4. 四组（新口径）
 
-## 3.0 早期基线（**已废弃**：阈值按 P70 放宽到 6–9 时的数字，留作对照）
-
-| 组 | 策略 | 三星率 | 胜率 | 备注 |
+| 组 | 策略 | 技能库 | loadout | 说明 |
 |---|---|---|---|---|
-| 脚本 | `expert:superconduct_aggro` | **0.4125** | ~96% | 无目标注入；新血量下 |
-| 参照 | `contestant` | 运行中 | — | 上游旧血量 74.7% |
-| LLM 空库 | `deepseek-v4.1-flash` | 待跑 | — | 端点已接通（见 §5） |
+| `scripted` | 固定脚本，无 LLM | — | — | 免费基线（expert/era base） |
+| `llm_empty` | LLM + **仅游戏规则** | `data/skills/rules_v1`（17 rule） | — | 不加载 strategy |
+| `static` | LLM + 规则 + 静态 skill | `data/skills/static_v1`（17 rule + 10 strategy） | `reports/loadouts/v1`（可选） | 规则 + 静态经验 |
+| `dynamic` | LLM + 规则 + 动态 skill | `data/skills/dyn_v4`（17 rule + 23 strategy） | `reports/loadouts/v4`（可选） | 规则 + 进化经验 |
 
-脚本组逐关（新血量）：`jifang`/`swan` 1.00，`patton`/`lan` 0.90，`timmie`/`buyun` 0.80，
-`shitou` 0.50，`marjorie` 0.40，`ellin` 0.20，`chefmao` 0.10，
-`wagner`/`timaeus`/`liusu`/`irontonguetian`/`uncletian`/`blanche` **0.00**。
-→ 血量补丁只压三星、几乎不影响胜负（胜率仍 ~96%），符合 D4 的预期。
+`contestant` 仅作参照，不在四组内。
 
-## 4. 已完成 / 进行中
+## 5. 运行命令（当前有效）
 
-已完成：
-- 仓库快照 + 裁剪 + 文档骨架 + 课程要求入库（首个 commit）。
-- `gitcg-skill` env（gitcg 0.21.0 / numpy / pytest，无 torch）。
-- 血量补丁（19 敌人 / 16 关）+ 审计 `configs/npc/hp_table.json`。
-- `skillloop/` 六个模块：`schema`（技能表示）、`library`（分层检索/激活/版本快照）、
-  `render`（稳定前缀 + 编号候选，真实对局实测 system 211 字符 / user 506 字符）、
-  `agent`（LLM 直选 + 回退 + 逐决策日志）、`gate`（按关配对 t 检验）、`extract`（失败画像 → 候选技能）。
-- 34 个 engine-free 单测全绿；`scripts/probe_render.py` 可在真实对局上检查 prompt。
+```sh
+REPO=~/projects/gitcg-skills
+export PY=/home/ubuntuaaa/miniconda3/envs/gitcg-skill/bin/python
+export OMP_NUM_THREADS=1
+cd "$REPO"
+COMMON="--stages all --seeds 50 --workers 6 --stage-decks configs/stage_decks.json --card-version v3.3.0 --stage-rules"
 
-进行中：
-- 引擎增量重链（V8 全量首编，`build/engine-build.log`，约 583/1232）。
-- DeepSeek/OpenCode Console 接入探针（子任务），产出 base_url / model / 计费字段。
+# scripted（免费）
+"$PY" -m skillloop.run --group scripted $COMMON --out data/runs/scripted.jsonl
 
-## 3.1 阈值标定（24 seeds × 16 关 = 384 局，手写策略）
+# llm_empty（仅规则；需预算上限）
+GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group llm_empty $COMMON \
+  --out data/runs/llm_empty.jsonl
 
-按「胜局回合 P70」重标 `win_within_rounds`（明细 `reports/calibration/thresholds.json`）：
+# static
+GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
+  --library data/skills/static_v1 --loadout reports/loadouts/v1 \
+  $COMMON --out data/runs/static.jsonl
 
-| 关卡 | 旧 | 新 | 关卡 | 旧 | 新 |
-|---|---|---|---|---|---|
-| blanche | 5 | **9** | liusu | 5 | 6 |
-| chefmao | 5 | 7 | shitou | **44** | 6 |
-| ellin | 5 | 7 | timaeus | 5 | 6 |
-| irontonguetian | 5 | 6 | wagner | 5 | **2** |
-| jifang | 5 | 3 | marjorie | 5 | 6 |
-| lan | 6 | 5 | **swan** | （无） | **+5** |
+# dynamic
+GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
+  --library data/skills/dyn_v4 --loadout reports/loadouts/v4 \
+  $COMMON --out data/runs/dynamic.jsonl
+```
 
-标定后手写策略总三星率 0.487（标定前 0.4375；旧判定口径，装备/事件目标当时恒 false，故偏低）。
-旧判定下 3 关 0%（`wagner`/`timaeus`/`uncletian`）；其中 `timaeus` / `uncletian` 的 0 曾被读成
-`play_equipment_card` / `play_event_cards` 的策略缺口，但这是**测量假象**：`record_decisions=False`
-让这两个目标恒为 false。`wagner` 的 0 则是牌组结构（无武器牌），不是策略缺口。修复后在统一阈值 5
-的当前任务集上，免费基线已能达成这些目标（`timaeus` scripted 2/10、`uncletian` 8/10；
-`wagner` 仍 0/10）；§3.1/§3.2 的标定任务集需重跑后再判断策略缺口。
+- `--seeds 50` 即 seeds 0–49。冒烟把 `--seeds` 换成 `3` 或 `3,4,5`。
+- `GITCG_LLM_BUDGET_USD` 是**硬上限**（D11）：触顶只停止启动新局，已在飞的局跑完。
+  模型与预算写进 run meta；成本先按 `EVAL_PROTOCOL.md §6` 标定再上全量。
+- **`llm_empty` 新口径会注入 17 条规则**，prompt/成本高于旧「空库」；上全量前先
+  3–5 seeds 标定成本。
+- **旧 run 的 fingerprint 不兼容**：旧 meta 的 `stages` 字段是文件 hash；新代码
+  `stages` 是关卡列表、文件 hash 改名为 `stages_file_sha1`。新实验请用新的
+  `--out`，不要续跑旧输出。
+- 冒烟要核查：无 `no_llm_config` / `unknown card` 错误；prompt 内库内容与
+  loadout 版本匹配；`llm_empty` 只含 17 条 rule、无 strategy。
 
-## 3.2 标定后 10-seed 复测（新任务集）
+## 6. 当前结果
 
-| 组 | 三星率 | 说明 |
-|---|---|---|
-| scripted | **0.5625** | 纯脚本（无目标意识） |
-| contestant | **0.6250** | 手写目标注入；配对 Δ=+0.062，CI [−0.020,+0.145] |
+- **无当前有效结果**。旧 LLM 组、t5/t5b、判定修复前的数字、旧免费基线
+  全部作废，不再引用；等待新一轮 API 实验。
+- `scripted` 可先跑免费基线；结果落 `data/runs/`，摘要进 `reports/`。
 
-表中三星率是旧判定结果；`timaeus`/`uncletian` 修正后需重跑，`wagner` 仍受牌组限制。
+## 7. 下一步
 
-**剩余失分画像（scripted，10 局/关；旧判定）**：`play_equipment_card` / `play_event_cards` 的
-10/10 是测量假象（判定看不到出牌），不能作为「指令遵循」缺口的证据。修复后在统一阈值 5 的任务集上，
-`timaeus` 装备 scripted 2/10、`uncletian` 事件 8/10 已达成（`wagner` 仍 0/10，牌组无武器）。
-其余失分（`use_elemental_burst` 3–6/10、`trigger_elemental_reactions` 5/10、`win_within_rounds`
-约 30%）仍是真实画像；§3.2 的标定任务集需用修复后的 runner 重跑后再下结论。
+1. 先跑 `scripted` 免费基线（50 seeds/关）。
+2. 3–5 seeds 冒烟 `llm_empty` / `static` / `dynamic`，核查 prompt、库、loadout、预算字段。
+3. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。
+4. 摘要进 `reports/`（带 stage/seeds/n/group/library_version/model/date），
+   失败进 `docs/failures/`。
 
-## 3.3 四组 10-seed 结果（阶段性，640 局；effort=none）
+## 8. 历史
 
-> 本节是 t5b 之前的阶段性结果（commit `f79868f`，旧判定口径）；**当前状态**见 §3.7
-> （LLM 组待重跑），§3.6 是泄漏嫌疑的轮 1 结果。
-
-| 组 | 三星率 | 胜率 | 调用/局 | prompt tokens/局 | 缓存命中 | 成本/局 |
-|---|---|---|---|---|---|---|
-| scripted | **0.5625** | 0.944 | 0 | 0 | — | 0 |
-| contestant（参照） | **0.6250** | 0.950 | 0 | 0 | — | 0 |
-| llm_empty | **0.4938** | 0.963 | 27.1 | 13.7k | 2.5% | $0.0042 |
-| static（规则库） | **0.4813** | 0.938 | 25.4 | 32.2k | **66.3%** | $0.0038 |
-
-本节四组 run 都是旧判定；LLM 组数值待重跑，`timaeus`/`uncletian` 的逐关 0 不作行为证据。
-
-**结论 1：规则注入没有帮助，但被缓存吸收了成本。**
-static vs llm_empty 配对 Δ = **−0.012**，CI [−0.103,+0.078]（跨 0）。
-prompt tokens 变成 2.4×，但缓存命中率从 2.5% → 66.3%，单 token 成本降 2.6×，
-**每局成本基本不变**（$0.0038 vs $0.0042）。→ 「规则层」应当保留（它便宜、可解释），
-但**不能指望它提分**；提分要靠策略层。
-
-**结论 2：LLM 的强弱正好互补，指明了技能库的方向。**
-
-| 现象 | 关卡 | Δ(LLM−scripted) |
-|---|---|---|
-| LLM 更好（会按目标做事） | blanche +0.50、liusu +0.50、irontonguetian +0.30 | 目标型（爆发/回合） |
-| LLM 更差（对局质量弱） | patton −0.70、buyun −0.50、jifang −0.50、lan −0.30 | 节奏/骰子/反应 |
-
-**结论 3（已部分作废）：旧判定下 3 关对所有组都是 0%**（`timaeus` / `uncletian` / `wagner`）。
-其中 `timaeus` / `uncletian` 是 `record_decisions=False` 的测量假象，不是行为；修复后免费基线已能
-达成装备/事件目标。仍成立的是 `wagner`：`superconduct_aggro` 无武器牌，装备目标由牌组封死；
-其 2 回合上限也被列为可能标定过紧（P70=2），后续按 P80 复核。修复后不再按 19% 计算「三关全零」——
-只有 `wagner` 的 10/160 = 6.25% 是结构性的。
-
-## 3.4 成本标定（2026-10-30/31 实测）
-
-| group | $/局 | calls/局 | completion tokens/次 |
-|---|---:|---:|---:|
-| smoke2_static (effort=none) | 0.0038 | 25.4 | 15 |
-| smoke2_llm_empty (effort=none) | 0.0042 | 27.1 | 15 |
-| t5_static (effort=low) | 0.0400 | 25.5 | 1215 |
-| t5_llm_empty (effort=low) | 0.0374 | 24.7 | 1167 |
-
-- **当前配置**：对局 `reasoning_effort=none` + `max_tokens=64`（D10）；思考只用于技能提取/反思（`effort=high`, 8192）。
-- t5 于 **2026-10-31 因额度耗尽中止**：`static` 82/160 行、`llm_empty` 90/160 行；这两个部分 run **不可引用**（复盘见 [`failures/thinking-in-game-cost-blowup.md`](./failures/thinking-in-game-cost-blowup.md)）。
-- 当日日志总花费 **$7.93**，其中 t5 占 **$6.64**；按实测外推，全量 4 组 10 seeds（3 个 LLM 组）约 **$19**，50 seeds/关约 **$96**。
-- 最后可引用结果原为 §3.7 的三轮进化 + 转移测试（2026-11-02）；但 §3.3/§3.6/§3.7 的 LLM 组都由
-  旧判定 runner 产出，**修复后尚未重跑，LLM 组数值暂不可引用**。§3 的免费基线已按修复后的重放更新
-  （0.4250/0.4813）；§3.6 的 t5b 五组继续作泄漏嫌疑的轮 1 历史对照，§3.3 的 640 局仍是历史对照。
-
-## 3.5 吞吐：parked scheduler（可用，未规模化验证）
-
-`game.step()` 同步调用策略，一进程一局时墙钟主要耗在模型往返。`skillloop/parked.py` 在
-`action` 决策点快照引擎状态、丢弃当前 live game，把 prompt 交给线程池，答案到达后从快照恢复；
-一个进程可同时保持多局在飞，引擎仍单线程。入口：`scripts/run_parked.py`（行格式与 `skillloop.run` 相同）。
-
-**已离线证明**（可复跑）：
-
-- `PYTHONPATH=. "$PY" scripts/probe_resume.py --sweep` → `parked=30 identical=30/30`：
-  PvP 4 seeds × 3 occurrences + 3 关 × 2 seeds × 3 occurrences，parked+resumed 的终局 JSON 与不中断对局字节相同。
-- `tests/test_parked.py` 全绿；其中 `test_parked_rows_match_synchronous_runner` 在 2 关 × 2 seeds 上
-  用 stub client 对比 `skillloop.run.play_one` 与 `ParkedRunner`，行字段集合、决策/事件序列（按语义字段）一致。
-
-**硬限制**：只有 `action` 请求可 park（`PARKABLE_REQUESTS = ("action",)`）。`switch_hands` 恢复后终局不一致
-（`choose_active` 在样本内偶然一致，保守排除；`reroll_dice` / `select_card` 未验证），因此换牌 / 首发角色
-仍由 expert 回答。也正因如此，parked run 与普通 `skillloop.run` 的决策流不同，**不能直接按同一口径对比**；
-要对比需先把同步侧也限制为 `request_types=("action",)`（测试即如此构造）。
-
-**未验证**：parked 路径在真实 API 下的规模化吞吐与单位时间成本（429 退避继承 `common.llm`，未在该路径压测）；目前只有离线单测/探针证据。
-
-## 3.6 t5b：effort=none 的五组结果（2026-11-01，轮 1，泄漏嫌疑）
-
-**这是轮 1 的结果，保留作历史对照；因提取与评测共用 seeds 0–9，标为 leakage-suspect，
-不再是当前可引用结果。** §3.7 用演进链末端的 `dyn_v3` 做了留出测试；r1 的 `dyn_v1`
-本身没有单独做转移复现（明细、逐关表、复现命令：
-[`../reports/t5b_summary.md`](../reports/t5b_summary.md)）。
-**旧判定**：本节 run 为 `record_decisions=False`，`timaeus`/`uncletian` 的装备/事件目标恒为 false；
-三星率与逐关表待重跑。
-口径：16 关 × seeds **0–9** = 160 局/组，`top_k=5`，deck `superconduct_aggro`，
-engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
-一条命令 `bash data/run_t5b.sh` 跑完（16:32–17:04 UTC），`scripted`/`contestant` 复用 t5 链。
-
-| 组 | 三星率 | 胜率 | 成本/局 |
-|---|---:|---:|---:|
-| scripted | 0.3812 | 0.9437 | 0 |
-| contestant（参照） | 0.4062 | 0.9500 | 0 |
-| llm_empty | 0.3563 | 0.9625 | $0.0023 |
-| static（`static_v1`，v1，27 技能） | 0.3000 | 0.9437 | $0.0021 |
-| dynamic（`dyn_v1`，v2，42 技能） | **0.4250** | 0.9437 | $0.0024 |
-
-- **门禁（按关配对 t，6 对）**：只有 **static→dynamic 过线**（+0.1250，CI [+0.0075, +0.2425]）；
-  其余 5 对全跨 0 —— llm_empty→dynamic +0.0687 [−0.0507,+0.1882]、scripted→dynamic +0.0437、
-  scripted→static −0.0813、scripted→llm_empty −0.0250、scripted→contestant +0.0250 → 均不采纳。
-- **逐关**：最大涨幅 `ellin` 0.2→0.8、`chefmao` 0.2→0.7、`irontonguetian` 0.1→0.5、`liusu` 0.1→0.4；
-  下降只有 `marjorie` 0.7→0.5、`swan` 1.0→0.9。`blanche`/`timaeus`/`uncletian`/`wagner` 五组全 0。
-- **库**：`data/skills/dyn_v1` = v2，42 条（17 rule + 25 strategy），父库 `static_v1`，
-  `source_rows=data/runs/t5b_static.jsonl`，本轮新增 15 条全部 `[strategy]`、按关卡命名。
-- **成本**：三个 LLM 组 $1.0890；提取一次 14 次调用 $0.0105。
-
-> **泄漏嫌疑（未解决，勿删）**：`dyn_v1` 的 15 条候选技能是从 `data/runs/t5b_static.jsonl` 提取的，
-> 而这个 run 用的就是 seeds 0–9 —— 与 dynamic 组随后评测的 10 个种子完全相同。
-> `scripts/extract_skills.py` 的设计口径是「在 run A 上提取 → 在未见过的种子上做门禁」，
-> 本链路没有留出种子：提取时模型已经看到这 160 局里哪些关卡失败、失败在哪类目标上。
-> 因此 static→dynamic 的 **+0.1250（CI [+0.0075, +0.2425]，accept=True）在 seeds 10–19 的
-> 留出门禁复现之前一律标为 leakage-suspect**，不能作为「技能库提分」的证据。
-> **2026-11-02 更新**：演进链末端的 `dyn_v3` 已在 seeds 10–19 上做了转移测试（§3.7），
-> static→dynamic 只有 +0.0625（CI [−0.0220,+0.1470]，accept=False）；`dyn_v1` 本身仍未单独复现，
-> 因此本节继续标 leakage-suspect，仅作轮 1 历史对照。
-
-**后续（2026-11-02，已完成）**：冻结演进链末端的 `dyn_v3`，在 **seeds 10–19** 上重跑
-static / dynamic / llm_empty；结果见 §3.7，static→dynamic 的 CI 仍跨 0。t5 的 effort=low
-部分 run（§3.4）仍**不可引用**。
-
-## 3.7 三轮进化 + 转移测试（2026-11-02）
-
-**阶段性主结果（LLM 组待重跑）**（明细、六行门禁、逐关表、成本：
-[`../reports/evo_summary.md`](../reports/evo_summary.md)）。
-**注意**：表中 LLM 组仍由旧判定 runner 产出；2026-11-02 修复后尚未重跑，数值暂不可引用；
-免费基线已更新为 0.4250/0.4813。
-口径：16 关 × seeds **0–9**（训练）/ **10–19**（留出），`top_k=5`，deck `superconduct_aggro`，
-engine lock `fa42fdfec70b` / hp_table `0bbae5d8798a`，`deepseek-v4.1-flash`（temperature 0，对局 effort=none）；
-`bash data/run_evo.sh`，2026-11-02 04:10–04:55 UTC，44m51s。
-
-| 组 | 库 | seeds 0–9 | seeds 10–19 |
-|---|---|---:|---:|
-| static | `static_v1`（v1，27） | 0.3000 | 0.3250 |
-| llm_empty | 空库 | 0.3563 | 0.3688 |
-| dyn_v1 | `dyn_v1`（v2，42） | 0.4250 | — |
-| dyn_v2 | `dyn_v2`（v3，42） | **0.4437** | — |
-| dyn_v3 | `dyn_v3`（v4，44） | 0.4250 | **0.3875** |
-
-（表内为三星率，每组 160 局。转移胜率：static 0.9750 / llm_empty 0.9875 / dyn_v3 0.9812。）
-
-> **一句话判决（旧判定口径）**：训练集 +0.1250 显著（static→dyn_v3，CI [+0.0176,+0.2324]，accept=True），
-> 转移到 seeds 10–19 只有 +0.0625（CI [−0.0220,+0.1470]，accept=False）→ **尚未成立**。
-> 判定修复后需重跑整条链再确认。
-
-1. **训练增益没有在留出集上复现。** +0.1250 → +0.0625，正好一半；CI 跨 0。方向仍正，
-   `timmie`/`patton`/`ellin`/`shitou` 等带额外目标项的关卡在涨，但按 `EVAL_PROTOCOL` §4
-   不算证据。相对空库只有 +0.0188（CI [−0.0750,+0.1125]），所以相对 static 的提升主要是
-   把 static 的负作用抹平。
-2. **多轮不单调。** dyn_v2 0.4437 见顶，dyn_v3 在**同一批 seeds 0–9** 回落到 0.4250
-   （−0.0188，n.s.）。轮 3 库 42→44、`top_k=5`；160 局只引用 44 条中的 16 条，
-   `1_chefmao` 占 128/640 次引用，`skill_lan`/`skill_wagner` 一次未被引用——检索被挤占的迹象，
-   不是因果证明。
-3. **手写静态库净负在两个种子集上复现。** 训练 0.3000 < 空库 0.3563，留出 0.3250 < 0.3688；
-   方向一致，两段差异的 CI 都跨 0，所以是方向性发现而非显著结论。后续提分应以 `llm_empty` 为基线，
-   不要拿 static 当基线。
-
-**门禁**（六行，完整表见报告）：训练 dyn_v1→dyn_v2 +0.0188 n.s.、dyn_v2→dyn_v3 −0.0188 n.s.、
-static→dyn_v3 +0.1250 accept；转移 static→dyn_v3 +0.0625 n.s.、llm_empty→dyn_v3 +0.0188 n.s.、
-llm_empty→static −0.0437 n.s.。
-
-**成本**：五个新 run $1.717253 + 两次提取 $0.0181 = **$1.7354**（800 局；不含 r1 的 $1.0995）。
-
-**下一步**：① 增加留出种子数（10 seeds/关的 CI 宽约 0.17，功效不够；按 50 seeds/关口径复测）；
-② 把「提取 → 门禁 → 晋级」拆开，未过线的库只进档案，不要每轮无条件接受提取（r2→r3 训练集
-已是负的）；③ 以 `llm_empty` 为基线，不以 static 为基线。
-
-## 4. LLM 接入（2026-10-30 实测）
-
-**思考档位分工（D10）**：对局决策 `reasoning_effort=none` + `max_tokens=64`（实测约 15 completion tokens/次）；
-技能提取/反思 `effort=high` + `max_tokens=8192`（每轮只跑一次，值得用贵档）。
-t5 的 `low` 档实测 1215 tokens/次、$0.04/局，成本 10× 且无质量证据，已暂时回退。
-
-| 项 | 值 |
-|---|---|
-| 端点 | `https://opencode.ai/inference/go/openai/v1`（OpenAI 兼容） |
-| 模型 | `deepseek-v4.1-flash`（1M 上下文；本仓库实测 2.6–4.9 s/次） |
-| 认证 | `Authorization: Bearer $SKKEY` + **`x-opencode-session`（必填）** + 自定义 `User-Agent` |
-| 对局思考 | `reasoning_effort="none"` + `max_tokens=64`（D10；开启思考时小 `max_tokens` 会返回空串） |
-| 缓存 | 短 prompt（~170 tokens）实测 **0%** 命中；长前缀（>4k）才命中 |
-| 成本 | 对局 `none` 实测 **$0.0038–0.0042/局**；`low` 实测 **$0.0374–0.0400/局**（约 10×）；见 §3.4 |
-| 并发 | 128 并发实测全绿；256 起出现 429（有 `Retry-After`） |
-
-`common/llm.py` 已改为：读 `SKKEY`、发 session/UA 头、空内容判失败、429 按 `Retry-After` 重试、
-usage 记录 `cached_tokens` 与 `cost_usd`。探针：`python -m scripts.probe_llm`。
-
-## 5. 已知风险
-
-1. **任务集小**：16 关，留出泛化只有 6 关；靠「50 seeds/关 + 按关配对」提升功效。
-2. **与上游共享机器**：本机 6C/12T，实验限 6–8 worker，`OMP_NUM_THREADS=1`。
-3. **llm 成本口径**：缓存命中价差 50×，prompt 必须「稳定前缀 + 动态尾」。
-4. **关卡数据**：`swan` 只有 `win` 一个目标（三星恒真）、`shitou` 的 `win_within_rounds(44)` 疑似错误，待修。
-5. **LLM 成本随配置跳变**：对局思考 `low` 实测 $0.04/局（10×），并发还会放大烧钱速率；
-   任何调模型的 run 必须走 `EVAL_PROTOCOL.md §6` 的门禁（见 `docs/failures/thinking-in-game-cost-blowup.md`）。
+- 历史结果：[`../reports/`](../reports/)（`t5b_summary.md`、`evo_summary.md`、
+  `compare/`、`calibration/`、`deck_matrix.md`、`era_decks.md` 等）。
+- 负结果：[`failures/`](./failures/)。
+- 旧数字仅作留档，STATUS 不再列出。

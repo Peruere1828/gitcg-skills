@@ -135,3 +135,7 @@ def test_rules_layer_is_injected_separately_from_retrieval():
     assert all(skill.layer != "rule" for skill in lib.retrieve("速攻 装备", {"stage": "wagner"}, k=5))
     # but asking for rules explicitly still works
     assert lib.retrieve("骰子", {}, k=3, layers=("rule",))
+
+    # a pinned rule can be excluded from the always-on block (no duplicate prompt)
+    trimmed = lib.rules_text(exclude_ids={"rule_dice"})
+    assert "rule_dice" not in trimmed and "rule_burst" in trimmed

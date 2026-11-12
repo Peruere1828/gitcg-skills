@@ -9,7 +9,7 @@
 ## 0. 硬约束
 
 1. **密钥不入库**：`.env` 已 gitignore；日志/prompt/报告里不得出现 key（只允许出现模型名与 base_url）。
-2. **可复现**：每局记录 `stage/seed/deck/group/library_version/model/prompt_hash`，LLM 用 `temperature=0`，保证同种子配对。
+2. **可复现**：每局记录 `stage/seed/deck/group/library_root/library_version/model/prompt_hash`，LLM 用 `temperature=0`，保证同种子配对。
 3. **上游目录不加业务逻辑**：`envs/ reps/ npc/ coach/ agents/ eval/ common/ web/` 是从上游快照来的环境层，
    我们的功能写进 `skillloop/`；必须改环境层时，在 `docs/PROVENANCE.md` §3 登记。
 4. **技能入库要有证据**：由 `skillloop/gate.py` 的配对 A/B 决定，不接受「LLM 觉得好」。
@@ -51,7 +51,11 @@ cd "$REPO"
 
 - `envs/match.py` 在 Python 侧按种子预洗牌并设 `NO_SHUFFLE=1`；每局开始 `reset_default_hierarchical_action_codebook()`。
 - policy spec：脚本走 `envs.policy.build_policy`（`expert:<slug>` / `heuristic` / `legal_random` / `random`）；
-  LLM 技能智能体走 web 桥的 `--policy llm:<none|llm_empty|static|dynamic>`（`dynamic` 取 `built_at` 最新的进化库）。
+  LLM 技能智能体走 `--policy llm:<none|llm_empty|static|dynamic>`：
+  `none`/`llm_empty` = LLM + **仅游戏规则**（`data/skills/rules_v1`，17 rule），
+  `static` = 规则 + 静态策略（`data/skills/static_v1`，17+10），
+  `dynamic` = 规则 + 动态策略（`data/skills/dyn_v4`，17+23）。
+  `--library` 只能覆盖 static/dynamic；`--loadout` 只对 static/dynamic 生效。
 - 网页调试：`bash scripts/serve_web_demo.sh`；人类执 NPC、AI 执参赛者，策略/提示词/库/候选必须与 `skillloop.run.build_policy` 完全一致；监控用 `GET /ai-decisions`。
 - 关卡/敌人数据权威在 `configs/npc/`；血量补丁用 `scripts/patch_npc_hp.py`（规则与审计见 `configs/npc/hp_table.json`）。
 - `gitcg 0.21.0`：`ActionRequest.action` 是候选列表；`ActionResponse(chosen_action_index=..., used_dice=[...])`；

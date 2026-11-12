@@ -85,7 +85,7 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 |---|---|---|
 | `PORT` | `7001` | 前端端口 |
 | `BRIDGE_PORT` | `8770` | Python 桥端口（仅本机，经前端反代） |
-| `POLICY` | `llm:dynamic` | AI 座位策略 spec（也可 `llm:none`/`llm:static` 等） |
+| `POLICY` | `llm:dynamic` | AI 座位策略 spec（也可 `llm:none`/`llm:llm_empty`/`llm:static`） |
 | `SEED` | `20261112` | 策略种子 |
 | `CONDA_ENV` | `gitcg-skill` | Python 环境 |
 | `STAGE_DECKS` | `configs/stage_decks.json` | 关卡 → 牌组映射 |
@@ -99,3 +99,16 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 - `engine-overlay/overlay/packages/standalone/src/AiDecisionPanel.tsx`：AI 决策监控
 - `engine-overlay/overlay/packages/standalone/src/stage-rules.ts`：关卡规则映射
 - `web/ai_rpc_server.py`：后端桥（策略由 `skillloop.run.build_policy` 决定）
+
+## 7. LLM 策略与技能库
+
+四个库选择与离线评测的四组严格对应：
+
+| `llm:<选择>` | 实际库 | 含义 |
+|---|---|---|
+| `none` / `llm_empty` | `data/skills/rules_v1`（17 rule） | **仅游戏规则**，不含 strategy/stage_specific，也不用 loadout |
+| `static` | `data/skills/static_v1`（17 rule + 10 strategy） | 游戏规则 + 静态策略；可用 loadout |
+| `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | 游戏规则 + 动态策略；可用 loadout |
+
+主流程不暴露库选择；`GET /ai` 的 `library` 会报告实际解析到的库（`llm_empty`
+报告 `rules_v1`，17 条规则）。

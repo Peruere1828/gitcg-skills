@@ -27,10 +27,10 @@
 
 | 组 | 技能库 | 说明 |
 |---|---|---|
-| ① 脚本 | 无 | 手写规则/启发式（对照组，无 LLM） |
-| ②′ LLM-空库 | 空 | 同一条 LLM 智能体，但不给任何技能（隔离「LLM 本身」的贡献） |
-| ② 静态 | **只有游戏规则**（卡牌/技能/骰子/反应/关卡目标） | 懂规则、不懂策略 |
-| ③ 动态 | 从 ② 起步，自主扩展/合并/淘汰 | 课程核心 |
+| ① 脚本 `scripted` | 无 | 手写规则/启发式（对照组，无 LLM） |
+| ②′ `llm_empty` | `data/skills/rules_v1`（17 条 rule） | 同一条 LLM 智能体 + **仅游戏规则**；不含任何 strategy/stage_specific，不用 loadout |
+| ② 静态 `static` | `data/skills/static_v1`（17 rule + 10 strategy） | 游戏规则 + 手写静态策略；可用 `reports/loadouts/v1` |
+| ③ 动态 `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | 从 ② 起步，自主扩展/合并/淘汰；可用 `reports/loadouts/v4` |
 
 指标：**三星率**（主）、逐目标达成率、每局 LLM 调用数/token；按关配对比较，50 seeds/关。
 

@@ -134,9 +134,18 @@ class SkillLibrary:
     def active(self) -> list[Skill]:
         return [skill for skill in self if skill.status == "active"]
 
-    def rules_text(self) -> str:
-        """The always-on rules layer, as a stable (sorted) prompt block."""
-        rules = [skill for skill in self.active() if skill.layer == "rule"]
+    def rules_text(self, *, exclude_ids: Iterable[str] = ()) -> str:
+        """The always-on rules layer, as a stable (sorted) prompt block.
+
+        ``exclude_ids`` drops rule skills that are already injected elsewhere (e.g.
+        a frozen loadout pins ``rule_burst``: it stays in the pinned block, so the
+        same block must not appear a second time under the rules note).
+        """
+        excluded = set(exclude_ids)
+        rules = [
+            skill for skill in self.active()
+            if skill.layer == "rule" and skill.skill_id not in excluded
+        ]
         return "\n".join(skill.prompt_block() for skill in sorted(rules, key=lambda s: s.skill_id))
 
     def by_layer(self) -> dict[str, int]:

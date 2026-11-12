@@ -246,6 +246,34 @@ def test_pinned_skills_replace_retrieval_and_keep_order():
     assert system.index("beta") < system.index("alpha")   # prompt order == pinned order
 
 
+def test_pinned_rule_is_not_duplicated_and_remains_citable():
+    """A loadout may pin rule-layer skills (e.g. ``rule_burst``).
+
+    The pinned block keeps it for citation accounting, but the always-on rules note
+    must not inject the same block a second time.
+    """
+    lib = SkillLibrary.from_skills([
+        Skill(
+            skill_id="rule_burst", skill_name="元素爆发", description="爆发需要能量",
+            layer="rule",
+        ),
+        Skill(
+            skill_id="strat_burst", skill_name="爆发时机", description="留骰子给爆发",
+            layer="strategy",
+        ),
+    ])
+    client = _FakeClient('{"choice": 0, "used": ["rule_burst", "strat_burst"]}')
+    agent = _agent(
+        client, library=lib, pinned_skills=("rule_burst", "strat_burst"),
+    )
+    agent.choose(_built(3))
+
+    system = client.calls[0][0]["content"]
+    assert system.count("- [rule_burst]") == 1
+    assert system.count("- [strat_burst]") == 1
+    assert agent.decisions[-1].used == ("rule_burst", "strat_burst")
+
+
 def test_pinned_skills_do_not_change_across_decisions():
     lib = SkillLibrary.from_skills([
         Skill(skill_id="alpha", skill_name="甲", description="第一"),

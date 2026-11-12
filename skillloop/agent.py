@@ -150,7 +150,13 @@ class SkillAgentPolicy:
                         self.task.describe(), self._context_dict(context), k=self.config.top_k
                     )
             if self.library is not None and not self.rules_note:
-                self.rules_note = self.library.rules_text()
+                # A frozen loadout may pin rule-layer skills (e.g. ``rule_burst``).
+                # They stay in the pinned block for citation accounting, but must not
+                # be repeated by the always-on rules note.
+                pinned_rule_ids = {
+                    skill.skill_id for skill in self._skills if skill.layer == "rule"
+                }
+                self.rules_note = self.library.rules_text(exclude_ids=pinned_rule_ids)
             self._system = self.renderer.system_message(
                 task=self.task, skills=self._skills, rules_note=self.rules_note
             )

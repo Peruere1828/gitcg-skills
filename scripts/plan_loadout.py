@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Plan and save the per-(stage, library version) skill loadouts.
 
-One model call per stage (temperature 0), frozen for every seed of that stage::
+One model call per stage (temperature 0), frozen for every seed of that stage.
+Loadouts are only used by the static/dynamic groups::
 
-    python -m scripts.plan_loadout --library data/skills/dyn_v3 \\
-        --out reports/loadouts --stages all --client real
+    # static group -> reports/loadouts/v1
+    python -m scripts.plan_loadout --library data/skills/static_v1 \\
+        --out reports/loadouts/v1 --stages all --client real
+
+    # dynamic group -> reports/loadouts/v4
+    python -m scripts.plan_loadout --library data/skills/dyn_v4 \\
+        --out reports/loadouts/v4 --stages all --client real
 
 ``--client stub`` never builds a network client; it answers with the library's
 BM25 top-k so the full parse/validate/save path can be exercised offline.
+``llm_empty``/``scripted``/``contestant`` do not use loadouts.
 """
 
 from __future__ import annotations
@@ -51,7 +58,14 @@ def _stub_client(library: SkillLibrary, stage, deck: str, max_skills: int) -> Mo
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--library", default="data/skills/dyn_v3")
+    parser.add_argument(
+        "--library", default="data/skills/dyn_v4",
+        help=(
+            "library whose version the loadout is frozen against "
+            "(static: data/skills/static_v1; dynamic: data/skills/dyn_v4); "
+            "loadouts are only used by static/dynamic"
+        ),
+    )
     parser.add_argument("--out", default="reports/loadouts")
     parser.add_argument("--stages", default="all", help="'all' or comma-separated stage names")
     parser.add_argument("--client", choices=("real", "stub"), default="stub")

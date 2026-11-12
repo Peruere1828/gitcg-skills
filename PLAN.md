@@ -85,12 +85,18 @@ task = (stage, deck, seed)
 
 ## 5. 实验
 
-| # | 组 | 内容 |
-|---|---|---|
-| ① | 脚本 | `expert:<deck>`（无目标注入）；参照天花板：`npc/contestant.py`（历史 74.7%） |
-| ②′ | LLM 空库 | 同一智能体，无技能 |
-| ② | 静态规则 | 只有游戏规则库（由 `data/assets/*.json` 自动生成），不更新 |
-| ③ | 动态 | 从 ② 起步，自演化 |
+四组的**唯一变量是技能库**；LLM 组使用同一智能体、同一提示词骨架、同一候选顺序。
+
+| # | 组名 | 技能库 | 内容 |
+|---|---|---|---|
+| ① | `scripted` | 无 | `expert:<deck>`（无目标注入，无 LLM）；参照天花板：`npc/contestant.py`（历史 74.7%） |
+| ②′ | `llm_empty` | `data/skills/rules_v1`（17 条 rule） | LLM + **仅游戏规则**；不加载 strategy/stage_specific，不用 loadout |
+| ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v1` |
+| ③ | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
+
+> `llm_empty` 不是「无提示词」：规则层始终注入，用于隔离「LLM + 规则」与
+> 「LLM + 规则 + 策略」的差别。`--library` 只能覆盖 static/dynamic；
+> `--loadout` 只对 static/dynamic 生效。
 
 **因子实验（≥3 个）**：更新门控（每局/每 20 局/配对门控）、检索 top-k（1/3/5/8）、
 技能表示（自然语言 / 结构化 JSON / 两者）、泛化（留出 6 关）。

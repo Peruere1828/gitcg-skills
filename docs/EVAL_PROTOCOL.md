@@ -11,6 +11,15 @@
 | `g` | 实验组：`scripted` / `llm_empty` / `static` / `dynamic` |
 | `x` | 一局的三星（1/0）；`objectives` 记录逐目标达成 |
 
+四组只允许技能库不同；库/loadout 的缺省与覆盖规则：
+
+| 组 | 库 | 推荐 loadout（需显式 `--loadout`） | `--library` 覆盖 |
+|---|---|---|---|
+| `scripted` | 无（无 LLM） | 不适用 | 不适用 |
+| `llm_empty` | `data/skills/rules_v1`（17 rule，仅游戏规则） | 不加载 | 忽略 |
+| `static` | `data/skills/static_v1`（17 rule + 10 strategy） | `reports/loadouts/v1` | 允许 |
+| `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | `reports/loadouts/v4` | 允许 |
+
 一局 **有效** 的条件：`error == 0` 且 `truncated == 0`；无效局不计入分母，但必须报数量。
 
 ## 2. 主指标
@@ -64,7 +73,9 @@
 
 ## 5. 可复现
 
-- 每局记录 `stage / seed / deck / group / library_version / model / prompt_hash`；
+- 每局记录 `stage / seed / deck / group / library_root / library_version / model / prompt_hash`；
+- run 元数据指纹里 `stages` 是关卡列表，关卡文件哈希在 `stages_file_sha1`；
+  指纹使用**实际解析后的库根**（`llm_empty` 也会记录 `data/skills/rules_v1`）；
 - 原始逐局 JSONL 落 `data/`（gitignore），聚合摘要落 `reports/`（入库）；
 - LLM 温度 0；但本端点实测 `temperature=0` **不是字节级可复现**（只降低采样方差）。复现以 50 seeds 的统计而非单局复现为准。
 
@@ -74,8 +85,9 @@
 
 1. **小样本标定**：跑 1 关 × 1 种子（或 ≥20 次决策），测出 `completion_tokens/次`、`calls/局`、`$/局`；
 2. **外推**：用已有 run 的逐局 JSONL 算出全量成本（无需联网/引擎）：
-   `"$PY" -m scripts.estimate_cost --rows data/runs/smoke2_static.jsonl --per-stage-seeds 50 --stages 16`
-   （或 `--games N`）；输出实测 `$/局`、`calls/局`、`completion tokens/次` 与 projected total；
+   `"$PY" -m scripts.estimate_cost --rows data/runs/llm_empty.jsonl --per-stage-seeds 50 --stages 16`
+   （`scripts/run_all_groups.sh` 的四组输出为 `data/runs/<group>.jsonl`；也可用 `--games N`）；
+   输出实测 `$/局`、`calls/局`、`completion tokens/次` 与 projected total；
 3. **设上限**：写明本次预算上限并在运行环境设 `GITCG_LLM_BUDGET_USD`，由运行器在启动新局前检查累计 `cost_usd`（D11；普通 `skillloop.run` 与 `scripts/run_parked` 共用同一守卫）。
    触顶只停止启动新局，已在飞的局会跑完；因此超额最多是当时在飞局（含刚越过阈值的那一局）的成本，不随网格规模放大；
 4. **写口径**：把 `completion_tokens/次`、`$/局`、预算上限三项写进该 run 的 meta 与报告。

@@ -27,6 +27,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1372,12 +1373,14 @@ def test_parse_llm_spec():
 
 
 def test_resolve_llm_library_choices():
-    assert srv.resolve_llm_library("none") is None
-
-    empty = srv.resolve_llm_library("llm_empty")
-    assert empty["resolved"] == "llm_empty"
-    assert empty["version"] == 0 and empty["skills"] == 0
-    assert empty["kind"] == "llm_empty" and empty["path"] is None
+    # none / llm_empty 都是「LLM + 仅游戏规则」，固定 rules_v1（17 rule）。
+    for selection in ("none", "llm_empty"):
+        empty = srv.resolve_llm_library(selection)
+        assert empty["selection"] == selection
+        assert empty["resolved"] == "rules_v1"
+        assert empty["version"] == 1 and empty["skills"] == 17
+        assert empty["kind"] == "rules"
+        assert empty["path"] == os.path.join("data", "skills", "rules_v1")
 
     static = srv.resolve_llm_library("static")
     assert static["resolved"] == "static_v1"
@@ -1385,8 +1388,8 @@ def test_resolve_llm_library_choices():
     assert static["version"] == 1 and static["skills"] == 27
     assert static["path"] == os.path.join("data", "skills", "static_v1")
 
-    # dynamic 必须按 built_at 选，而不是目录名/version：dyn_v4 的 version 是 2，
-    # 但它是 evolved 库里最新的一个。
+    # dynamic 固定优先 dyn_v4（与 skillloop.run 的默认库一致）；dyn_v4 的
+    # version 是 2，若按目录/version 猜会选错。
     dynamic = srv.resolve_llm_library("dynamic")
     assert dynamic["resolved"] == "dyn_v4"
     assert dynamic["kind"] == "evolved"
@@ -1398,6 +1401,8 @@ def test_llm_library_options_always_list_four():
     options = srv.llm_library_options()
     assert [o["value"] for o in options] == ["none", "llm_empty", "static", "dynamic"]
     labels = {o["value"]: o["label"] for o in options}
+    assert "仅游戏规则" in labels["none"]
+    assert "仅游戏规则" in labels["llm_empty"]
     assert "static_v1" in labels["static"] and "27" in labels["static"]
     assert "dyn_v4" in labels["dynamic"] and "40" in labels["dynamic"]
 
@@ -1491,6 +1496,22 @@ def test_ai_endpoint_reports_llm_and_options(monkeypatch):
         assert [o["value"] for o in out["options"]] == [
             "none", "llm_empty", "static", "dynamic"
         ]
+    finally:
+        server.close()
+
+
+def test_ai_endpoint_llm_empty_reports_17_rules(monkeypatch):
+    server = _llm_server(
+        monkeypatch, available=True, base="llm:llm_empty", choice="llm_empty"
+    )
+    try:
+        status, out = server.request("GET", "/ai")
+        assert status == 200
+        assert out["group"] == "llm_empty"
+        assert out["library"]["resolved"] == "rules_v1"
+        assert out["library"]["skills"] == 17
+        assert out["library"]["version"] == 1
+        assert out["library_root"] and out["library_root"].endswith("rules_v1")
     finally:
         server.close()
 
@@ -1695,6 +1716,9 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
         "strat_burst_timing",
         "strat_focus_fire",
     )
+    # pinned rule_burst 仍在 pinned 块里，但规则说明不再重复注入。
+    system = agent._system_message(SimpleNamespace(player_view=None))["content"]
+    assert system.count("- [rule_burst]") == 1
 
 
 def test_none_and_llm_empty_map_to_llm_empty_group():
@@ -1712,8 +1736,14 @@ def test_none_and_llm_empty_map_to_llm_empty_group():
         )
         agent = policy._ensure_policy()
         assert policy.group == "llm_empty"
-        assert agent.library is None
-        assert policy.library_root is None
+        # 不再是无库：LLM + 仅游戏规则（rules_v1，17 rule）；不用 loadout。
+        assert agent.library is not None
+        assert agent.library.by_layer() == {
+            "rule": 17, "strategy": 0, "stage_specific": 0,
+        }
+        assert policy.library_root and policy.library_root.endswith("rules_v1")
+        assert agent.config.pinned_skills == ()
+        assert policy.library_info["resolved"] == "rules_v1"
 
 
 def test_npc_decks_have_eval_protocol():

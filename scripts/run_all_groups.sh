@@ -4,42 +4,78 @@
 #
 # Usage:
 #   bash scripts/run_all_groups.sh 50 8                 # full scale, 8 workers
-#   GROUPS="scripted contestant" bash scripts/run_all_groups.sh 10 8
+#   EVAL_GROUPS="scripted contestant" bash scripts/run_all_groups.sh 10 8
 #
-# Groups:
-#   scripted    plain scripted expert (no objective awareness)      -- no LLM
-#   contestant  hand-written objective-aware policy (reference)     -- no LLM
-#   llm_empty   the same LLM agent with an empty skill library
-#   static      LLM agent + rules-only library (data/skills/rules_v1)
-#   dynamic     LLM agent + evolved library (pass --library via LIB env)
+# NOTE: the selection variable is EVAL_GROUPS, not GROUPS: bash reserves GROUPS
+# for the process group-id array.
+#
+# Groups (the only experimental variable is the skill library):
+#   scripted    plain scripted expert (no objective awareness)      -- no LLM, no library
+#   contestant  hand-written objective-aware policy (reference)     -- no LLM, no library
+#   llm_empty   LLM + game rules only (data/skills/rules_v1, 17 rule;
+#               no strategy/stage_specific, no loadout)             -- no --library
+#   static      LLM + rules + hand-written static strategies
+#               (data/skills/static_v1, 17+10) + reports/loadouts/v1
+#   dynamic     LLM + rules + evolved strategies
+#               (data/skills/dyn_v4, 17+23) + reports/loadouts/v4
+#
+# `contestant` is a reference arm, not one of the four groups.
+# static/dynamic may override their library with STATIC_LIB / DYNAMIC_LIB and
+# their frozen loadout with STATIC_LOADOUT / DYNAMIC_LOADOUT.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PY="${PY:-/home/ubuntuaaa/miniconda3/envs/gitcg-skill/bin/python}"
 SEEDS="${1:-50}"
 WORKERS="${2:-8}"
-GROUPS="${GROUPS:-scripted contestant llm_empty static dynamic}"
-STATIC_LIB="${STATIC_LIB:-data/skills/rules_v1}"
-DYNAMIC_LIB="${DYNAMIC_LIB:-data/skills/dynamic_v1}"
+EVAL_GROUPS="${EVAL_GROUPS:-scripted contestant llm_empty static dynamic}"
+STATIC_LIB="${STATIC_LIB:-data/skills/static_v1}"
+DYNAMIC_LIB="${DYNAMIC_LIB:-data/skills/dyn_v4}"
+STATIC_LOADOUT="${STATIC_LOADOUT:-reports/loadouts/v1}"
+DYNAMIC_LOADOUT="${DYNAMIC_LOADOUT:-reports/loadouts/v4}"
 DECK="${DECK:-superconduct_aggro}"
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 
-started=$(date -Is)
-echo "=== $started groups='$GROUPS' seeds=$SEEDS workers=$WORKERS deck=$DECK"
+# Same evaluation protocol for every group (era decks + stage special rules).
+common=(
+  --stages all --seeds "$SEEDS" --workers "$WORKERS" --deck "$DECK"
+  --stage-decks configs/stage_decks.json
+  --card-version v3.3.0
+  --stage-rules
+)
 
-for group in $GROUPS; do
-  lib=""
+needs_llm=0
+for group in $EVAL_GROUPS; do
   case "$group" in
-    static)  lib="--library $STATIC_LIB" ;;
-    dynamic) lib="--library $DYNAMIC_LIB" ;;
+    llm_empty|static|dynamic) needs_llm=1 ;;
   esac
-  echo "=== $(date -Is) group=$group ${lib:+($lib)}"
-  "$PY" -m skillloop.run --group "$group" --stages all --seeds "$SEEDS" \
-    --workers "$WORKERS" --deck "$DECK" $lib \
+done
+if [ "$needs_llm" = 1 ] && [ -z "${GITCG_LLM_BUDGET_USD:-}" ]; then
+  echo "=== WARNING: GITCG_LLM_BUDGET_USD is not set; the D11 hard budget guard is off for LLM groups" >&2
+fi
+
+started=$(date -Is)
+echo "=== $started groups='$EVAL_GROUPS' seeds=$SEEDS workers=$WORKERS deck=$DECK"
+
+for group in $EVAL_GROUPS; do
+  extra=()
+  case "$group" in
+    static)
+      extra=(--library "$STATIC_LIB" --loadout "$STATIC_LOADOUT")
+      ;;
+    dynamic)
+      extra=(--library "$DYNAMIC_LIB" --loadout "$DYNAMIC_LOADOUT")
+      ;;
+    llm_empty)
+      # Fixed to data/skills/rules_v1 by the runner; never pass --library/--loadout.
+      ;;
+  esac
+  echo "=== $(date -Is) group=$group ${extra[*]:-}"
+  "$PY" -m skillloop.run --group "$group" "${common[@]}" "${extra[@]}" \
     --out "data/runs/${group}.jsonl"
 done
 
 echo "=== $(date -Is) paired comparisons (baseline = scripted)"
-for group in $GROUPS; do
+for group in $EVAL_GROUPS; do
   [ "$group" = "scripted" ] && continue
   "$PY" -m scripts.compare_groups --a data/runs/scripted.jsonl \
     --b "data/runs/${group}.jsonl" --label-a scripted --label-b "$group" \

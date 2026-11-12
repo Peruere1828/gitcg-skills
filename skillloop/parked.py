@@ -86,6 +86,7 @@ from skillloop.run import (
     _stage_decks_for_spec,
     budget_exhausted,
     budget_from_env,
+    resolved_library_root,
     summarize,
     task_spec,
 )
@@ -158,7 +159,14 @@ class ParkablePolicy:
                         "round": int(context.player_view.round_number) if context.player_view else None,
                     }
                     self.skills = self.library.retrieve(self.task.describe(), ctx, k=self.config.top_k)
-            rules = self.library.rules_text() if self.library is not None else ""
+            pinned_rule_ids = {
+                skill.skill_id for skill in self.skills if skill.layer == "rule"
+            }
+            rules = (
+                self.library.rules_text(exclude_ids=pinned_rule_ids)
+                if self.library is not None
+                else ""
+            )
             self.system = self.renderer.system_message(task=self.task, skills=self.skills, rules_note=rules)
             self.system_hash = hashlib.sha1(self.system["content"].encode("utf-8")).hexdigest()[:12]
         return self.system
@@ -294,11 +302,12 @@ class ParkedRunner:
         self.client = None if client is _CLIENT_UNSET else client
         # The library is immutable during a run: load it once, not per segment and
         # definitely not per row (the row used to re-read it from disk).
-        self.library: SkillLibrary | None = None
-        if spec.group in ("static", "dynamic"):
-            if not spec.library_root:
-                raise ValueError(f"group {spec.group!r} needs a library_root")
-            self.library = SkillLibrary.load(spec.library_root)
+        # ``llm_empty`` resolves to rules_v1 (LLM + game rules only); static/dynamic
+        # use their defaults or an explicit ``--library`` override.
+        self.library_root = resolved_library_root(spec)
+        self.library: SkillLibrary | None = (
+            SkillLibrary.load(self.library_root) if self.library_root else None
+        )
         self.library_version = self.library.version if self.library is not None else 0
         # Fixed stage deck + frozen loadouts, resolved once (same contract as run.py).
         self.stage_decks = _stage_decks_for_spec(spec)
@@ -608,6 +617,7 @@ class ParkedRunner:
             "group": self.spec.group,
             "stage_rules": bool(self.spec.stage_rules),
             "model": self.spec.model,
+            "library_root": self.library_root,
             "library_version": self.library_version,
             "skill_loadout_hash": (
                 self.loadouts[task.stage.name].fingerprint()

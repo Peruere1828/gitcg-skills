@@ -13,6 +13,7 @@ import common.llm
 import skillloop.run as run_module
 from npc.spec import get_stage
 from reps.schema import DeckSpec
+from skillloop.agent import SkillAgentPolicy
 from skillloop.library import SkillLibrary
 from skillloop.loadout import Loadout, engine_lock_hash, save_loadout
 from skillloop.run import (
@@ -24,6 +25,19 @@ from skillloop.run import (
     summarize,
 )
 from skillloop.schema import Skill
+
+
+class _FakeLLMClient:
+    """Offline stand-in for ``common.llm`` clients (no network call)."""
+
+    def __init__(self, reply: str = '{"choice": 0, "used": []}') -> None:
+        self.reply = reply
+        self.calls: list[list[dict[str, str]]] = []
+        self.usage = None
+
+    def chat(self, messages, **kwargs) -> str:
+        self.calls.append(messages)
+        return self.reply
 
 
 def _row(stage: str, seed: int, three_star: bool, *, stars: int = 3, n_obj: int = 3, **extra) -> dict:
@@ -84,6 +98,141 @@ def test_fingerprint_tracks_trace_flag():
     traced = RunSpec(**base, trace=True).fingerprint()
     assert plain["trace"] is False and traced["trace"] is True
     assert plain != traced
+
+
+def test_fingerprint_keeps_stage_list_and_hashes_stage_file():
+    fp = RunSpec(
+        group="scripted", stages=("wagner", "timmie"), seeds=(1,), deck="superconduct_aggro"
+    ).fingerprint()
+    assert fp["stages"] == ["wagner", "timmie"]
+    assert fp["stages_file_sha1"] != "missing"
+
+
+# -- four-group policy/library contract --------------------------------------
+def test_group_library_defaults():
+    assert run_module.DEFAULT_LIBRARY_ROOTS == {
+        "llm_empty": "data/skills/rules_v1",
+        "static": "data/skills/static_v1",
+        "dynamic": "data/skills/dyn_v4",
+    }
+    assert run_module.LIBRARY_GROUPS == ("llm_empty", "static", "dynamic")
+    assert run_module.LOADOUT_GROUPS == ("static", "dynamic")
+    expected_versions = {"llm_empty": 1, "static": 1, "dynamic": 2}
+    for group, version in expected_versions.items():
+        fp = RunSpec(
+            group=group, stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+        ).fingerprint()
+        assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS[group]
+        assert fp["library_version"] == version
+    scripted = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+    ).fingerprint()
+    assert scripted["library_root"] is None and scripted["library_version"] == 0
+
+
+def test_scripted_group_is_not_a_skill_agent():
+    spec = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+    )
+    policy = run_module.build_policy(spec, get_stage("wagner"))
+    assert not isinstance(policy, SkillAgentPolicy)
+
+
+@pytest.mark.parametrize(
+    ("group", "strategies"),
+    [("llm_empty", 0), ("static", 10), ("dynamic", 23)],
+)
+def test_group_policies_load_expected_library_layers(tmp_path, group, strategies):
+    spec = RunSpec(
+        group=group,
+        stages=("wagner",),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        # llm_empty must ignore any override.
+        library_root=_library_root(tmp_path) if group == "llm_empty" else None,
+    )
+    client = _FakeLLMClient()
+    policy = run_module.build_policy(spec, get_stage("wagner"), client=client)
+    assert isinstance(policy, SkillAgentPolicy)
+    assert policy.library is not None
+    assert policy.library.by_layer() == {
+        "rule": 17, "strategy": strategies, "stage_specific": 0,
+    }
+    system = policy._system_message(SimpleNamespace(player_view=None))["content"]
+    for rule in policy.library.active():
+        if rule.layer == "rule":
+            assert system.count(f"- [{rule.skill_id}]") == 1
+    # Retrieval never re-injects the rules layer as a strategy skill.
+    assert all(skill.layer != "rule" for skill in policy._skills)
+    if group == "llm_empty":
+        assert policy._skills == []
+        assert not any("- [strat_" in line for line in system.splitlines())
+
+
+def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
+    other = _library_root(tmp_path, version=9)
+    loadout_root = tmp_path / "loadouts"
+    save_loadout(loadout_root, _loadout(version=9))
+
+    spec = RunSpec(
+        group="llm_empty",
+        stages=("wagner",),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        library_root=other,
+        loadout_root=str(loadout_root),
+    )
+    client = _FakeLLMClient()
+    policy = run_module.build_policy(spec, get_stage("wagner"), client=client)
+    assert policy.library is not None
+    assert policy.library.by_layer() == {"rule": 17, "strategy": 0, "stage_specific": 0}
+    assert policy.config.pinned_skills == ()
+    fp = spec.fingerprint()
+    assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["llm_empty"]
+    assert fp["library_version"] == 1
+    # Loadout is not part of an llm_empty run at all.
+    assert fp["loadout_root"] is None and fp["loadout_hash"] == "none"
+
+
+def test_pinned_rule_from_loadout_is_not_duplicated_and_stays_citable():
+    spec = RunSpec(
+        group="static", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+    )
+    client = _FakeLLMClient('{"choice": 0, "used": ["rule_burst"]}')
+    policy = run_module.build_policy(
+        spec, get_stage("wagner"), client=client, pinned_skills=("rule_burst",)
+    )
+    system = policy._system_message(SimpleNamespace(player_view=None))["content"]
+    assert system.count("- [rule_burst]") == 1
+    # Still in the pinned block, so a citation can resolve (see test_skill_agent).
+    assert "rule_burst" in [skill.skill_id for skill in policy._skills]
+
+
+def test_play_one_records_resolved_library_root_for_llm_empty(monkeypatch):
+    monkeypatch.setattr(common.llm, "build_llm_client", lambda: _FakeLLMClient())
+    monkeypatch.setattr(
+        run_module, "run_match",
+        lambda *args, **kwargs: SimpleNamespace(
+            winner=0, rounds=3, error=None, truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    spec = RunSpec(
+        group="llm_empty",
+        stages=("wagner",),
+        seeds=(7,),
+        deck="superconduct_aggro",
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "wagner", "seed": 7, "task_index": 0,
+         "stage_decks": {}}
+    )
+    assert row["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["llm_empty"]
+    assert row["library_version"] == 1
+    assert row["pinned_skills"] == []
 
 
 # -- compact trace rows ------------------------------------------------------

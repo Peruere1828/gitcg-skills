@@ -7,8 +7,8 @@ calls (scripted/contestant groups) are ignored: they do not predict LLM spend.
 
 Usage::
 
-    python -m scripts.estimate_cost --rows data/runs/smoke2_llm_empty.jsonl --games 800
-    python -m scripts.estimate_cost --rows data/runs/smoke2_llm_empty.jsonl \\
+    python -m scripts.estimate_cost --rows data/runs/llm_empty.jsonl --games 800
+    python -m scripts.estimate_cost --rows data/runs/llm_empty.jsonl \\
         --per-stage-seeds 10 --stages 16
 """
 

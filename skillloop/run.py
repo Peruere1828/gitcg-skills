@@ -14,12 +14,18 @@ only what the course experiments need:
 Usage::
 
     python -m skillloop.run --group scripted --stages all --seeds 3 --workers 6
-    python -m skillloop.run --group dynamic --library data/skills/lib1 --seeds 50 \
-        --out data/runs/dynamic.jsonl
-    python -m skillloop.run --group dynamic --library data/skills/dyn_v3 \
-        --stage-decks configs/stage_decks.json --loadout reports/loadouts \
+    python -m skillloop.run --group llm_empty --stages all --seeds 50   # rules_v1
+    python -m skillloop.run --group static --loadout reports/loadouts/v1 --seeds 50
+    python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
+        --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
         --seeds 50 --out data/runs/dynamic_loadout.jsonl
     python -m skillloop.run --group scripted --stages all --seeds 3 --stage-rules
+
+Group defaults (``--library`` may only override static/dynamic)::
+
+    llm_empty -> data/skills/rules_v1   (17 rule; no strategy/stage_specific, no loadout)
+    static    -> data/skills/static_v1  (17 rule + 10 strategy)
+    dynamic   -> data/skills/dyn_v4     (17 rule + 23 strategy)
 """
 
 from __future__ import annotations
@@ -57,7 +63,17 @@ from skillloop.render import StateRenderer, TaskSpec
 from skillloop.replay import compact_trace
 
 GROUPS = ("scripted", "contestant", "llm_empty", "static", "dynamic")
-LIBRARY_GROUPS = ("static", "dynamic")
+# Groups that load a skill library. ``llm_empty`` is **not** an empty prompt: it is
+# the "LLM + game rules only" arm, so it loads the 17-rule rules_v1 library.
+LIBRARY_GROUPS = ("llm_empty", "static", "dynamic")
+# Frozen stage loadouts only make sense when the library has strategy candidates;
+# llm_empty deliberately ignores ``--loadout``.
+LOADOUT_GROUPS = ("static", "dynamic")
+DEFAULT_LIBRARY_ROOTS = {
+    "llm_empty": "data/skills/rules_v1",   # 17 rule skills, no strategy/stage_specific
+    "static": "data/skills/static_v1",     # 17 rule + 10 strategy
+    "dynamic": "data/skills/dyn_v4",       # 17 rule + 23 strategy
+}
 
 
 @dataclass(frozen=True)
@@ -90,19 +106,21 @@ class RunSpec:
     trace: bool = False
 
     def fingerprint(self) -> dict[str, Any]:
+        library_root = resolved_library_root(self)
         library_version = 0
-        if self.library_root:
+        if library_root:
             try:
-                library_version = SkillLibrary.load(self.library_root).version
+                library_version = SkillLibrary.load(library_root).version
             except FileNotFoundError:
                 library_version = -1
+        loadout_root = self.loadout_root if self.group in LOADOUT_GROUPS else None
         return {
             "group": self.group,
             "stages": list(self.stages),
             "seeds": list(self.seeds),
             "deck": self.deck,
             "card_version": self.card_version,
-            "library_root": self.library_root,
+            "library_root": library_root,
             "library_version": library_version,
             "top_k": self.top_k,
             "model": self.model,
@@ -116,16 +134,29 @@ class RunSpec:
             ),
             "engine_lock": _sha1(Path("configs/engine.lock")),
             "hp_table": _sha1(Path("configs/npc/hp_table.json")),
-            "stages": _sha1(Path("configs/npc/npc_stages_mond_liyue.json")),
+            "stages_file_sha1": _sha1(Path("configs/npc/npc_stages_mond_liyue.json")),
             "stage_decks_root": self.stage_decks_root,
             "stage_decks_hash": (
                 _sha1(Path(self.stage_decks_root)) if self.stage_decks_root else "none"
             ),
-            "loadout_root": self.loadout_root,
+            "loadout_root": loadout_root,
             "loadout_hash": (
-                _dir_hash(Path(self.loadout_root)) if self.loadout_root else "none"
+                _dir_hash(Path(loadout_root)) if loadout_root else "none"
             ),
         }
+
+
+def resolved_library_root(spec: "RunSpec") -> str | None:
+    """The library actually used by ``spec.group`` (defaults applied).
+
+    ``llm_empty`` is fixed to ``rules_v1`` and ignores an explicit ``library_root``;
+    ``static``/``dynamic`` may override their default; the other groups load none.
+    """
+    if spec.group in LIBRARY_GROUPS:
+        if spec.group == "llm_empty":
+            return DEFAULT_LIBRARY_ROOTS["llm_empty"]
+        return spec.library_root or DEFAULT_LIBRARY_ROOTS[spec.group]
+    return None
 
 
 def _sha1(path: Path) -> str:
@@ -188,12 +219,13 @@ def _stage_decks_for_spec(spec: RunSpec) -> dict[str, str]:
 
 
 def _loadouts_for_spec(spec: RunSpec, *, library: SkillLibrary | None = None) -> dict[str, Loadout]:
-    """Load + validate frozen loadouts once (only groups that own a library)."""
-    if not spec.loadout_root or spec.group not in LIBRARY_GROUPS:
+    """Load + validate frozen loadouts once (static/dynamic only)."""
+    if not spec.loadout_root or spec.group not in LOADOUT_GROUPS:
         return {}
-    if not spec.library_root:
-        raise SystemExit(f"group {spec.group!r} needs --library together with --loadout")
-    lib = library or SkillLibrary.load(spec.library_root)
+    library_root = resolved_library_root(spec)
+    if not library_root:
+        raise SystemExit(f"group {spec.group!r} needs a skill library for --loadout")
+    lib = library or SkillLibrary.load(library_root)
     root = Path(spec.loadout_root)
     versioned = root / f"v{lib.version}"
     source = versioned if versioned.is_dir() else root
@@ -201,7 +233,7 @@ def _loadouts_for_spec(spec: RunSpec, *, library: SkillLibrary | None = None) ->
     if not loadouts:
         raise SystemExit(
             f"no loadouts in {source}; run: python -m scripts.plan_loadout "
-            f"--library {spec.library_root} --out {root}"
+            f"--library {library_root} --out {root}"
         )
     current_lock = engine_lock_hash()
     for stage in spec.stages:
@@ -239,9 +271,10 @@ def build_policy(
 
     library = None
     if spec.group in LIBRARY_GROUPS:
-        if not spec.library_root:
-            raise SystemExit(f"group {spec.group!r} needs --library")
-        library = SkillLibrary.load(spec.library_root)
+        library_root = resolved_library_root(spec)
+        if not library_root:
+            raise SystemExit(f"group {spec.group!r} needs a skill library")
+        library = SkillLibrary.load(library_root)
     renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
     return SkillAgentPolicy(
         resolve_base_policy(deck, seed=0),
@@ -281,8 +314,8 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     stage_decks = payload.get("stage_decks")
     if stage_decks is None:
         stage_decks = _stage_decks_for_spec(spec)
-    loadout = _loadout_from_payload(payload) if spec.group in LIBRARY_GROUPS else None
-    if loadout is None and spec.loadout_root and spec.group in LIBRARY_GROUPS:
+    loadout = _loadout_from_payload(payload) if spec.group in LOADOUT_GROUPS else None
+    if loadout is None and spec.loadout_root and spec.group in LOADOUT_GROUPS:
         loadout = _loadouts_for_spec(spec).get(stage.name)
     if loadout is not None and loadout.stage != stage.name:
         return {
@@ -296,7 +329,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     pinned_skills = tuple(loadout.skills) if loadout is not None else ()
 
     client = None
-    if spec.group.startswith("llm") or spec.group in LIBRARY_GROUPS:
+    if spec.group in LIBRARY_GROUPS:
         from common.llm import build_llm_client
 
         client = build_llm_client()
@@ -354,10 +387,16 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     stars = evaluate_stage(stage, record)
     decisions = getattr(policy0, "decisions", []) or []
     usage = getattr(client, "usage", None)
+    library_root = resolved_library_root(spec)
     if loadout is not None:
         library_version = loadout.library_version
+    elif library_root:
+        try:
+            library_version = SkillLibrary.load(library_root).version
+        except FileNotFoundError:
+            library_version = 0
     else:
-        library_version = SkillLibrary.load(spec.library_root).version if spec.library_root else 0
+        library_version = 0
     row = {
         "task_index": payload.get("task_index", 0),
         "stage": stage.name,
@@ -367,6 +406,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "group": spec.group,
         "stage_rules": bool(spec.stage_rules),
         "model": spec.model,
+        "library_root": library_root,
         "library_version": library_version,
         "skill_loadout_hash": loadout.fingerprint() if loadout is not None else "",
         "pinned_skills": list(pinned_skills),
@@ -406,6 +446,12 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
     # Read the two per-stage configs once per invocation; workers get the resolved
     # values in their payload instead of re-reading them per game.
     stage_decks = _stage_decks_for_spec(spec)
+    if progress and spec.group == "llm_empty" and spec.library_root:
+        print(
+            f"[run] --library ignored for group 'llm_empty' "
+            f"(fixed library: {DEFAULT_LIBRARY_ROOTS['llm_empty']})",
+            flush=True,
+        )
     loadouts = _loadouts_for_spec(spec)
     if loadouts:
         missing = [stage for stage in spec.stages if stage not in loadouts]
@@ -422,10 +468,10 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
                     f"{loadouts[stage].deck!r}, but --stage-decks/RunSpec.deck gives "
                     f"{expected!r}; re-run scripts.plan_loadout"
                 )
-    elif spec.loadout_root and spec.group not in LIBRARY_GROUPS and progress:
+    elif spec.loadout_root and spec.group not in LOADOUT_GROUPS and progress:
         print(
             f"[run] --loadout ignored for group {spec.group!r} "
-            "(only static/dynamic load a skill library)",
+            "(only static/dynamic accept loadouts)",
             flush=True,
         )
 
@@ -589,7 +635,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seeds", default="1,2,3", help="count (N -> 0..N-1) or comma-separated list")
     parser.add_argument("--deck", default="superconduct_aggro")
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--library", default=None, help="skill library directory (static/dynamic)")
+    parser.add_argument(
+        "--library", default=None,
+        help="skill library override (static/dynamic only; llm_empty is fixed to rules_v1)",
+    )
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-calls", type=int, default=80)
