@@ -462,3 +462,30 @@ session：`data/web/20261112T092846Z_995f4483-57c7-40c2-bc8d-`
 - 手牌利用明显上升（12→22 次出牌），但单局样本不能证明胜率；需要同种子/多局 A/B。
 - 本轮实局同时验证了引擎拆分：AI 角色卡 `2301 maxHealth=11`，NPC 阵容
   `3302/3101 maxHealth=10`（与 `.gts` NPC 值一致）。
+
+> 历史审计说明：本文提到的 `WEB_TACTICS` / `filter_library_for_web` /
+> `WebStateRenderer` / 候选重排 / `candidate_cap=24` 等 web-only 增强已在
+> 「严格对齐 `skillloop.run`」中移除，本文仅保留当时的历史审计记录。
+
+## 13. 严格对齐 `skillloop.run` 后的验证（2026-11-12 10:41 UTC）
+
+用户明确要求 web 只是调试接口、必须与真实评测同协议，因此选择**移除全部
+web-only 协议增强**（WEB_TACTICS / 库过滤 / WebStateRenderer / 候选重排 /
+cap24）。网页 LLM 策略现在直接调用 `skillloop.run.build_policy`。
+
+验证局：`data/web/20261112T104131Z_16d5e6e7-7924-4033-9cbe-`
+- stage=`blanche`，AI 座位 1 = `keqing_shuanghuo`，NPC 座位 0 = `npc:blanche`；
+  `card_version=v3.3.0`，`loadout=reports/loadouts/v4/v2/blanche.json`，
+  `protocol_mismatch=false`，0 fallback。
+- **系统提示 hash = `f7b604670cce`**，与离线按 runner 规则复算（stage_task +
+  未过滤 dyn_v4 + loadout pinned skills + plain StateRenderer）**逐字节一致**。
+- 该局 AI 引用技能全部来自 loadout pinned：`rule_burst` 7、`strat_focus_fire` 6、
+  `skill_irontonguetian` 1、`skill_liusu` 1。
+- 关卡规则：`initial_energy=2 friendly_all` 已作用到参赛者（AI）座位；NPC 座位
+  走真实 `npc:blanche` NpcPolicy。
+- 人类执 NPC 座位、AI 执参赛者；对局下方「AI 决策」面板通过
+  `GET /ai-decisions` 显示每一步的 `used_skill_names`、库版本、候选下标/耗时。
+
+**血量口径补充**：时代协议 `card_version=v3.3.0` 下，官方角色卡 2301 的卡面
+血量是 **10**（官方 v3.3.0 数据；v7.1.0 才是 11）。因此严格对齐后网页棋盘显示
+2301=10 是正确时代值；NPC 变体 9301 仍是独立的 13 血。

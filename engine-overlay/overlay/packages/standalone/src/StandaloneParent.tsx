@@ -39,6 +39,11 @@ import {
 } from "@gi-tcg/assets-manager";
 import mergeErrorCause from "merge-error-cause";
 import { createAiHttpIo } from "./ai-http-io";
+import {
+  toStageRuleSpecs,
+  type StageRulesPayload,
+} from "./stage-rules";
+import { AiDecisionPanel } from "./AiDecisionPanel";
 
 export interface StandaloneParentProps {
   logs?: GameStateLogEntry[];
@@ -69,6 +74,17 @@ export interface StandaloneParentProps {
   aiOpponent?: string;
   /** WS8/D18 overlay：非空时本窗口座位也托管（双方 AI 自对弈，便于调试） */
   aiSelfPlay?: boolean;
+  /**
+   * 评价协议：当前关卡 slug（`GET /npc-decks` 的 `slug`）。没有选 NPC 阵容时
+   * 为 undefined/null，`/session` 的 meta 里报 `stage: null`。
+   */
+  stage?: string | null;
+  /**
+   * 评价协议：关卡特殊规则（`GET /npc-decks` 的 `eval.rules`）。只在**新开局**
+   * 的 `Game.createInitialState` 里传给引擎；续局/导入日志不传（规则已固化在
+   * 历史状态里）。规则视角统一落到 AI 座位（`OTHER_WHO`，人类执 NPC 座位）。
+   */
+  stageRules?: StageRulesPayload | null;
 }
 
 /** 续局的 seq 基线：座位 -> 该座位上一局最后一个已应用的 seq */
@@ -377,6 +393,8 @@ export function StandaloneParent(props: StandaloneParentProps) {
     }
     const meta = {
       version: props.version,
+      // 评价协议：关卡 slug（未选 NPC 阵容时为 null）；桥据此校验 stage/牌组/规则。
+      stage: props.stage ?? null,
       ai_seat: OTHER_WHO,
       human_seat: HUMAN_WHO,
       ai_self_play: !!props.aiSelfPlay,
@@ -469,10 +487,23 @@ export function StandaloneParent(props: StandaloneParentProps) {
 
   const createGame = async (state?: GameState, seqBase: SeqBaseline = {}) => {
     if (!state) {
+      // 评价协议：关卡特殊规则只在全新对局注入。`who` 用 AI 座位——规则数据
+      // 是「参赛者」视角（rules.player=0），人类执 NPC 座位，参赛者即 AI 座位。
+      const stageRules = toStageRuleSpecs(
+        props.stageRules,
+        OTHER_WHO,
+        props.stage ?? undefined,
+      );
       const initial = Game.createInitialState({
         decks: SEAT_DECKS,
         data: getData(props.version),
         versionBehavior: props.version,
+        ...(stageRules
+          ? {
+              stageRuleSupports: stageRules.supports,
+              stageRuleEffects: stageRules.effects,
+            }
+          : {}),
       });
       // 血量语义由引擎 `.gts` 决定：官方可玩角色卡 2301/2202 是原版 11/10，
       // NPC 阵容使用独立变体 9301/9202（13/12）。前端不再按座位覆盖 HP。
@@ -683,6 +714,15 @@ export function StandaloneParent(props: StandaloneParentProps) {
         <DetailLogViewer logs={detailLog()} />
         <button onClick={closeDetail}>关闭</button>
       </dialog>
+      <Show when={props.aiOpponent}>
+        {(baseUrl) => (
+          <AiDecisionPanel
+            baseUrl={baseUrl()}
+            sessionId={props.sessionId}
+            who={OTHER_WHO}
+          />
+        )}
+      </Show>
     </div>
   );
 }

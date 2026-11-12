@@ -44,16 +44,18 @@
 #       `reps.action_adapter.build_decision_context`。SPEC 支持
 #       `heuristic`、`legal_random`、`expert:<slug>`、`random`，以及 LLM 技能
 #       智能体 `llm:<library>`（library ∈ none | llm_empty | static | dynamic）。
-#       LLM 策略包在 `skillloop.agent.SkillAgentPolicy` 里：机械决策交给牌组脚本，
-#       战略决策才问模型；`none` 不注入技能/规则层，`llm_empty` 是空库组，
-#       `static` 用 `data/skills/static_v1`（缺失时退回 built_at 最新的 rules 库），
-#       `dynamic` 取 `data/skills/` 下 `meta.kind=="evolved"` 中 `built_at` **最新**
-#       的库（当前 dyn_v4；按 built_at 而不是目录名/version 选）。
+#       LLM 策略**严格对齐 `skillloop.run.build_policy`**：关卡 TaskSpec、
+#       plain StateRenderer、era/expert base、未过滤技能库、candidate_cap=16、
+#       引擎原候选顺序。`none` / `llm_empty` 都映射到 runner 的 `llm_empty`
+#       （LLM + 空库）；`static` 用 `data/skills/static_v1`，`dynamic` 取
+#       `meta.kind=="evolved"` 中 `built_at` 最新的库（当前 dyn_v4）。
+#       牌组优先级：loadout > `--stage-decks` > 网页上报的 AI deck。
 #       LLM 需要仓库根 `.env` 里的 key/base_url/model；不可用时 AI 座位退回
-#       `expert:<slug>`/`heuristic` 并在 `/session` 的 `ai` 字段记录原因。
-#       `GET /ai` 报告全局设置，`POST /ai-library {"library": ...}` 改后续新会话的库。
+#       `resolve_base_policy`（era/expert；未知牌组用 heuristic）并在 `/session`
+#       的 `ai` 字段记录原因。`GET /ai` 报告全局设置与 `parity`、`POST
+#       /ai-library {"library": ...}` 改后续新会话的库。
 #       reps/torch 等依赖只在请求模型策略时才延迟导入，默认路径仍是零依赖。
-#       任何加载/转换/选择失败都回退占位策略（回退写进决策日志的 `fallback`）。
+#       任何加载/转换/选择失败都回退脚本/占位策略（回退写进决策日志的 `fallback`）。
 #
 # T3 牌组对齐：`--ai-deck <slug>`（或 `--policy expert:<slug>` 隐含）声明 AI 座位
 # 应该用的牌组，`/ai-deck` 把它给前端回填；开局 `/session` 里浏览器上报实际牌组，
@@ -64,7 +66,9 @@
 # 一套应对牌组，结果记进会话；开局 `/session` 时若 base 策略是 deck-specific 的
 # `expert:*`，就按**各座位实际牌组**改派 `expert:<slug>`（人的牌组若也是池内 20 套
 # 之一，自对弈时同样派它自己的脚本）。base 是 `llm:*` 时只有 `meta.ai_seat` 那侧
-# 用 LLM，其它座位仍按牌组派脚本。`neural:` 等用户显式选的策略绝不被覆盖。
+# 用 LLM；`meta.ai_self_play` 且带 stage 时非 AI 座位派 `npc:<stage>` 的真实
+# NpcPolicy（缺 stage 用 heuristic），否则仍按牌组派脚本。`neural:` 等用户显式选的
+# 策略绝不被覆盖。
 #
 # C3 NPC 卡组（D18）：`GET /npc-decks` 给出可当玩家牌组用的 NPC 阵容
 # （角色取自 `configs/npc/`，牌由 decklab 池 C 填充）。
@@ -72,10 +76,9 @@
 # 跑：
 #   conda run -n gitcg python web/ai_rpc_server.py --port 8770
 #   conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
-#       --policy "neural:data/checkpoints/curve_dfbcsa_e15_d128_n48000.pt#t=0.2"
-#   conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
 #       --policy expert:superconduct_aggro --ai-deck superconduct_aggro
-#   conda run -n gitcg python web/ai_rpc_server.py --port 8770 --policy llm:dynamic
+#   conda run -n gitcg python web/ai_rpc_server.py --port 8770 --policy llm:dynamic \
+#       --stage-decks configs/stage_decks.json --loadout-root reports/loadouts
 # 前端（standalone）里勾选「AI 对手（HTTP 桥）」并填 http://127.0.0.1:8770 即可。
 # LLM 策略需要仓库根 `.env`（GITCG_LLM_* / DEEPSEEK_*）；`GET /ai` 自查是否可用。
 
@@ -88,6 +91,8 @@ import random
 import sys
 import threading
 import time
+from dataclasses import dataclass
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -151,24 +156,95 @@ _LLM_LIBRARY_LABELS = {
     "llm_empty": "llm_empty（空库）",
 }
 
-# 网页专用渲染/过滤在 `web.llm_render`（避免改动 skillloop 的实验口径）。这里用
-# 惰性再导出，让 `web.ai_rpc_server.WebStateRenderer` 等可被直接引用，同时默认
-# 路径（占位策略）仍不提前导入 reps/skillloop。
-_LAZY_WEB_LLM_EXPORTS = {
-    "WEB_TACTICS",
-    "WebStateRenderer",
-    "filter_library_for_web",
-    "is_web_skill",
-    "web_priority_key",
-}
+# 与 ``skillloop.run`` 严格对齐的评测配置。网页端只是调试接口：策略、提示词、
+# 技能库、基础策略、候选顺序/上限全部由 ``skillloop.run.build_policy`` 决定。
+DEFAULT_STAGE_DECKS = os.path.join(_REPO_ROOT, "configs", "stage_decks.json")
+DEFAULT_ERA_DECKS = os.path.join(_REPO_ROOT, "configs", "era_decks.json")
+_LIBRARY_GROUPS = ("static", "dynamic")
+_PROTOCOL_NAME = "skillloop.run"
 
 
-def __getattr__(name: str) -> Any:
-    if name in _LAZY_WEB_LLM_EXPORTS:
-        from web import llm_render
+@dataclass(frozen=True)
+class WebEvalConfig:
+    """Runner knobs the web bridge must pass through unchanged."""
 
-        return getattr(llm_render, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    stage_decks_root: str = DEFAULT_STAGE_DECKS
+    loadout_root: str | None = None
+    library_override: str | None = None
+    card_version: str | None = None
+    rotation: str | None = None
+    stage_rules: bool = True
+
+
+def _abs_path(value: str | os.PathLike[str]) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else Path(_REPO_ROOT) / path
+
+
+def _display_path(path: str | os.PathLike[str] | None) -> str | None:
+    if not path:
+        return None
+    resolved = _abs_path(path)
+    try:
+        return os.path.relpath(resolved, _REPO_ROOT)
+    except ValueError:
+        return str(resolved)
+
+
+def _stage_or_none(slug: Any) -> Any:
+    """Resolve an NPC stage slug; unknown/missing slugs degrade to parity=false."""
+    if not isinstance(slug, str) or not slug:
+        return None
+    try:
+        from npc.spec import get_stage
+
+        return get_stage(slug)
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"无法解析关卡 {slug!r}（{type(exc).__name__}: {exc}），按非评价协议处理")
+        return None
+
+
+@lru_cache(maxsize=4)
+def _stage_decks_map(path: str) -> dict[str, str]:
+    from skillloop.loadout import load_stage_decks
+
+    root = _abs_path(path)
+    if not root.exists():
+        _warn(f"--stage-decks 文件不存在：{root}（关卡牌组映射为空）")
+        return {}
+    return load_stage_decks(root)
+
+
+@lru_cache(maxsize=1)
+def _era_version() -> str | None:
+    try:
+        payload = json.loads(_abs_path(DEFAULT_ERA_DECKS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    version = payload.get("version")
+    return str(version) if version else None
+
+
+def _selection_group(selection: str | None) -> str | None:
+    """Map the four web selections to the runner's group names."""
+    if selection in ("none", "llm_empty"):
+        return "llm_empty"
+    if selection in _LIBRARY_GROUPS:
+        return selection
+    return None
+
+
+def resolve_library_root(selection: str | None, override: str | None = None) -> str | None:
+    """Library directory for a selection (``None`` for none/llm_empty)."""
+    if selection not in _LIBRARY_GROUPS:
+        return None
+    if override:
+        return str(_abs_path(override))
+    info = resolve_llm_library(selection)
+    if info is None or not info.get("path"):
+        raise RuntimeError(f"技能库 {selection!r} 未解析到目录")
+    return str(_abs_path(info["path"]))
+
 
 
 def parse_llm_spec(spec: str | None) -> tuple[str, str | None] | None:
@@ -200,29 +276,21 @@ def _library_roots() -> list[Path]:
 def _library_meta(path: Path) -> dict[str, Any]:
     """只读 library.json 的 meta/version（避免为一个 label 构造整个 SkillLibrary）。
 
-    ``applied_skills`` / ``filtered_out`` 按网页过滤口径（``is_web_skill``：rule 层
-    与通用 ``strat_*``，剔除 mulligan / ``规则_目标_*``）直接数 JSON 条目，不构造
-    Skill 对象。
+    严格对齐后网页不再过滤技能库：``applied_skills`` 恒等于 ``skills``，
+    ``filtered_out`` 恒为 0（字段保留给前端向后兼容）。
     """
     import json as _json
-
-    from web.llm_render import is_web_skill
 
     try:
         payload = _json.loads((path / "library.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     skills = [item for item in (payload.get("skills") or []) if isinstance(item, dict)]
-    applied = sum(
-        1
-        for item in skills
-        if is_web_skill(str(item.get("skill_id") or ""), str(item.get("layer") or ""))
-    )
     return {
         "version": int(payload.get("library_version") or 0),
         "skills": len(skills),
-        "applied_skills": applied,
-        "filtered_out": len(skills) - applied,
+        "applied_skills": len(skills),
+        "filtered_out": 0,
         "meta": dict(payload.get("meta") or {}),
     }
 
@@ -283,20 +351,6 @@ def resolve_llm_library(selection: str) -> dict[str, Any] | None:
     return _library_info(path, selection) if path is not None else None
 
 
-def load_llm_library(selection: str) -> Any:
-    """按选择加载 SkillLibrary；none 返回 None（不注入技能，也不注入规则层）。"""
-    from skillloop.library import SkillLibrary
-
-    if selection == "none":
-        return None
-    if selection == "llm_empty":
-        return SkillLibrary.from_skills([], version=0, meta={"kind": "llm_empty"})
-    info = resolve_llm_library(selection)
-    if info is None or not info.get("path"):
-        raise RuntimeError(f"技能库 {selection!r} 未解析到目录")
-    return SkillLibrary.load(Path(_REPO_ROOT) / info["path"])
-
-
 def llm_library_options() -> list[dict[str, str]]:
     """`/ai` 的 options：label 带解析到的目录名/条数，便于人直接看懂。"""
     options: list[dict[str, str]] = []
@@ -313,11 +367,251 @@ def llm_library_options() -> list[dict[str, str]]:
     return options
 
 
+def _loadout_for_stage(
+    stage_slug: str,
+    selection: str | None,
+    config: WebEvalConfig,
+) -> tuple[Any, str | None, str | None]:
+    """Load the frozen loadout for ``stage`` (same vN/``loadout_matches`` rules).
+
+    Unlike the runner this is a *debug* bridge: a missing or stale loadout warns
+    and falls back to the stage deck instead of aborting the session.
+    """
+    if not config.loadout_root or selection not in _LIBRARY_GROUPS:
+        return None, None, None
+    try:
+        from skillloop.library import SkillLibrary
+        from skillloop.loadout import engine_lock_hash, load_loadouts, loadout_matches
+
+        library_root = resolve_library_root(selection, config.library_override)
+        if library_root is None:
+            return None, None, None
+        library = SkillLibrary.load(library_root)
+        root = _abs_path(config.loadout_root)
+        versioned = root / f"v{library.version}"
+        source = versioned if versioned.is_dir() else root
+        loadouts = load_loadouts(source)
+        loadout = loadouts.get(stage_slug)
+        if loadout is None:
+            _warn(
+                f"关卡 {stage_slug!r} 在 {source} 没有 loadout；"
+                "按 --stage-decks 的关卡牌组继续（非严格 loadout 协议）"
+            )
+            return None, library_root, None
+        if not loadout_matches(
+            loadout,
+            library_version=library.version,
+            engine_lock=engine_lock_hash(),
+        ):
+            _warn(
+                f"关卡 {stage_slug!r} 的 loadout 过期（文件 v{loadout.library_version} / "
+                f"engine {loadout.engine_lock or 'missing'}，运行 v{library.version} / "
+                f"engine {engine_lock_hash()}）；按 --stage-decks 继续"
+            )
+            return None, library_root, None
+        candidates = [
+            source / f"{stage_slug}.json",
+            source / f"v{library.version}" / f"{stage_slug}.json",
+            root / f"v{library.version}" / f"{stage_slug}.json",
+            root / f"{stage_slug}.json",
+        ]
+        # ``reports/loadouts`` packs versions as ``v<run>/v<library>/stage.json``;
+        # pick the file whose parent directory matches the loaded library version.
+        candidates.extend(sorted(root.rglob(f"{stage_slug}.json")))
+        version_dir = f"v{library.version}"
+        path = next(
+            (
+                item
+                for item in candidates
+                if item.is_file() and item.parent.name == version_dir
+            ),
+            None,
+        )
+        if path is None:
+            path = next((item for item in candidates if item.is_file()), source)
+        return loadout, library_root, str(path)
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"加载 loadout 失败（{stage_slug!r}）：{type(exc).__name__}: {exc}；退回 stage_decks")
+        return None, None, None
+
+
+def _resolve_stage_assignment(
+    stage_slug: str,
+    *,
+    selection: str | None,
+    config: WebEvalConfig,
+) -> tuple[Any, str | None, Any, str | None, str | None]:
+    """Return ``(stage, stage_deck, loadout, library_root, loadout_path)``."""
+    stage = _stage_or_none(stage_slug)
+    if stage is None:
+        return None, None, None, None, None
+    stage_deck = _stage_decks_map(config.stage_decks_root).get(stage_slug)
+    loadout, library_root, loadout_path = _loadout_for_stage(stage_slug, selection, config)
+    return stage, stage_deck, loadout, library_root, loadout_path
+
+
+def _eval_target(
+    stage_slug: str | None,
+    *,
+    selection: str | None,
+    config: WebEvalConfig,
+) -> dict[str, Any]:
+    """The deck/rules an evaluation run would use for this stage."""
+    info: dict[str, Any] = {
+        "stage": stage_slug,
+        "parity": False,
+        "card_version": None,
+        "deck": None,
+        "characters": None,
+        "cards": None,
+        "rules": None,
+        "loadout": None,
+    }
+    if not stage_slug:
+        return info
+    stage = _stage_or_none(stage_slug)
+    if stage is None:
+        return info
+    info["parity"] = True
+    _stage, stage_deck, loadout, _library_root, loadout_path = _resolve_stage_assignment(
+        stage_slug, selection=selection, config=config
+    )
+    deck = loadout.deck if loadout is not None else stage_deck
+    if loadout_path:
+        info["loadout"] = _display_path(loadout_path)
+    if deck:
+        try:
+            from skillloop.era import is_era, resolve_deck
+
+            spec = resolve_deck(deck)
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"解析关卡 {stage_slug!r} 的牌组 {deck!r} 失败：{type(exc).__name__}: {exc}")
+        else:
+            info["deck"] = deck
+            info["characters"] = [int(c) for c in spec.characters]
+            info["cards"] = [int(c) for c in spec.cards]
+            info["card_version"] = _era_version() if is_era(deck) else None
+    if config.stage_rules:
+        try:
+            from npc.stage_rules import stage_rules_json
+
+            raw = stage_rules_json(stage_slug)
+            info["rules"] = json.loads(raw) if raw else None
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"解析关卡 {stage_slug!r} 的特殊规则失败：{type(exc).__name__}: {exc}")
+    return info
+
+
+def build_web_llm_policy(
+    selection: str,
+    reported_deck: str | None,
+    *,
+    stage_slug: str | None,
+    config: WebEvalConfig,
+    client: Any,
+    seed: int,
+) -> tuple[Any, dict[str, Any]]:
+    """Build the exact ``skillloop.run.build_policy`` LLM policy for one stage.
+
+    Deck priority matches the runner: frozen loadout > ``--stage-decks`` > the
+    deck the browser reported for the AI seat. Missing stage falls back to a
+    generic TaskSpec (``parity=False``), which the caller must surface as
+    non-evaluation.
+    """
+    from npc.spec import NpcStage
+    from skillloop.run import RunSpec, build_policy
+
+    group = _selection_group(selection)
+    if group is None:
+        raise RuntimeError(f"未知 LLM 库选择 {selection!r}")
+    library_root = resolve_library_root(selection, config.library_override)
+
+    stage = _stage_or_none(stage_slug)
+    parity = stage is not None
+    stage_deck: str | None = None
+    loadout = None
+    loadout_path: str | None = None
+    if stage is not None:
+        stage, stage_deck, loadout, _root, loadout_path = _resolve_stage_assignment(
+            stage.name, selection=selection, config=config
+        )
+    deck = (loadout.deck if loadout is not None else None) or stage_deck or reported_deck
+    if not deck:
+        raise RuntimeError("无法确定 AI 牌组（loadout/stage_decks/网页上报均缺失）")
+
+    run_stage = stage
+    if run_stage is None:
+        run_stage = NpcStage(
+            name="web",
+            display="网页对局（非评价协议）",
+            region="",
+            lineup=(),
+            reserve=(),
+            special_rules=(),
+            objectives=(),
+        )
+        _warn("meta.stage 缺失：本次会话按非评价协议（parity=false）运行")
+
+    spec = RunSpec(
+        group=group,
+        stages=(run_stage.name,),
+        seeds=(int(seed),),
+        deck=deck,
+        library_root=library_root,
+        top_k=5,
+        model=None,
+        max_calls=80,
+        stage_decks_root=config.stage_decks_root,
+        loadout_root=config.loadout_root,
+        card_version=config.card_version,
+    )
+    pinned = tuple(loadout.skills) if loadout is not None else ()
+    policy = build_policy(
+        spec,
+        run_stage,
+        client=client,
+        deck=deck,
+        pinned_skills=pinned,
+    )
+    info = {
+        "stage": run_stage.name if parity else None,
+        "parity": parity,
+        "group": group,
+        "library_root": _display_path(library_root),
+        "deck": deck,
+        "reported_deck": reported_deck,
+        "loadout": _display_path(loadout_path),
+        "card_version": config.card_version,
+    }
+    return policy, info
+
+
 def _ai_seat_of(meta: dict[str, Any]) -> int:
     try:
         return int(meta.get("ai_seat") or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _deck_matches(deck_slug: str, reported: Any) -> bool | None:
+    """Compare a reported ``{characters, cards}`` deck with an eval deck slug.
+
+    Returns ``None`` when the comparison cannot be made (unknown deck/slug or a
+    malformed report), so callers do not turn a missing field into a mismatch.
+    """
+    if not isinstance(reported, dict):
+        return None
+    try:
+        from skillloop.era import resolve_deck
+
+        spec = resolve_deck(deck_slug)
+    except Exception:  # noqa: BLE001
+        return None
+    expected_chars = [int(c) for c in spec.characters]
+    expected_cards = sorted(int(c) for c in spec.cards)
+    actual_chars = [int(c) for c in reported.get("characters") or []]
+    actual_cards = sorted(int(c) for c in reported.get("cards") or [])
+    return actual_chars == expected_chars and actual_cards == expected_cards
 
 
 def _is_local_origin(origin: str) -> bool:
@@ -427,13 +721,15 @@ class RepoPolicy:
         seed: int | None,
         role: str,
         fallback: Policy,
+        policy: Any = None,
     ) -> None:
         self.spec = spec
         self.name = spec
         self.seed = 0 if seed is None else int(seed)
         self.role = role
         self._fallback = fallback
-        self._policy: Any = None
+        # Pre-built policy (era/expert base, NPC policy): skip spec-string loading.
+        self._policy: Any = policy
         self._load_error: str | None = None
         self._step_index = 0
         self.last_fallback = False
@@ -478,9 +774,11 @@ class RepoPolicy:
 class LLMPolicy:
     """LLM 技能智能体（`skillloop.agent.SkillAgentPolicy`）的延迟构造包装。
 
-    与 `RepoPolicy` 一样，重型依赖与模型客户端都在**首次决策**时才构造。LLM 调用
-    失败/构造失败时回退到该牌组的脚本专家（池内 `expert:<slug>`；否则
-    `heuristic`），而不是每步都掉到占位策略。
+    与 `RepoPolicy` 一样，重型依赖与模型客户端都在**首次决策**时才构造。策略本体
+    由 `skillloop.run.build_policy` 构造（关卡 TaskSpec、plain StateRenderer、
+    era/expert base、未过滤库、候选 cap 16、原顺序），网页桥只负责把 meta.stage
+    与 runner 配置传进去。构造失败时回退到该牌组的 `resolve_base_policy`（era /
+    expert；未知牌组才用 heuristic），而不是每步都掉到占位策略。
 
     `last_decision` 是这一步的审计信息（used_skills/system_hash/llm_calls）；
     `library_info` 是该座位实际加载的库描述，供 decisions.jsonl 记录。
@@ -496,6 +794,8 @@ class LLMPolicy:
         fallback: Policy,
         spec: str | None = None,
         client_factory: Any = None,
+        stage: str | None = None,
+        eval_config: WebEvalConfig | None = None,
     ) -> None:
         self.selection = selection
         self.deck = deck
@@ -505,6 +805,8 @@ class LLMPolicy:
         self.name = _llm_policy_name(selection)
         self.seed = 0 if seed is None else int(seed)
         self.role = role
+        self.stage = stage
+        self.eval_config = eval_config or WebEvalConfig()
         self._fallback = fallback
         self._client_factory = client_factory
         self._policy: Any = None
@@ -513,36 +815,37 @@ class LLMPolicy:
         self._step_index = 0
         self.base_spec: str | None = None
         self.library_info = resolve_llm_library(selection)
+        self.parity = False
+        self.group: str | None = None
+        self.library_root: str | None = None
+        self.eval_deck: str | None = None
+        self.loadout_path: str | None = None
         self.last_fallback = False
         self.last_error: str | None = None
         self.last_decision: dict[str, Any] | None = None
 
     # -- construction --------------------------------------------------------
     def _scripted_spec(self) -> str:
-        """机械兜底：池内 20 套用自家脚本，其它牌组用 deck-agnostic 的 heuristic。"""
+        """机械兜底 spec 的标签：era/expert 牌组用自家脚本，未知牌组用 heuristic。"""
         if not self.deck:
             return "heuristic"
         try:
+            from skillloop.era import is_era
+
+            if is_era(self.deck):
+                return f"expert:{self.deck}"
             from envs.decks import expert_decks_by_name
 
             if self.deck in expert_decks_by_name():
                 return f"expert:{self.deck}"
         except Exception as exc:  # noqa: BLE001
-            _warn(f"无法解析牌组池（{self.deck!r}），LLM 兜底改用 heuristic：{exc}")
+            _warn(f"无法解析牌组 {self.deck!r}，LLM 兜底改用 heuristic：{exc}")
         return "heuristic"
 
     def _ensure_policy(self) -> Any:
         if self._policy is None and self._load_error is None:
             try:
                 from common.llm import build_llm_client
-                from envs.policy import _asset_catalog, build_policy
-                from skillloop.agent import AgentConfig, SkillAgentPolicy
-                from skillloop.render import TaskSpec
-                from web.llm_render import (
-                    WEB_TACTICS,
-                    WebStateRenderer,
-                    filter_library_for_web,
-                )
 
                 client = (
                     self._client_factory()
@@ -551,47 +854,30 @@ class LLMPolicy:
                 )
                 if client is None:
                     raise RuntimeError("LLM 不可用（.env 未配置 key/base_url/model）")
-                self.base_spec = self._scripted_spec()
-                base = build_policy(self.base_spec, seed=self.seed, role=self.role)
-                # 关卡特化技能（skill_* / tempo_budget_* / frontload_*）只按
-                # objective_types 命中，在普通网页对局里会注入「起手换牌」「五回合
-                # 窗口」等无关建议；网页层统一过滤。
-                library = filter_library_for_web(load_llm_library(self.selection))
-                # rules_note 非空时 SkillAgentPolicy 不再自动拼 library.rules_text()，
-                # 所以规则层与网页战术必须在这里合并（none 库只有网页战术）。
-                rules_note = "\n".join(
-                    part
-                    for part in (
-                        library.rules_text() if library is not None else "",
-                        WEB_TACTICS,
-                    )
-                    if part
+                policy, info = build_web_llm_policy(
+                    self.selection,
+                    self.deck,
+                    stage_slug=self.stage,
+                    config=self.eval_config,
+                    client=client,
+                    seed=self.seed,
                 )
-                renderer = WebStateRenderer(_asset_catalog(), opponent_name="对手")
-                task = TaskSpec(
-                    stage="web",
-                    display="网页对局",
-                    objectives=("赢得胜利",),
-                    deck=self.deck or "网页牌组",
-                    objective_types=("win",),
-                )
-                self._policy = SkillAgentPolicy(
-                    base,
-                    client,
-                    renderer=renderer,
-                    task=task,
-                    library=library,
-                    rules_note=rules_note,
-                    config=AgentConfig(
-                        model=None,
-                        max_calls_per_game=80,
-                        candidate_cap=24,
-                        top_k=5,
-                    ),
-                )
+                self._policy = policy
+                self.base_spec = getattr(getattr(policy, "base", None), "name", None)
+                self.parity = bool(info.get("parity"))
+                self.group = info.get("group")
+                self.library_root = info.get("library_root")
+                self.eval_deck = info.get("deck")
+                self.loadout_path = info.get("loadout")
+                library_root = info.get("library_root")
+                if library_root:
+                    resolved = _abs_path(library_root)
+                    if (resolved / "library.json").is_file():
+                        self.library_info = _library_info(resolved, self.selection)
                 _warn(
-                    f"LLM 策略已加载：{self.name}（base={self.base_spec}, "
-                    f"library={self.library_info['resolved'] if self.library_info else None}）"
+                    f"LLM 策略已加载：{self.name}（stage={info.get('stage')}, "
+                    f"parity={self.parity}, group={self.group}, base={self.base_spec}, "
+                    f"deck={self.eval_deck}, library={info.get('library_root')}）"
                 )
             except Exception as exc:  # noqa: BLE001
                 self._load_error = f"{type(exc).__name__}: {exc}"
@@ -600,11 +886,24 @@ class LLMPolicy:
 
     def _scripted_policy(self) -> RepoPolicy:
         if self._scripted is None:
+            base = None
+            if self.deck:
+                try:
+                    from skillloop.era import resolve_base_policy
+
+                    base = resolve_base_policy(self.deck, seed=0)
+                except Exception as exc:  # noqa: BLE001
+                    _warn(f"无法构造牌组 {self.deck!r} 的 era/expert 兜底：{exc}")
+            if base is None:
+                from envs.policy import heuristic_policy
+
+                base = heuristic_policy()
             self._scripted = RepoPolicy(
                 self._scripted_spec(),
                 seed=self.seed,
                 role=self.role,
                 fallback=self._fallback,
+                policy=base,
             )
         return self._scripted
 
@@ -629,7 +928,6 @@ class LLMPolicy:
                 value,
                 latest_state,
                 self._step_index,
-                web_llm=True,
             )
             self._step_index += 1
             decisions = getattr(policy, "decisions", []) or []
@@ -717,35 +1015,6 @@ def _flatten_ts_oneofs(descriptor: Any, obj: Any) -> Any:
     return out
 
 
-def _reorder_for_web_llm(built: Any) -> Any:
-    """Stable presentation reorder for the web LLM candidate list.
-
-    Only the three parallel tuples on ``DecisionContext`` move; ``payload_by_
-    low_level_code`` stays keyed by the original engine action code, so the
-    model's chosen code still resolves to the correct engine payload. Ties keep
-    the engine order (``sorted`` is stable).
-    """
-    from dataclasses import replace
-
-    from web.llm_render import web_priority_key
-
-    context = built.context
-    specs = tuple(context.legal_low_level_specs)
-    codes = tuple(context.legal_low_level_codes)
-    mask = tuple(context.legal_low_level_mask)
-    order = sorted(
-        range(len(specs)),
-        key=lambda index: web_priority_key(context, specs[index]),
-    )
-    reordered = replace(
-        context,
-        legal_low_level_codes=tuple(codes[index] for index in order),
-        legal_low_level_specs=tuple(specs[index] for index in order),
-        legal_low_level_mask=tuple(mask[index] for index in order),
-    )
-    return replace(built, context=reordered)
-
-
 def _repo_decide(
     policy: Any,
     who: int,
@@ -753,8 +1022,6 @@ def _repo_decide(
     value: dict[str, Any],
     latest_state: Any,
     step_index: int,
-    *,
-    web_llm: bool = False,
 ) -> dict[str, Any]:
     """用仓库策略跑一次决策：request JSON -> proto -> 决策上下文 -> 响应 JSON。"""
     from google.protobuf import json_format
@@ -782,8 +1049,6 @@ def _repo_decide(
         full_state_json=None,
         step_index=int(step_index),
     )
-    if web_llm:
-        built = _reorder_for_web_llm(built)
     code = int(policy.choose(built))
     payload = built.payload_by_low_level_code.get(code)
     if payload is None:
@@ -943,6 +1208,88 @@ def _safe_session(session: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# 只读调试：最近 N 条 LLM 决策（技能引用）
+# --------------------------------------------------------------------------- #
+@lru_cache(maxsize=8)
+def _skill_names_by_library(path: str) -> dict[str, str]:
+    """``skill_id -> skill_name`` for one library, cached across polls."""
+    try:
+        from skillloop.library import SkillLibrary
+
+        library = SkillLibrary.load(_abs_path(path))
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"读取技能库 {path!r} 失败（/ai-decisions 回退 id）：{type(exc).__name__}: {exc}")
+        return {}
+    return {
+        skill_id: str(getattr(skill, "skill_name", "") or skill_id)
+        for skill_id, skill in library.skills.items()
+    }
+
+
+def _used_skill_names(record: dict[str, Any]) -> list[str]:
+    used = [str(item) for item in (record.get("used_skills") or ())]
+    if not used:
+        return []
+    library = record.get("library")
+    mapping: dict[str, str] = {}
+    if isinstance(library, dict) and library.get("path"):
+        mapping = _skill_names_by_library(str(library["path"]))
+    return [mapping.get(skill_id, skill_id) for skill_id in used]
+
+
+def _read_ai_decisions(
+    directory: str | os.PathLike[str] | None, who: int, limit: int
+) -> list[dict[str, Any]]:
+    """Tail of ``decisions.jsonl`` filtered by seat (read-only, best effort)."""
+    if not directory:
+        return []
+    path = Path(directory) / "decisions.jsonl"
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue  # 正在追加的半行：跳过，不 500
+                if not isinstance(record, dict) or record.get("type") != "decision":
+                    continue
+                try:
+                    if int(record.get("who")) != int(who):
+                        continue
+                except (TypeError, ValueError):
+                    continue
+                rows.append(
+                    {
+                        "step": record.get("step"),
+                        "method": record.get("method"),
+                        "policy": record.get("policy"),
+                        "model_choice": record.get("model_choice"),
+                        "n_candidates": record.get("n_candidates"),
+                        "used_skills": [
+                            str(item) for item in (record.get("used_skills") or ())
+                        ],
+                        "used_skill_names": _used_skill_names(record),
+                        "library": record.get("library"),
+                        "fallback": bool(record.get("fallback", False)),
+                        "error": record.get("error"),
+                        "latency_ms": record.get("latency_ms"),
+                        "system_hash": record.get("system_hash") or "",
+                        "request": record.get("request") or record.get("method"),
+                    }
+                )
+    except OSError as exc:  # noqa: BLE001
+        _warn(f"读取决策日志失败（{path}）：{exc}")
+        return []
+    return rows[-limit:]
+
+
+# --------------------------------------------------------------------------- #
 # 状态：按 (session, who) 隔离
 # --------------------------------------------------------------------------- #
 class Seat:
@@ -993,6 +1340,8 @@ class State:
         base_spec: str | None = None,
         llm_client_factory: Any = None,
         library_choice: str | None = None,
+        eval_config: WebEvalConfig | None = None,
+        session_stages: dict[str, str] | None = None,
     ) -> None:
         self.policy = policy
         self.policy_factory = policy_factory
@@ -1002,6 +1351,13 @@ class State:
         # 只在 policy_factory 读它时生效（座位一旦建好就不再改）。
         self.seat_specs = seat_specs if seat_specs is not None else {}
         self.base_spec = base_spec
+        # 严格对齐 skillloop.run 的 runner 配置；座位工厂与 /npc-decks 共用。
+        self.eval_config = eval_config or WebEvalConfig()
+        # /session 的 meta.stage 按会话记下来，供座位工厂构造 LLMPolicy 时读取。
+        shared_stages = session_stages
+        if shared_stages is None:
+            shared_stages = getattr(policy_factory, "session_stages", None)
+        self.session_stages = shared_stages if shared_stages is not None else {}
         # LLM 库选择可被 `POST /ai-library` 改（只影响后续新会话）。base spec
         # 自带的选择是初始值；测试可注入 client_factory 避免真实网络。
         parsed = parse_llm_spec(base_spec)
@@ -1057,6 +1413,8 @@ class State:
             "aborted": False,
             "abort_reason": None,
             "deck_mismatch": False,
+            "protocol_mismatch": False,
+            "stage": None,
             "seat_specs": {},
             "notify_0": 0,
             "notify_1": 0,
@@ -1096,6 +1454,10 @@ class State:
                 self._sessions[session] = info
             if meta:
                 info["meta"].update(meta)
+                stage = meta.get("stage")
+                if isinstance(stage, str) and stage:
+                    self.session_stages[session] = stage
+                    info["stage"] = stage
             if restart:
                 info["runs"] = int(info.get("runs", 1)) + 1
                 for (sess, _who), seat in self._seats.items():
@@ -1312,6 +1674,10 @@ class State:
             )
         selection = self.library_choice_value() or base_selection
 
+        stage_slug = meta.get("stage") if isinstance(meta.get("stage"), str) else None
+        stage_obj = _stage_or_none(stage_slug) if stage_slug else None
+        self_play = bool(meta.get("ai_self_play"))
+
         targets: set[int] = set()
         for key in decks:
             try:
@@ -1330,6 +1696,10 @@ class State:
                 spec = (
                     f"llm:{selection}#deck={slug}" if slug else f"llm:{selection}"
                 )
+            elif who != ai_seat and self_play:
+                # 自对弈的 NPC 座位：真实 NpcPolicy（与 RunSpec.rotation 一致）；
+                # 缺 stage 时退回 deck-agnostic 的 heuristic。
+                spec = f"npc:{stage_obj.name}" if stage_obj is not None else _NON_POOL_DECK_SPEC
             else:
                 spec = f"expert:{slug}" if slug else _NON_POOL_DECK_SPEC
             if spec == self.base_spec:
@@ -1337,7 +1707,7 @@ class State:
             with self.lock:
                 self.seat_specs[(session, who)] = spec
             assigned[who] = spec
-            if slug is None and not (who == ai_seat and available):
+            if slug is None and not (who == ai_seat and available) and not spec.startswith("npc:"):
                 _warn(
                     f"会话 {session} 座位 {who} 的牌组不在评测池 20 套里，"
                     f"已把策略从 {self.base_spec!r} 改派成 {spec!r}"
@@ -1378,6 +1748,46 @@ class State:
         with self.lock:
             self.library_choice = selection
 
+    def current_selection(self) -> str | None:
+        with self.lock:
+            selection = self.library_choice
+        if selection:
+            return selection
+        parsed = parse_llm_spec(self.base_spec)
+        return parsed[0] if parsed is not None else None
+
+    def stage_of(self, session: str | None) -> str | None:
+        if not session:
+            return None
+        with self.lock:
+            stage = self.session_stages.get(session)
+            if stage:
+                return stage
+            info = self._sessions.get(session) or {}
+        meta = info.get("meta") or {}
+        value = meta.get("stage")
+        return value if isinstance(value, str) and value else None
+
+    def eval_target(self, stage_slug: str | None, *, selection: str | None = None) -> dict[str, Any]:
+        return _eval_target(
+            stage_slug,
+            selection=selection if selection is not None else self.current_selection(),
+            config=self.eval_config,
+        )
+
+    def reported_ai_deck(self, session: str | None) -> Any:
+        if not session:
+            return None
+        info = self.session_info(session)
+        if info is None:
+            return None
+        meta = info.get("meta") or {}
+        decks = meta.get("decks")
+        if not isinstance(decks, dict):
+            return None
+        seat = _ai_seat_of(meta)
+        return decks.get(str(seat)) or decks.get(seat)
+
     def ai_info(self, session: str | None = None) -> dict[str, Any]:
         """序列化 AI 信息（`/ai`、`/session` 共用）。
 
@@ -1397,10 +1807,14 @@ class State:
             else:
                 selection = self.library_choice_value() or parsed[0]
                 spec = f"llm:{selection}"
-        return self._ai_payload(spec, session_error)
+        return self._ai_payload(spec, session_error, session=session)
 
     def _ai_payload(
-        self, spec: str | None, session_error: str | None = None
+        self,
+        spec: str | None,
+        session_error: str | None = None,
+        *,
+        session: str | None = None,
     ) -> dict[str, Any]:
         parsed = parse_llm_spec(spec)
         if parsed is not None:
@@ -1410,7 +1824,35 @@ class State:
         else:
             mode = "placeholder"
         available, error, model = self.llm_probe()
-        library = resolve_llm_library(parsed[0]) if parsed is not None else None
+        selection = parsed[0] if parsed is not None else None
+        if selection is None:
+            # LLM 不可用时会话 spec 已回落到脚本，但 /ai 仍应报告配置的库/group。
+            base_parsed = parse_llm_spec(self.base_spec)
+            selection = base_parsed[0] if base_parsed is not None else None
+        library = resolve_llm_library(selection) if selection is not None else None
+        if selection in _LIBRARY_GROUPS and self.eval_config.library_override:
+            override = _abs_path(self.eval_config.library_override)
+            if (override / "library.json").is_file():
+                library = _library_info(override, selection)
+
+        stage = self.stage_of(session)
+        target = self.eval_target(stage, selection=selection)
+        parity = bool(target.get("parity"))
+        if parity and target.get("deck"):
+            matched = _deck_matches(target["deck"], self.reported_ai_deck(session))
+            if matched is not None:
+                parity = matched
+
+        group = _selection_group(selection) if selection is not None else None
+        library_root: str | None = None
+        if selection in _LIBRARY_GROUPS:
+            try:
+                library_root = _display_path(
+                    resolve_library_root(selection, self.eval_config.library_override)
+                )
+            except Exception:  # noqa: BLE001
+                library_root = None
+        card_version = self.eval_config.card_version or target.get("card_version")
         return {
             "mode": mode,
             "spec": spec,
@@ -1419,6 +1861,15 @@ class State:
             "model": model,
             "library": library,
             "options": llm_library_options(),
+            "protocol": _PROTOCOL_NAME,
+            "stage": target.get("stage") or stage,
+            "parity": parity,
+            "group": group,
+            "library_root": library_root,
+            "library_resolved": library.get("resolved") if library else None,
+            "card_version": card_version,
+            "eval_deck": target.get("deck"),
+            "loadout": target.get("loadout"),
         }
 
 
@@ -1558,19 +2009,28 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
             # 续局（「从此处继续」）：同一个 session 开新的一局，seq 要从基线接着数。
             restart = bool(body.get("resume"))
             info = state.open_session(session, meta, restart=restart)
+            stage = meta.get("stage") if isinstance(meta.get("stage"), str) else None
             mismatch = self._check_deck(session, meta)
+            protocol_mismatch = self._check_protocol_deck(session, stage, meta)
+            mismatch = mismatch or protocol_mismatch
             specs = state.assign_seat_specs(session, meta)
             seat_specs = {str(who): spec for who, spec in sorted(specs.items())}
             # 记进**真实**会话记录（不能只改 open_session 返回的快照，
             # 否则 summary.json / /results / session.json 里看不到）。
             stored = state.update_session_info(
-                session, deck_mismatch=mismatch, seat_specs=seat_specs
+                session,
+                deck_mismatch=mismatch,
+                protocol_mismatch=protocol_mismatch,
+                stage=stage,
+                seat_specs=seat_specs,
             )
             # 该会话**实际**使用的 AI 信息（LLM 不可用时这里会如实显示回落后的
             # 脚本 spec 与原因），复用 /ai 的序列化函数。
             ai_info = state.ai_info(session)
             stored = state.update_session_info(session, ai=ai_info) or stored
             info["deck_mismatch"] = mismatch
+            info["protocol_mismatch"] = protocol_mismatch
+            info["stage"] = stage
             info["seat_specs"] = seat_specs
             info["ai"] = ai_info
             info["runs"] = (stored or info).get("runs", 1)
@@ -1620,6 +2080,34 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                 f"characters={actual_chars} cards={len(actual_cards)}，期望 "
                 f"characters={expected_chars} cards={len(expected_cards)}。"
                 "脚本专家规则是按自家牌组写的，牌组不符会静默变蠢。"
+            )
+            return True
+
+        def _check_protocol_deck(
+            self, session: str, stage: str | None, meta: dict[str, Any]
+        ) -> bool:
+            """AI 座位上报的牌组是否与 ``/npc-decks.eval.deck`` 一致。
+
+            这是严格对齐 ``skillloop.run`` 的额外校验：评价协议里玩家侧牌组是
+            固定的（loadout > stage_decks），网页上报的 AI 牌组必须一致，否则
+            本局只能算非评价协议。
+            """
+            if not stage:
+                _warn(
+                    f"会话 {session} 的 meta.stage 缺失：本局按非评价协议"
+                    "（parity=false）运行；网页桥仍按 skillloop.run 构策略。"
+                )
+                return False
+            target = state.eval_target(stage)
+            deck = target.get("deck")
+            if not deck:
+                return False
+            matched = _deck_matches(deck, state.reported_ai_deck(session))
+            if matched is None or matched:
+                return False
+            _warn(
+                f"会话 {session} 的 AI 座位牌组与评价协议关卡 {stage!r} 的 "
+                f"eval.deck {deck!r} 不一致：本局按非评价协议（parity=false）运行。"
             )
             return True
 
@@ -1679,6 +2167,12 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                     from web.npc_decks import npc_decks
 
                     payload = npc_decks()
+                    # 每个 NPC 阵容带上评价协议（stage deck / card pool / rules），
+                    # 前端用它把 AI 牌组自动回填成与 skillloop.run 一致的值。
+                    payload["decks"] = [
+                        {**deck, "eval": state.eval_target(deck.get("slug"))}
+                        for deck in payload.get("decks", ())
+                    ]
                     # C3：NPC 的名字/技能描述/骰子费用来自 .gts，镜像里没有——
                     # 前端用它构造 `new AssetsManager({customData})` 传给 createClient，
                     # 详情面板与棋盘才会显示（否则 getData 会拿到镜像的 404 JSON）。
@@ -1696,6 +2190,34 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
             elif path == "/ai":
                 session = self._query().get("session", [None])[0]
                 self._json(state.ai_info(session))
+            elif path == "/ai-decisions":
+                query = self._query()
+                session = query.get("session", [DEFAULT_SESSION])[0]
+                try:
+                    who = int(query.get("who", [""])[0])
+                except (TypeError, ValueError):
+                    self._json({"error": "who must be 0 or 1"}, status=400)
+                    return
+                if who not in (0, 1):
+                    self._json({"error": "who must be 0 or 1"}, status=400)
+                    return
+                try:
+                    limit = int(query.get("limit", ["20"])[0])
+                except (TypeError, ValueError):
+                    self._json({"error": "limit must be an integer in 1..100"}, status=400)
+                    return
+                if not 1 <= limit <= 100:
+                    self._json({"error": "limit must be an integer in 1..100"}, status=400)
+                    return
+                info = state.session_info(session)
+                directory = info.get("dir") if info else None
+                self._json(
+                    {
+                        "session": session,
+                        "who": who,
+                        "decisions": _read_ai_decisions(directory, who, limit),
+                    }
+                )
             else:
                 self._json(
                     {
@@ -1711,6 +2233,7 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                             "/state",
                             "/ai-deck",
                             "/ai",
+                            "/ai-decisions",
                             "/ai-library",
                             "/npc-decks",
                             "/results",
@@ -1947,23 +2470,42 @@ def _is_end_phase(state_json: Any) -> bool:
     return state_json.get("phase") in _END_PHASES
 
 
+def eval_config_from_args(args: argparse.Namespace) -> WebEvalConfig:
+    """Read the runner-alignment knobs from CLI args (tolerant of test namespaces)."""
+    return WebEvalConfig(
+        stage_decks_root=getattr(args, "stage_decks", None) or DEFAULT_STAGE_DECKS,
+        loadout_root=getattr(args, "loadout_root", None),
+        library_override=getattr(args, "library", None),
+        card_version=getattr(args, "card_version", None),
+        rotation=getattr(args, "rotation", None),
+        stage_rules=bool(getattr(args, "stage_rules", True)),
+    )
+
+
 def build_policy_from_args(
     args: argparse.Namespace,
     *,
     seat_specs: dict[tuple[str, int], str] | None = None,
     client_factory: Any = None,
+    session_stages: dict[str, str] | None = None,
+    eval_config: WebEvalConfig | None = None,
 ) -> tuple[Any, Any]:
     """按命令行参数组装策略：返回 `(seat0 策略, policy_factory)`。
 
     `policy_factory(session, who)` 每次返回**新实例**（T1：座位/会话隔离，
     独立 RNG 与 step 计数）。有 `--policy` 走模型桥，否则纯占位；
-    `--policy llm:<library>` 走 LLM 技能智能体。
+    `--policy llm:<library>` 走与 `skillloop.run.build_policy` 一致的 LLM 策略；
+    `npc:<stage>` 是自对弈时非 AI 座位的真实 NPC 策略。
 
     `seat_specs` 是 C1 的按座位 spec 覆盖（`/choose-deck` + `/session` 派生，
     见 `State.assign_seat_specs`）；没有覆盖时用 `args.policy`。
+    `session_stages` 让工厂读到 `/session` 的 meta.stage（LLM 策略必须知道关卡）。
     `client_factory` 是测试注入入口（默认 `common.llm.build_llm_client`）。
     """
     from common.seeding import derive_seed
+
+    config = eval_config or eval_config_from_args(args)
+    stages = session_stages if session_stages is not None else {}
 
     def factory(session: str, who: int) -> Any:
         role = _role_for(session, who)
@@ -1984,6 +2526,32 @@ def build_policy_from_args(
                 fallback=placeholder,
                 spec=spec,
                 client_factory=client_factory,
+                stage=stages.get(session),
+                eval_config=config,
+            )
+        if spec.startswith("npc:"):
+            stage_slug = spec.split(":", 1)[1]
+            try:
+                from npc.policy import npc_policy_for_stage
+
+                stage_obj = _stage_or_none(stage_slug)
+                if stage_obj is None:
+                    raise KeyError(f"unknown NPC stage: {stage_slug!r}")
+                policy = npc_policy_for_stage(stage_obj, rotation=config.rotation)
+            except Exception as exc:  # noqa: BLE001
+                _warn(f"构造 NPC 策略 {spec!r} 失败，改用 heuristic：{type(exc).__name__}: {exc}")
+                return RepoPolicy(
+                    spec=_NON_POOL_DECK_SPEC,
+                    seed=base_seed,
+                    role=role,
+                    fallback=placeholder,
+                )
+            return RepoPolicy(
+                spec=spec,
+                seed=base_seed,
+                role=role,
+                fallback=placeholder,
+                policy=policy,
             )
         return RepoPolicy(
             spec=spec,
@@ -1992,6 +2560,8 @@ def build_policy_from_args(
             fallback=placeholder,
         )
 
+    # Let ``State`` share the same stage map even when the caller did not pass one.
+    factory.session_stages = stages
     return factory(DEFAULT_SESSION, 0), factory
 
 
@@ -2050,6 +2620,37 @@ def main() -> None:
         help="AI 座位应使用的牌组 slug（T3 牌组对齐）；留空则从 --policy expert:<slug> 推断",
     )
     ap.add_argument(
+        "--stage-decks",
+        default=DEFAULT_STAGE_DECKS,
+        help="每关固定牌组映射（默认 configs/stage_decks.json，与 skillloop.run 一致）",
+    )
+    ap.add_argument(
+        "--loadout-root",
+        default=None,
+        help="冻结的技能 loadout 根目录（reports/loadouts；static/dynamic 生效）",
+    )
+    ap.add_argument(
+        "--library",
+        default=None,
+        help="覆盖 static/dynamic 解析到的技能库目录（传给 skillloop.run.RunSpec）",
+    )
+    ap.add_argument(
+        "--card-version",
+        default=None,
+        help="固定引擎卡池（如 v3.3.0）；默认用 eval.card_version/引擎默认",
+    )
+    ap.add_argument(
+        "--rotation",
+        default=None,
+        help="自对弈 NPC 座位的 rotation（与 skillloop.run --rotation 一致）",
+    )
+    ap.add_argument(
+        "--no-stage-rules",
+        dest="stage_rules",
+        action="store_false",
+        help="不在 /npc-decks.eval 里返回关卡特殊规则",
+    )
+    ap.add_argument(
         "--log-dir",
         default=DEFAULT_LOG_DIR,
         help=f"逐决策日志根目录（默认 {DEFAULT_LOG_DIR}，在 gitignore 内）",
@@ -2064,7 +2665,14 @@ def main() -> None:
     args = ap.parse_args()
 
     seat_specs: dict[tuple[str, int], str] = {}
-    seat0_policy, factory = build_policy_from_args(args, seat_specs=seat_specs)
+    session_stages: dict[str, str] = {}
+    eval_config = eval_config_from_args(args)
+    seat0_policy, factory = build_policy_from_args(
+        args,
+        seat_specs=seat_specs,
+        session_stages=session_stages,
+        eval_config=eval_config,
+    )
     ai_deck = resolve_ai_deck(args)
     log = None if args.no_log else DecisionLog(args.log_dir)
     state = State(
@@ -2074,6 +2682,8 @@ def main() -> None:
         ai_deck=ai_deck,
         seat_specs=seat_specs,
         base_spec=args.policy,
+        eval_config=eval_config,
+        session_stages=session_stages,
     )
     server = ThreadingHTTPServer(
         (args.host, args.port), make_handler(state, args.quiet, args.cors_origin)

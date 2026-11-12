@@ -1619,416 +1619,323 @@ def test_llm_decision_log_has_audit_fields(captured, tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 网页专用渲染 / 战术 / 技能库过滤
+# 严格对齐 skillloop.run：策略/提示词/技能库/候选顺序与上限
 # --------------------------------------------------------------------------- #
-def test_web_state_renderer_skill_candidate_has_type_and_description():
-    from types import SimpleNamespace
+def _resolve_deck_payload(name: str) -> dict:
+    from skillloop.era import resolve_deck
 
-    from reps.schema import DecisionType, LowLevelActionSpec, OptionKind
+    spec = resolve_deck(name)
+    return {"characters": list(spec.characters), "cards": list(spec.cards)}
 
-    try:
-        from agents.scripted.assets import load_assets
 
-        assets = load_assets()
-        assets.skill(23012)  # 伺机而动：造成1点火元素伤害
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"assets 缓存不可用：{exc}")
+def test_llm_policy_matches_runner_build_policy():
+    """LLMPolicy 必须产出 build_policy 的 SkillAgentPolicy（plain renderer 等）。"""
+    from common.llm import MockLLMClient
+    from skillloop.agent import SkillAgentPolicy
+    from skillloop.loadout import stage_task
+    from skillloop.render import StateRenderer
+    from npc.spec import get_stage
 
-    renderer = srv.WebStateRenderer(assets)
-    context = SimpleNamespace(player_view=None, acting_player=0)
-    use_skill = LowLevelActionSpec(
-        action_code=1,
-        request_type=DecisionType.ACTION,
-        kind=OptionKind.ACTION_USE_SKILL,
-        label="",
-        subject_definition_id=23012,
-        used_dice=(3, 3, 3),
+    policy = srv.LLMPolicy(
+        "dynamic",
+        "keqing_shuanghuo",
+        seed=1,
+        role="web0",
+        fallback=srv.Policy(strategy="random", seed=1),
+        stage="blanche",
+        client_factory=lambda: MockLLMClient(['{"choice": 0, "used": []}']),
     )
-    line = renderer.describe_candidate(context, use_skill, 3)
-    assert "元素战技" in line
-    assert "使用技能" not in line  # 类型标签替代了泛化标签
-    assert "造成1点火元素伤害" in line
-    assert "将附着火" in line  # 无状态时至少给出附着提示
-    assert line.startswith("[3] 元素战技：")
+    agent = policy._ensure_policy()
 
-    switch = LowLevelActionSpec(
-        action_code=2,
-        request_type=DecisionType.ACTION,
-        kind=OptionKind.ACTION_SWITCH_ACTIVE,
-        label="",
-        subject_definition_id=23012,
-    )
-    switch_line = renderer.describe_candidate(context, switch, 0)
-    assert "切换出战角色" in switch_line
-    assert "伤害" not in switch_line  # 不编造伤害
-
-
-def _web_state_view(
-    *,
-    opp_aura: int = 0,
-    hand_count: int = 0,
-    me_declared_end: bool = False,
-    opp_declared_end: bool = False,
-):
-    """Minimal masked-state shape for ``describe_state`` / reaction tests."""
-    from types import SimpleNamespace
-
-    def character(definition_id: int, *, aura: int = 0, active: bool = False):
-        return SimpleNamespace(
-            definition_id=definition_id,
-            health=10,
-            max_health=10,
-            energy=0,
-            max_energy=3,
-            aura=aura,
-            is_active=active,
-            defeated=False,
-        )
-
-    me = SimpleNamespace(
-        characters=[character(1403, aura=3, active=True)],
-        dice=[3, 3, 8],
-        hand_cards=[SimpleNamespace(definition_id=1) for _ in range(hand_count)],
-        declared_end=me_declared_end,
-    )
-    opp = SimpleNamespace(
-        characters=[character(3302, aura=opp_aura, active=True)],
-        hand_cards=[],
-        dice=[],
-        declared_end=opp_declared_end,
-    )
-    return SimpleNamespace(
-        round_number=2,
-        phase="action",
-        current_turn=0,
-        players=[me, opp],
-    )
+    assert isinstance(agent, SkillAgentPolicy)
+    # 网页专属 renderer 已移除，使用 runner 的纯 StateRenderer。
+    assert type(agent.renderer) is StateRenderer
+    stage = get_stage("blanche")
+    expected = stage_task(stage, "keqing_shuanghuo")
+    assert agent.task.stage == "blanche"
+    assert agent.task.objectives == expected.objectives
+    assert agent.task.deck == "keqing_shuanghuo"
+    # 技能库不再过滤：动态库原样 40 条，含关卡特化技能。
+    assert agent.library is not None
+    assert len(agent.library) == 40
+    assert "skill_timmie" in agent.library.skills
+    assert "strat_mulligan" in agent.library.skills
+    # base 是 era/expert（blanche 的 keqing_shuanghuo 是 era 牌组）。
+    assert agent.base.name == "expert:keqing_shuanghuo"
+    assert agent.config.candidate_cap == 16
+    assert agent.rules_note == ""  # 没有网页战术
+    assert policy.parity is True
+    assert policy.group == "dynamic"
+    assert policy.library_root.endswith("dyn_v4")
+    assert policy.eval_deck == "keqing_shuanghuo"
 
 
-def test_web_state_renderer_maps_aura_ids_to_elements():
-    from types import SimpleNamespace
-
-    try:
-        from agents.scripted.assets import load_assets
-
-        assets = load_assets()
-        assets.character(1403)
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"assets 缓存不可用：{exc}")
-
-    renderer = srv.WebStateRenderer(assets)
-    text = renderer.describe_state(
-        SimpleNamespace(player_view=_web_state_view(opp_aura=3), acting_player=0)
-    )
-    assert "附着:火" in text
-    assert " 3" not in text  # 不再出现裸 aura 整数
-    text0 = renderer.describe_state(
-        SimpleNamespace(player_view=_web_state_view(opp_aura=0), acting_player=0)
-    )
-    assert "无附着" in text0
-
-
-def test_web_state_renderer_previews_reactions():
-    from types import SimpleNamespace
-
-    from reps.schema import DecisionType, LowLevelActionSpec, OptionKind
-
-    try:
-        from agents.scripted.assets import load_assets
-
-        assets = load_assets()
-        assets.skill(23012)
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"assets 缓存不可用：{exc}")
-
-    renderer = srv.WebStateRenderer(assets)
-    skill = LowLevelActionSpec(
-        action_code=1,
-        request_type=DecisionType.ACTION,
-        kind=OptionKind.ACTION_USE_SKILL,
-        label="",
-        subject_definition_id=23012,
-        used_dice=(3, 3, 3),
-    )
-    # 对方出战带冰附着（aura=1），火技能 → 融化。
-    melting = renderer.describe_candidate(
-        SimpleNamespace(player_view=_web_state_view(opp_aura=1), acting_player=0),
-        skill,
-        0,
-    )
-    assert "将对附着冰的出战角色触发融化" in melting
-    # 无附着 → 只提示附着。
-    attaching = renderer.describe_candidate(
-        SimpleNamespace(player_view=_web_state_view(opp_aura=0), acting_player=0),
-        skill,
-        0,
-    )
-    assert "将附着火" in attaching
-    assert "触发" not in attaching.split("（")[-1]
-
-
-def test_filter_library_for_web_drops_stage_specific_skills():
-    from skillloop.library import SkillLibrary
-
-    root = Path(srv._REPO_ROOT) / "data" / "skills"
-    dynamic = SkillLibrary.load(root / "dyn_v4")
-    filtered = srv.filter_library_for_web(dynamic)
-    ids = set(filtered.skills)
-
-    for dropped in (
-        "skill_timmie",
-        "tempo_budget_for_round_cap_shitou",
-        "frontload_reaction_into_kill_line_shitou",
-        "strat_mulligan",
-        "规则_目标_胜利",
-        "规则_目标_回合上限",
-    ):
-        assert dropped in dynamic.skills
-        assert dropped not in ids
-    for kept in (
-        "rule_reaction",
-        "rule_switch",
-        "strat_reaction",
-        "strat_switch_cost",
-    ):
-        assert kept in ids
-    assert 0 < len(filtered) < len(dynamic)
-    assert filtered.version == dynamic.version
-    assert filtered.meta == dynamic.meta
-
-    # static_v1 也含 strat_mulligan 与 规则_目标_*，同样会被剔除。
-    static = SkillLibrary.load(root / "static_v1")
-    static_filtered = srv.filter_library_for_web(static)
-    assert 0 < len(static_filtered) < len(static)
-    assert "strat_mulligan" not in static_filtered.skills
-    assert not any(sid.startswith("规则_目标_") for sid in static_filtered.skills)
-
-    assert srv.filter_library_for_web(None) is None
-    empty = SkillLibrary.from_skills([], version=0)
-    assert srv.filter_library_for_web(empty) is empty
-
-
-def test_llm_policy_prompt_has_web_tactics_and_filtered_library(captured):
+def test_llm_policy_uses_runner_loadout_priority(captured):
+    """loadout.deck > stage_decks > 网页上报牌组；pinned_skills 原样进策略。"""
     from common.llm import MockLLMClient
 
-    entry = captured["action"]
+    config = srv.WebEvalConfig(loadout_root=os.path.join(REPO_ROOT, "reports", "loadouts"))
+    policy = srv.LLMPolicy(
+        "dynamic",
+        "natlan_battleship",  # 网页上报的牌组应被 loadout/stage_decks 覆盖
+        seed=1,
+        role="web0",
+        fallback=srv.Policy(strategy="random", seed=1),
+        stage="blanche",
+        eval_config=config,
+        client_factory=lambda: MockLLMClient(['{"choice": 0, "used": []}']),
+    )
+    agent = policy._ensure_policy()
+    assert policy.eval_deck == "keqing_shuanghuo"
+    assert policy.loadout_path and policy.loadout_path.endswith("blanche.json")
+    assert agent.config.pinned_skills == (
+        "skill_liusu",
+        "skill_irontonguetian",
+        "rule_burst",
+        "strat_burst_timing",
+        "strat_focus_fire",
+    )
 
-    def make_policy(selection: str, deck: str | None) -> srv.LLMPolicy:
-        return srv.LLMPolicy(
+
+def test_none_and_llm_empty_map_to_llm_empty_group():
+    from common.llm import MockLLMClient
+
+    for selection in ("none", "llm_empty"):
+        policy = srv.LLMPolicy(
             selection,
-            deck,
+            "keqing_shuanghuo",
             seed=1,
             role="web0",
             fallback=srv.Policy(strategy="random", seed=1),
+            stage="blanche",
             client_factory=lambda: MockLLMClient(['{"choice": 0, "used": []}']),
         )
+        agent = policy._ensure_policy()
+        assert policy.group == "llm_empty"
+        assert agent.library is None
+        assert policy.library_root is None
 
-    policy = make_policy("dynamic", _POOL_DECK)
-    policy.decide(0, "action", _payload(entry), _state(entry))
-    agent = policy._policy
-    assert agent.config.candidate_cap == 24
-    assert agent.library is not None
-    assert all(
-        skill.layer == "rule" or skill.skill_id.startswith("strat_")
-        for skill in agent.library
+
+def test_npc_decks_have_eval_protocol():
+    server = _Server(srv.Policy(strategy="greedy", seed=1))
+    try:
+        status, payload = server.request("GET", "/npc-decks")
+        assert status == 200
+        blanche = next(d for d in payload["decks"] if d["slug"] == "blanche")
+        ev = blanche["eval"]
+        assert ev["stage"] == "blanche"
+        assert ev["deck"] == "keqing_shuanghuo"
+        assert ev["card_version"] == "v3.3.0"
+        assert ev["characters"] and ev["cards"]
+        assert isinstance(ev["rules"], dict)
+        assert ev["rules"]["effects"][0]["kind"] == "initial_energy"
+        assert ev["loadout"] is None
+
+        # 每关都有 eval 字段；没有 stage_decks 映射时 deck/characters/cards 可为 null。
+        assert all("eval" in deck for deck in payload["decks"])
+    finally:
+        server.close()
+
+
+def test_npc_decks_eval_rules_can_be_disabled():
+    state = srv.State(
+        srv.Policy(strategy="greedy", seed=1),
+        eval_config=srv.WebEvalConfig(stage_rules=False),
     )
-    assert "strat_mulligan" not in agent.library.skills
-    assert not any(sid.startswith("规则_目标_") for sid in agent.library.skills)
-    system = agent._system["content"]
-    assert "网页对局的助手" in system
-    assert "普通攻击只造成物理伤害" in system
-    assert "rule_reaction" in system or "strat_reaction" in system
-    # 网页版不再用 PvE 关卡/三星目标框架。
-    assert "三星" not in system
-    assert "单人 PvE" not in system
-    # 关卡特化 / mulligan 技能已过滤，不得出现在 stable prefix 里。
-    assert "五回合窗口" not in system
-    assert "tempo_budget_for_round_cap" not in system
-    assert "frontload_reaction_into_kill_line" not in system
-    assert "strat_mulligan" not in system
-
-    # none 库也必须带网页战术（rules_note 不能为空）。
-    none_policy = make_policy("none", None)
-    none_policy.decide(0, "action", _payload(entry), _state(entry))
-    none_system = none_policy._policy._system["content"]
-    assert "普通攻击只造成物理伤害" in none_system
-    assert none_policy._policy.library is None
+    server = _Server(state=state)
+    try:
+        _, payload = server.request("GET", "/npc-decks")
+        assert all(deck["eval"]["rules"] is None for deck in payload["decks"])
+    finally:
+        server.close()
 
 
-def test_ai_endpoint_reports_applied_and_filtered_counts(monkeypatch):
+def _stage_session_body(session: str, stage: str, ai_deck: str) -> dict:
+    return {
+        "session": session,
+        "meta": {
+            "ai_seat": 1,
+            "stage": stage,
+            "decks": {
+                "0": _NPC_DECK,
+                "1": _resolve_deck_payload(ai_deck),
+            },
+        },
+    }
+
+
+def test_session_stage_sets_parity_and_ai_protocol(monkeypatch):
     server = _llm_server(monkeypatch, available=True)
     try:
-        status, out = server.request("GET", "/ai")
+        status, out = server.request(
+            "POST", "/session", _stage_session_body("gstage", "blanche", "keqing_shuanghuo")
+        )
         assert status == 200
-        library = out["library"]
-        assert library["resolved"] == "dyn_v4"
-        assert library["skills"] == 40
-        assert library["filtered_out"] > 0
-        assert library["applied_skills"] == library["skills"] - library["filtered_out"]
+        assert out["stage"] == "blanche"
+        assert out["protocol_mismatch"] is False
 
-        # static_v1 的 strat_mulligan 与 规则_目标_* 同样会被剔除。
-        extra = srv.resolve_llm_library("static")
-        assert extra["skills"] == 27
-        assert 0 < extra["applied_skills"] < extra["skills"]
-        assert extra["applied_skills"] == extra["skills"] - extra["filtered_out"]
+        _, ai = server.request("GET", "/ai?session=gstage")
+        assert ai["protocol"] == "skillloop.run"
+        assert ai["stage"] == "blanche"
+        assert ai["parity"] is True
+        assert ai["group"] == "dynamic"
+        assert ai["library_root"].endswith("dyn_v4")
+        assert ai["library_resolved"] == "dyn_v4"
+        assert ai["eval_deck"] == "keqing_shuanghuo"
+        assert ai["card_version"] == "v3.3.0"
+
+        # 上报的 AI 牌组与 eval.deck 不一致 → 非评价协议。
+        _, out = server.request(
+            "POST", "/session", _stage_session_body("gbad", "blanche", "natlan_battleship")
+        )
+        assert out["protocol_mismatch"] is True
+        _, ai = server.request("GET", "/ai?session=gbad")
+        assert ai["parity"] is False
+    finally:
+        server.close()
+
+
+def test_ai_parity_false_without_stage(monkeypatch):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        server.request("POST", "/session", _llm_session_body("gnostage"))
+        _, ai = server.request("GET", "/ai?session=gnostage")
+        assert ai["stage"] is None
+        assert ai["parity"] is False
+        assert ai["protocol"] == "skillloop.run"
+    finally:
+        server.close()
+
+
+def test_self_play_assigns_real_npc_policy_to_non_ai_seat(monkeypatch):
+    from npc.policy import NpcPolicy
+
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        body = _stage_session_body("gself", "blanche", "keqing_shuanghuo")
+        body["meta"]["ai_self_play"] = True
+        status, out = server.request("POST", "/session", body)
+        assert status == 200
+        assert out["seat_specs"]["0"] == "npc:blanche"
+        # AI 座位仍用 base spec（llm:dynamic），无需额外覆盖。
+        assert out["seat_specs"].get("1") in (None, "llm:dynamic")
+        seat1 = server.state.seat("gself", 1)
+        assert isinstance(seat1.policy, srv.LLMPolicy)
+        assert seat1.policy.stage == "blanche"
+
+        seat0 = server.state.seat("gself", 0)
+        assert isinstance(seat0.policy, srv.RepoPolicy)
+        assert seat0.policy.name == "npc:blanche"
+        assert isinstance(seat0.policy._policy, NpcPolicy)
+    finally:
+        server.close()
+
+
+def test_self_play_without_stage_keeps_heuristic(monkeypatch):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        body = _llm_session_body("gselfnostage")
+        body["meta"]["ai_self_play"] = True
+        _, out = server.request("POST", "/session", body)
+        assert out["seat_specs"]["0"] == "heuristic"
     finally:
         server.close()
 
 
 # --------------------------------------------------------------------------- #
-# 网页候选排序 / 手牌提示 / 战术增补
+# 只读调试：/ai-decisions（最近 N 条 LLM 决策的技能引用）
 # --------------------------------------------------------------------------- #
-def _action_spec(kind, *, subject: int = 0, code: int = 0):
-    from reps.schema import DecisionType, LowLevelActionSpec
-
-    return LowLevelActionSpec(
-        action_code=code,
-        request_type=DecisionType.ACTION,
-        kind=kind,
-        label="",
-        subject_definition_id=subject,
-    )
-
-
-def test_web_priority_key_tiers_and_stability():
-    from types import SimpleNamespace
-
-    from reps.schema import OptionKind
-
-    try:
-        from agents.scripted.assets import load_assets
-
-        load_assets().skill(23012)
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"assets 缓存不可用：{exc}")
-
-    def key(view, spec):
-        return srv.web_priority_key(
-            SimpleNamespace(player_view=view, acting_player=0), spec
-        )
-
-    icy = _web_state_view(opp_aura=1)
-    clear = _web_state_view(opp_aura=0)
-    reaction = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23012)  # 火 E vs 冰
-    burst = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23013)
-    elemental = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23012)
-    card = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=100)
-    normal = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23011)
-    switch = _action_spec(OptionKind.ACTION_SWITCH_ACTIVE, subject=1403)
-    tuning = _action_spec(OptionKind.ACTION_ELEMENTAL_TUNING)
-    end = _action_spec(OptionKind.ACTION_DECLARE_END)
-
-    assert key(icy, reaction) == 0
-    assert key(clear, burst) == 1
-    assert key(clear, elemental) == 2
-    assert key(clear, card) == 3
-    assert key(clear, normal) == 4
-    assert key(clear, switch) == 5
-    assert key(clear, tuning) == 5
-    assert key(clear, end) == 6
-
-    # 同优先级保持原顺序（sorted 稳定）。
-    card_b = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=101)
-    specs = [card, card_b, end, normal]
-    order = sorted(range(len(specs)), key=lambda i: key(clear, specs[i]))
-    assert [specs[i].subject_definition_id for i in order] == [100, 101, 23011, 0]
-    assert key(clear, card) == key(clear, card_b)
-
-
-def test_web_llm_reorder_keeps_payload_by_code():
-    from reps.action_adapter import BuiltDecisionContext
-    from reps.schema import (
-        DecisionContext,
-        DecisionType,
-        OptionKind,
-    )
-
-    end = _action_spec(OptionKind.ACTION_DECLARE_END, code=7)
-    card = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=100, code=8)
-    switch = _action_spec(OptionKind.ACTION_SWITCH_ACTIVE, subject=1403, code=9)
-    payloads = {
-        7: {"chosen_action_index": 5, "used_dice": []},
-        8: {"chosen_action_index": 2, "used_dice": [8]},
-        9: {"chosen_action_index": 4, "used_dice": [8]},
+def _decision_record(who: int, step: int, used: list[str]) -> dict:
+    return {
+        "type": "decision",
+        "who": who,
+        "step": step,
+        "method": "action",
+        "policy": "llm:dynamic[dyn_v4]",
+        "model_choice": 4,
+        "n_candidates": 16,
+        "used_skills": used,
+        "library": {
+            "selection": "dynamic",
+            "resolved": "dyn_v4",
+            "path": os.path.join("data", "skills", "dyn_v4"),
+            "version": 2,
+        },
+        "fallback": False,
+        "error": None,
+        "latency_ms": 3000,
+        "system_hash": "abc123",
+        "request": "action",
     }
-    context = DecisionContext(
-        acting_player=0,
-        request_type=DecisionType.ACTION,
-        step_index=0,
-        full_state=None,  # type: ignore[arg-type]
-        legal_low_level_codes=(7, 8, 9),
-        legal_low_level_specs=(end, card, switch),
-        legal_low_level_mask=(True, True, True),
-        player_view=None,
-    )
-    built = BuiltDecisionContext(
-        context=context,
-        payload_by_low_level_code=payloads,
-        label_by_low_level_code={},
-        low_to_high_code={},
-    )
-    reordered = srv._reorder_for_web_llm(built)
-    assert reordered.context.legal_low_level_codes == (8, 9, 7)
-    assert [spec.kind for spec in reordered.context.legal_low_level_specs] == [
-        OptionKind.ACTION_PLAY_CARD,
-        OptionKind.ACTION_SWITCH_ACTIVE,
-        OptionKind.ACTION_DECLARE_END,
-    ]
-    assert reordered.context.legal_low_level_mask == (True, True, True)
-    # payload 表按原引擎 code 映射，未随排序改动。
-    assert reordered.payload_by_low_level_code == payloads
-    for code in reordered.context.legal_low_level_codes:
-        assert code in reordered.payload_by_low_level_code
-    assert reordered.payload_by_low_level_code[7]["chosen_action_index"] == 5
 
 
-def test_web_state_and_user_message_hand_hints():
-    from types import SimpleNamespace
-
-    from reps.schema import OptionKind
-
+def test_ai_decisions_filters_who_limit_and_maps_skill_names(tmp_path):
+    log = srv.DecisionLog(tmp_path)
+    server = _Server(state=srv.State(srv.Policy(strategy="greedy", seed=1), log=log))
     try:
-        from agents.scripted.assets import load_assets
+        server.request("POST", "/session", {"session": "gdec", "meta": {}})
+        for step in (1, 2, 3, 4):
+            log.append(
+                "gdec",
+                _decision_record(0, step, ["strat_reaction", "unknown_skill"]),
+            )
+        log.append("gdec", _decision_record(1, 5, ["rule_reaction"]))
 
-        assets = load_assets()
-        assets.character(1403)
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"assets 缓存不可用：{exc}")
+        status, out = server.request(
+            "GET", "/ai-decisions?session=gdec&who=0&limit=2"
+        )
+        assert status == 200
+        assert out["session"] == "gdec" and out["who"] == 0
+        assert [d["step"] for d in out["decisions"]] == [3, 4]
+        first = out["decisions"][0]
+        assert first["method"] == "action"
+        assert first["policy"] == "llm:dynamic[dyn_v4]"
+        assert first["model_choice"] == 4
+        assert first["n_candidates"] == 16
+        assert first["used_skills"] == ["strat_reaction", "unknown_skill"]
+        assert first["used_skill_names"] == ["先附着再补元素", "unknown_skill"]
+        assert first["library"]["resolved"] == "dyn_v4"
+        assert first["fallback"] is False and first["error"] is None
+        assert first["latency_ms"] == 3000
+        assert first["system_hash"] == "abc123"
+        assert first["request"] == "action"
 
-    renderer = srv.WebStateRenderer(assets)
-    view = _web_state_view(hand_count=8, opp_declared_end=True)
-    context = SimpleNamespace(player_view=view, acting_player=0)
-    state_text = renderer.describe_state(context)
-    assert "（8/10）" in state_text
-    assert "对方已宣布结束=True" in state_text
-
-    end = _action_spec(OptionKind.ACTION_DECLARE_END, code=3)
-    user = renderer.user_message(context, [(3, end)], progress="PLACEHOLDER")
-    content = user["content"]
-    assert "手牌 8/10" in content
-    assert "手牌接近上限" in content
-    assert "未完成目标" not in content
-    assert "PLACEHOLDER" not in content  # PvE progress 不再显示
-
-    # 已宣布结束时不再提示继续行动。
-    ended_view = _web_state_view(hand_count=9, me_declared_end=True)
-    ended = renderer.user_message(
-        SimpleNamespace(player_view=ended_view, acting_player=0),
-        [(3, end)],
-    )
-    assert "手牌接近上限" not in ended["content"]
+        _, other = server.request("GET", "/ai-decisions?session=gdec&who=1")
+        assert [d["step"] for d in other["decisions"]] == [5]
+        assert other["decisions"][0]["used_skill_names"] == ["元素反应"]
+    finally:
+        server.close()
 
 
-def test_web_tactics_cover_card_and_position_bias():
-    from web.llm_render import WEB_TACTICS
+def test_ai_decisions_missing_session_or_log_is_empty(tmp_path):
+    server = _Server(state=srv.State(srv.Policy(strategy="greedy", seed=1)))
+    try:
+        status, out = server.request(
+            "GET", "/ai-decisions?session=does-not-exist&who=0"
+        )
+        assert status == 200
+        assert out == {"session": "does-not-exist", "who": 0, "decisions": []}
+    finally:
+        server.close()
 
-    for phrase in (
-        "每轮先检查手牌",
-        "手牌接近 10 先打掉会溢出的牌",
-        "元素调和凑同色",
-        "普通攻击只是默认动作",
-        "普通攻击常排在候选 0",
-        "结束回合是最后手段",
-        "天赋/装备牌注意出战角色/武器匹配",
-    ):
-        assert phrase in WEB_TACTICS
+    # 日志开了但会话没开过目录 → 仍是空列表，不 500。
+    log = srv.DecisionLog(tmp_path)
+    server = _Server(state=srv.State(srv.Policy(strategy="greedy", seed=1), log=log))
+    try:
+        status, out = server.request("GET", "/ai-decisions?session=ghost&who=1")
+        assert status == 200 and out["decisions"] == []
+    finally:
+        server.close()
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["who=2", "who=abc", "who=0&limit=0", "who=0&limit=101", "who=0&limit=abc", ""],
+)
+def test_ai_decisions_rejects_bad_params(query):
+    server = _Server(state=srv.State(srv.Policy(strategy="greedy", seed=1)))
+    try:
+        status, out = server.request("GET", f"/ai-decisions?session=g&{query}")
+        assert status == 400 and "error" in out
+    finally:
+        server.close()

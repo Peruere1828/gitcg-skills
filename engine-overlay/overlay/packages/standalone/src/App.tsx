@@ -46,6 +46,7 @@ import {
   type CustomData,
 } from "@gi-tcg/assets-manager";
 import { GameStateEditor } from "@gi-tcg/state-editor";
+import type { StageRulesPayload } from "./stage-rules";
 
 enum GameMode {
   NotStarted = 0,
@@ -60,6 +61,21 @@ const INIT_DECK1 =
 
 const EMPTY_DECK: Deck = { characters: [], cards: [] };
 
+/**
+ * 评价协议：`GET /npc-decks` 每条阵容附带的评测口径（后端契约）。
+ * 旧版桥没有 eval 字段 → 保持 undefined，前端所有回填/警告安全跳过。
+ */
+interface NpcDeckEval {
+  stage: string;
+  card_version: string | null;
+  deck: string | null;
+  characters: number[] | null;
+  cards: number[] | null;
+  rules: StageRulesPayload | null;
+  /** 冻结的 loadout 文件（static/dynamic 才有；仅展示） */
+  loadout?: string | null;
+}
+
 /** C3：`GET /npc-decks` 的一条 NPC 阵容（人数不限 3，出战+预备原样） */
 interface NpcDeck {
   slug: string;
@@ -72,6 +88,8 @@ interface NpcDeck {
   n_support: number;
   total: number;
   cards: number[];
+  /** 评价协议：关卡/卡池版本/评测牌组/特殊规则（后端新增，可缺省） */
+  eval?: NpcDeckEval | null;
 }
 
 interface NpcPayload {
@@ -108,6 +126,10 @@ interface AiStatus {
   model: string;
   library: AiLibraryInfo | null;
   options: AiLibraryOption[];
+  /** 评价协议状态（后端新增；旧版桥没有这些字段） */
+  stage?: string | null;
+  parity?: string | boolean | null;
+  protocol?: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -167,6 +189,12 @@ function parseAiStatus(raw: unknown): AiStatus | null {
     model: readString(raw, "model"),
     library: parseAiLibrary(raw.library),
     options: parseAiOptions(raw.options),
+    stage: typeof raw.stage === "string" ? raw.stage : null,
+    parity:
+      typeof raw.parity === "boolean" || typeof raw.parity === "string"
+        ? raw.parity
+        : null,
+    protocol: typeof raw.protocol === "string" ? raw.protocol : null,
   };
 }
 
@@ -231,6 +259,9 @@ export function App() {
   const [otherDeckCode, setOtherDeckCode] = createSignal(INIT_DECK0);
   // 用户手改过对面牌组 → 开局时不再自动反选（尊重人的选择）
   const [otherDeckEdited, setOtherDeckEdited] = createSignal(false);
+  // 评价协议：AI 牌组由所选 NPC 阵容的 `eval` 回填（不是用户手改）。
+  // 与 `otherDeckEdited` 分开：切到另一个关卡时还能继续回填，但手改优先。
+  const [otherDeckFromEval, setOtherDeckFromEval] = createSignal(false);
   const [npcPick, setNpcPick] = createSignal<NpcDeck | null>(null);
   const [npcList, setNpcList] = createSignal<NpcPayload | null>(null);
   const [npcError, setNpcError] = createSignal<string | null>(null);
@@ -316,6 +347,51 @@ export function App() {
       return null;
     }
   };
+  const deckKey = (values: readonly number[]): string =>
+    [...values].sort((a, b) => a - b).join(",");
+  /** 牌组内容是否与评价牌组一致（角色/行动牌各自按多重集比较） */
+  const sameDeckContents = (
+    deck: Deck,
+    evaluation: { characters: number[]; cards?: number[] },
+  ): boolean =>
+    deckKey(deck.characters) === deckKey(evaluation.characters ?? []) &&
+    deckKey(deck.cards ?? []) === deckKey(evaluation.cards ?? []);
+
+  /**
+   * 评价协议：选了 NPC 阵容就按它的 `eval` 回填 AI 牌组分享码与卡池版本。
+   * 旧版桥没有 `eval` → 全部安全跳过；用户手改过 AI 牌组 → 不覆盖。
+   */
+  const applyNpcEval = (deck: NpcDeck | null) => {
+    const evaluation = deck?.eval;
+    if (!evaluation || otherDeckEdited()) {
+      // 缺 eval（旧版桥）或用户手改过 AI 牌组 → 不动版本/牌组。
+      return;
+    }
+    if (evaluation.characters?.length) {
+      const code = encodeDeck({
+        characters: evaluation.characters,
+        cards: evaluation.cards ?? [],
+      });
+      if (code) {
+        setOtherDeckCode(code);
+        // 评测牌组是固定口径：标记来源，开局时不让 /choose-deck 反选覆盖。
+        setOtherDeckFromEval(true);
+      } else {
+        console.warn(
+          `[npc-eval] 评价牌组 ${evaluation.deck} 编不出分享码，保留当前 AI 牌组`,
+        );
+      }
+    }
+    const cardVersion = evaluation.card_version;
+    if (!cardVersion) {
+      return;
+    }
+    if ((VERSIONS as readonly string[]).includes(cardVersion)) {
+      setVersion(cardVersion as Version);
+    } else {
+      console.warn(`[npc-eval] 未知卡池版本 ${cardVersion}，保持当前版本`);
+    }
+  };
   /** seat0 恒为先手：先手三选在这里落成具体座位 */
   const resolveHumanSeat = (): 0 | 1 => {
     const choice = firstTurn();
@@ -339,12 +415,19 @@ export function App() {
         setAiDeckSlug(null);
         return;
       }
+      if (npcPick()?.eval && otherDeckFromEval()) {
+        // 评价协议下 AI 牌组由关卡 `eval` 固定：只记录桥声明的 slug（用于
+        // 不一致警告），不拿桥的默认牌组覆盖评测牌组。
+        setAiDeckSlug(data.slug);
+        return;
+      }
       const code = encodeDeck({ characters: data.characters, cards: data.cards });
       if (code) {
         setOtherDeckCode(code);
         // 桥声明的牌组是**显式选择**：标记手改过，开局时不再被自动反选覆盖
         // （否则 expert:<slug> 的牌组会被反选成别的池内套，脚本专家被改派）。
         setOtherDeckEdited(true);
+        setOtherDeckFromEval(false);
       }
       setAiDeckSlug(data.slug);
     } catch (e) {
@@ -382,6 +465,7 @@ export function App() {
       if (code) {
         setOtherDeckCode(code);
         setOtherDeckEdited(false);
+        setOtherDeckFromEval(false);
       }
       setCounterPick(pick);
       return pick;
@@ -453,6 +537,73 @@ export function App() {
       ? ""
       : `（不可用：${status.llm_error ?? "原因未知"}）`;
     return `AI 引擎：LLM（model=${status.model || "?"}）${unavailable} · 技能库：${library}`;
+  });
+
+  /**
+   * 评价协议状态行：以「是否选了 NPC 阵容」为准；`/ai` 如果返回
+   * `parity` / `protocol` / `stage` 就附在后面（旧版桥没有这些字段）。
+   */
+  const evalProtocolText = createMemo(() => {
+    const pick = npcPick();
+    if (!pick) {
+      return "非评价协议（未选 NPC 阵容）";
+    }
+    const status = aiStatus();
+    const evaluation = pick.eval;
+    const details: string[] = [];
+    if (evaluation) {
+      // 评价协议的静态口径：关卡牌组 / 卡池 / 冻结 loadout。
+      if (evaluation.deck) {
+        details.push(`牌组 ${evaluation.deck}`);
+      }
+      if (evaluation.card_version) {
+        details.push(`卡池 ${evaluation.card_version}`);
+      }
+      if (evaluation.loadout) {
+        details.push(`loadout ${evaluation.loadout}`);
+      }
+    }
+    // `/ai` 是全局状态（配置页还没有 session），parity 此时必然 false；
+    // 只有显式 true 才展示，避免误导。
+    if (status?.parity === true) {
+      details.push("parity=true");
+    }
+    if (status?.protocol) {
+      details.push(`protocol=${status.protocol}`);
+    }
+    if (!evaluation && status?.stage && status.stage !== pick.slug) {
+      details.push(`/ai stage=${status.stage}`);
+    }
+    return `评价协议：${pick.slug}${
+      details.length > 0 ? `（${details.join("，")}）` : ""
+    }`;
+  });
+
+  /**
+   * 评价牌组一致性（非阻塞警告）：优先比对桥声明的 AI 牌组 slug；桥没声明
+   * 就比对当前 AI 牌组内容。缺 `eval` 的旧版桥什么都不提示。
+   */
+  const evalDeckWarning = createMemo(() => {
+    const evaluation = npcPick()?.eval;
+    if (!evaluation?.deck) {
+      return null;
+    }
+    const declared = aiDeckSlug();
+    if (declared) {
+      return declared === evaluation.deck
+        ? null
+        : `桥的 AI 牌组是 ${declared}，评价要求 ${evaluation.deck}`;
+    }
+    const characters = evaluation.characters;
+    if (!characters?.length) {
+      return null;
+    }
+    return sameDeckContents(deckOrEmpty(otherDeckCode()), {
+      characters,
+      cards: evaluation.cards ?? [],
+    })
+      ? null
+      : `当前 AI 牌组与评价牌组 ${evaluation.deck} 不一致`;
   });
 
   /** `POST /ai-library`：切换技能库；失败回滚下拉并提示错误 */
@@ -643,8 +794,9 @@ export function App() {
       return;
     }
     const sessionId = newSessionId();
-    if (aiOpponent() && !otherDeckEdited()) {
-      // 没手改过对面牌组 → 让桥按我的牌组反选一次（结果回填并用于本局）
+    if (aiOpponent() && !otherDeckEdited() && !otherDeckFromEval()) {
+      // 没手改过对面牌组 → 让桥按我的牌组反选一次（结果回填并用于本局）。
+      // 评价牌组由关卡 `eval` 固定，不参与反选。
       const pick = await chooseCounterPick(sessionId);
       if (pick) {
         theirs = { characters: pick.characters, cards: pick.cards };
@@ -697,6 +849,7 @@ export function App() {
                   onInput={(e) => {
                     setOtherDeckCode(e.currentTarget.value);
                     setOtherDeckEdited(true);
+                    setOtherDeckFromEval(false);
                     setCounterPick(null);
                   }}
                 />
@@ -725,12 +878,15 @@ export function App() {
                     const slug = e.target.value;
                     if (!slug) {
                       setNpcPick(null);
+                      setOtherDeckFromEval(false);
                       return;
                     }
                     const found = npcList()?.decks.find(
                       (d) => d.slug === slug,
                     );
                     setNpcPick(found ?? null);
+                    // 评价协议：按该关卡的 eval 回填 AI 牌组与卡池版本
+                    applyNpcEval(found ?? null);
                   }}
                 >
                   <option value="">（不用 NPC 阵容，用上面的分享码）</option>
@@ -861,6 +1017,12 @@ export function App() {
               >
                 <Show when={aiEngineText()}>
                   <span>{aiEngineText()}</span>
+                </Show>
+                <span>{evalProtocolText()}</span>
+                <Show when={evalDeckWarning()}>
+                  <span style={{ color: "#b00020" }}>
+                    牌组警告：{evalDeckWarning()}
+                  </span>
                 </Show>
               </div>
               <div
@@ -1067,6 +1229,8 @@ export function App() {
               npcLineups={npcLineups()}
               aiOpponent={aiOpponent() ? bridgeBase() : undefined}
               aiSelfPlay={aiSelfPlay()}
+              stage={npcPick()?.slug}
+              stageRules={npcPick()?.eval?.rules}
             />
           </Show>
         </Match>
