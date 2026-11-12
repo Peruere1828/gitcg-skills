@@ -72,6 +72,8 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 ```
 
 - `--seeds 50` 即 seeds 0–49。冒烟把 `--seeds` 换成 `3` 或 `3,4,5`。
+- 并发：LLM 组 `--workers` 就是同时在飞的 API 请求数。本轮回跑用 4（稳定、无 429）；
+  12 线程机器上建议默认 **6**（约 20% 提速），出现 429/超时再降到 4。scripted 可用 6–8。
 - `GITCG_LLM_BUDGET_USD` 是**硬上限**（D11）：触顶只停止启动新局，已在飞的局跑完。
   模型与预算写进 run meta；成本先按 `EVAL_PROTOCOL.md §6` 标定再上全量。
 - **`llm_empty` 新口径会注入 17 条规则**，prompt/成本高于旧「空库」；上全量前先
@@ -82,16 +84,31 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 - 冒烟要核查：无 `no_llm_config` / `unknown card` 错误；prompt 内库内容与
   loadout 版本匹配；`llm_empty` 只含 17 条 rule、无 strategy。
 
-## 6. 当前结果
+## 6. 当前结果（v3 回跑，2026-11-12）
 
-- **无当前有效结果**。旧 LLM 组、t5/t5b、判定修复前的数字、旧免费基线
-  全部作废，不再引用；等待新一轮 API 实验。
-- `scripted` 可先跑免费基线；结果落 `data/runs/`，摘要进 `reports/`。
+口径：16 关 × seeds **1–5**（80 局/组），`stage_decks` + `card_version=v3.3.0`
++ `--stage-rules`；旧 v2/t5 结果全部作废，不与本表混用。
+
+| 组 | 局数 | 三星 | 三星率 | 成本 | 备注 |
+|---|---:|---:|---:|---:|---|
+| `scripted` | 80 | 57 | **71.25%** | $0 | 固定脚本 |
+| `llm_empty` | 80 | 42 | **52.50%** | $0.147 | 仅 17 条 rule |
+| `static` | 80 | 46 | **57.50%** | $0.153 | static_v1 + loadouts/v1 |
+| `dynamic` | — | — | — | — | 未跑（待下一步） |
+
+- 0 error / 0 truncated（三组均 80 valid）。
+- LLM 组 4 workers；平均 ~80 s/局、~26 calls/局；无 429/回退。
+- 配对 vs `scripted`（同 stage/seed，n=80 对；`scripts.compare_groups`）：
+  - `llm_empty` Δ = **−0.1875**，CI [−0.3987, +0.0237] → 跨 0，不采纳；
+  - `static` Δ = **−0.1375**，CI [−0.2763, +0.0013] → 跨 0，不采纳。
+- 5 seeds 的 CI 很宽，**不作显著性/胜率结论**；`dynamic` 未跑，四组完整对比待补。
+- 原始行：`data/runs/v3_{scripted,llm_empty,static}.jsonl`；比较：`reports/compare/v3_scripted_vs_*.json`。
 
 ## 7. 下一步
 
-1. 先跑 `scripted` 免费基线（50 seeds/关）。
-2. 3–5 seeds 冒烟 `llm_empty` / `static` / `dynamic`，核查 prompt、库、loadout、预算字段。
+1. 用 **6 workers** 跑 `dynamic` 的 seeds 1–5，补齐四组同口径对比。
+2. 5 seeds 结果只作冒烟；全量按 50 seeds/关、6 workers 跑，预算按
+   `EVAL_PROTOCOL.md §6` 分组设置。
 3. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。
 4. 摘要进 `reports/`（带 stage/seeds/n/group/library_version/model/date），
    失败进 `docs/failures/`。

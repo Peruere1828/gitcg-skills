@@ -3,7 +3,7 @@
 # against the scripted baseline. Runs are resumable (same --out => skip done rows).
 #
 # Usage:
-#   bash scripts/run_all_groups.sh 50 8                 # full scale, 8 workers
+#   bash scripts/run_all_groups.sh 50 6                 # full scale, 6 workers (API concurrency = workers)
 #   EVAL_GROUPS="scripted contestant" bash scripts/run_all_groups.sh 10 8
 #
 # NOTE: the selection variable is EVAL_GROUPS, not GROUPS: bash reserves GROUPS
@@ -26,7 +26,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PY="${PY:-/home/ubuntuaaa/miniconda3/envs/gitcg-skill/bin/python}"
 SEEDS="${1:-50}"
-WORKERS="${2:-8}"
+WORKERS="${2:-6}"
 EVAL_GROUPS="${EVAL_GROUPS:-scripted contestant llm_empty static dynamic}"
 STATIC_LIB="${STATIC_LIB:-data/skills/static_v1}"
 DYNAMIC_LIB="${DYNAMIC_LIB:-data/skills/dyn_v4}"
