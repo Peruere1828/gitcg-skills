@@ -4,8 +4,9 @@
 Pipeline (the "dynamic" arm's first half):
 
 1. read the per-game rows of a run (e.g. ``llm_empty`` or a previous library version);
-2. build a per-stage failure profile (which objectives fail, how often, round stats);
-3. ask the model for 1-2 reusable principles per failing stage (``skillloop.extract``);
+2. build a per-stage failure profile (which objectives fail, how often, round stats)
+   plus one close loss and one 3★ trace per stage when rows carry ``trace``;
+3. ask the model to write 1-2 injected prompts per failing stage (``skillloop.extract``);
 4. write a **new library version** = current library + the candidates, snapshot it, and
    print the candidates so the gate can be run on unseen seeds.
 
@@ -38,6 +39,19 @@ def stage_objectives(path: Path = STAGES_JSON) -> dict[str, tuple[str, ...]]:
             for s in stages}
 
 
+def stage_round_caps(path: Path = STAGES_JSON) -> dict[str, int]:
+    """Per-stage round cap from ``win_within_rounds`` (used to rank close losses)."""
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    stages = doc if isinstance(doc, list) else doc.get("stages", [])
+    caps: dict[str, int] = {}
+    for stage in stages:
+        for objective in stage.get("objectives") or []:
+            if objective.get("type") == "win_within_rounds" and objective.get("n") is not None:
+                caps[str(stage["name"])] = int(objective["n"])
+                break
+    return caps
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--rows", required=True, help="per-game JSONL of the run to learn from")
@@ -47,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-failure-rate", type=float, default=0.15)
     ap.add_argument("--effort", default="high", help="thinking effort for extraction (default high)")
     ap.add_argument("--max-tokens", type=int, default=8192)
+    ap.add_argument("--max-replays", type=int, default=2,
+                    help="representative game traces per stage (max 2: one loss + one 3★)")
     ap.add_argument("--dry-run", action="store_true", help="print candidates, do not write")
     args = ap.parse_args(argv)
 
@@ -59,7 +75,14 @@ def main(argv: list[str] | None = None) -> int:
     if not rows:
         raise SystemExit(f"no valid rows in {args.rows}")
 
-    profiles = failure_profiles(rows, objectives_by_stage=stage_objectives())
+    # Rows written with ``skillloop.run --trace`` carry ``trace``; older rows do
+    # not and simply contribute statistics with no replay block.
+    profiles = failure_profiles(
+        rows,
+        objectives_by_stage=stage_objectives(),
+        round_caps_by_stage=stage_round_caps(),
+        max_replays=args.max_replays,
+    )
     client = build_llm_client()
     if client is None:
         raise SystemExit("no LLM config; fill .env (see scripts/probe_llm.py)")
