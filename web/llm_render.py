@@ -24,6 +24,7 @@ Pieces:
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any
 
 from reps.schema import OptionKind
@@ -46,6 +47,14 @@ WEB_TACTICS = (
     "- 能量满且骰子够时优先考虑元素爆发；能击杀对方出战角色时优先击杀；"
     "不要为了铺场牺牲当轮伤害。\n"
     "- 候选编号只是标识，不代表优先级。\n"
+    "- 每轮先检查手牌：有可支付且有效的行动牌（装备/事件/支援）时优先利用；"
+    "手牌接近 10 先打掉会溢出的牌。\n"
+    "- 元素战技/爆发因骰色不足付不起时，先用 0–2 费牌或元素调和凑同色，再打技能；"
+    "普通攻击只是默认动作，不是最优动作。\n"
+    "- 普通攻击常排在候选 0、结束回合常在候选末尾；位置不代表优先级。"
+    "结束回合是最后手段：结束前确认没有可支付的有效牌；不要带着 3+ 骰子和多张"
+    "可支付手牌结束（除非为抢下轮先手/防止被击杀）。\n"
+    "- 天赋/装备牌注意出战角色/武器匹配；已经不可能触发的死牌不要反复考虑。\n"
     "- 「起手换牌」类技能只在起手换牌阶段参考，之后不要引用。"
 )
 
@@ -127,6 +136,109 @@ def _parse_damage(description: str) -> tuple[str, int] | None:
     return (match.group(3), amount)
 
 
+def _opponent_active_character(context: Any) -> Any:
+    """Opponent's active (not defeated) character from the masked player view."""
+    state = getattr(context, "player_view", None)
+    if state is None:
+        return None
+    opponent = state.players[1 - context.acting_player]
+    return next(
+        (
+            character
+            for character in opponent.characters
+            if getattr(character, "is_active", False)
+            and not getattr(character, "defeated", False)
+        ),
+        None,
+    )
+
+
+def _reaction_name(element: str | None, aura: str | None) -> str | None:
+    """Reaction name for an attacking element against an existing aura."""
+    if not element or not aura or element == "物理":
+        return None
+    if element in _ANEMO_GEO:
+        if aura not in _REACTING_AURAS:
+            return None
+        return "扩散" if element == "风" else "结晶"
+    return _REACTIONS.get(frozenset((element, aura)))
+
+
+@lru_cache(maxsize=1)
+def _asset_catalog() -> Any:
+    """Cached asset pack for candidate ordering (never fetches: offline-safe)."""
+    try:
+        from agents.scripted.assets import load_assets
+
+        return load_assets()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _skill_definition(definition_id: int) -> Any:
+    catalog = _asset_catalog()
+    if catalog is None:
+        return None
+    try:
+        return catalog.skill(int(definition_id))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _skill_type_tag(definition_id: int) -> str:
+    info = _skill_definition(definition_id)
+    tag = str(getattr(info, "skill_type", "") or "")
+    if tag:
+        return tag
+    # Cache missing / unknown id: fall back to the raw-asset classifier.
+    try:
+        from skillloop.cards import skill_kind
+
+        return {
+            "normal": "GCG_SKILL_TAG_A",
+            "elemental": "GCG_SKILL_TAG_E",
+            "burst": "GCG_SKILL_TAG_Q",
+            "passive": "GCG_SKILL_TAG_PASSIVE",
+        }.get(skill_kind(int(definition_id)) or "", "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+_SKILL_PRIORITY = {
+    "GCG_SKILL_TAG_Q": 1,       # burst
+    "GCG_SKILL_TAG_E": 2,       # elemental skill
+    "GCG_SKILL_TAG_A": 4,       # normal attack
+    "GCG_SKILL_TAG_PASSIVE": 4,
+}
+
+
+def web_priority_key(context: Any, spec: Any) -> int:
+    """Sort key for browser LLM candidates (lower = shown earlier).
+
+    Tiers: reaction skill 0, burst 1, elemental skill 2, action card 3, normal
+    attack 4, switch/tuning 5, end round 6. Every tier is stable, so ties keep
+    the engine's original order. This only changes *presentation*: the chosen
+    ``action_code`` still maps through the untouched payload table.
+    """
+    kind = spec.kind
+    if kind == OptionKind.ACTION_USE_SKILL:
+        definition_id = int(spec.subject_definition_id or 0)
+        info = _skill_definition(definition_id)
+        damage = _parse_damage(getattr(info, "description", "") if info else "")
+        if damage is not None and damage[0] != "物理":
+            aura = _aura_element(_opponent_active_character(context))
+            if _reaction_name(damage[0], aura):
+                return 0
+        return _SKILL_PRIORITY.get(_skill_type_tag(definition_id), 2)
+    if kind == OptionKind.ACTION_PLAY_CARD:
+        return 3
+    if kind == OptionKind.ACTION_DECLARE_END:
+        return 6
+    # switch_active / elemental_tuning (and non-action request kinds) share one
+    # tier after normal attacks and before ending the round.
+    return 5
+
+
 def is_web_skill(skill_id: str, layer: str) -> bool:
     """Whether a library skill belongs to the browser match.
 
@@ -205,26 +317,15 @@ class WebStateRenderer(StateRenderer):
             f"第{state.round_number}轮 {_phase_label(state.phase)} 行动方={'我方' if state.current_turn == context.acting_player else '对方'}",
             f"我方：{side(me)}",
             f"我方骰子：{dice}（{len(me.dice)}个）",
-            f"我方手牌：{hand}",
+            f"我方手牌：{hand}（{len(me.hand_cards)}/10）",
             f"{self.opponent_name}：{side(opp)}；手牌{len(opp.hand_cards)}张，骰子{len(opp.dice)}个",
             f"我方已宣布结束={bool(me.declared_end)}",
+            f"对方已宣布结束={bool(opp.declared_end)}",
         ])
 
     # -- reaction hints ----------------------------------------------------
     def _opponent_active(self, context: Any) -> Any:
-        state = context.player_view
-        if state is None:
-            return None
-        opponent = state.players[1 - context.acting_player]
-        return next(
-            (
-                character
-                for character in opponent.characters
-                if getattr(character, "is_active", False)
-                and not getattr(character, "defeated", False)
-            ),
-            None,
-        )
+        return _opponent_active_character(context)
 
     def _damage_hint(self, context: Any, element: str | None) -> str:
         """One-line attachment/reaction preview; empty when unparseable."""
@@ -232,16 +333,16 @@ class WebStateRenderer(StateRenderer):
             return ""
         if element == "物理":
             return "物理伤害（不附着元素）"
-        active = self._opponent_active(context)
+        active = _opponent_active_character(context)
         aura = _aura_element(active)
         if element in _ANEMO_GEO:
-            if aura in _REACTING_AURAS:
-                reaction = "扩散" if element == "风" else "结晶"
+            reaction = _reaction_name(element, aura)
+            if reaction:
                 return f"将对附着{aura}的出战角色触发{reaction}"
             return f"{element}元素伤害（不附着元素）"
         if not aura:
             return f"将附着{element}"
-        reaction = _REACTIONS.get(frozenset((element, aura)))
+        reaction = _reaction_name(element, aura)
         if reaction:
             return f"将对附着{aura}的出战角色触发{reaction}"
         if element == aura:
@@ -280,6 +381,43 @@ class WebStateRenderer(StateRenderer):
         return line
 
     # -- prompt ------------------------------------------------------------
+    @staticmethod
+    def _hand_line(context: Any) -> str:
+        """Dynamic web hand block (replaces the PvE objective progress line)."""
+        state = getattr(context, "player_view", None)
+        if state is None:
+            return ""
+        me = state.players[context.acting_player]
+        count = len(me.hand_cards)
+        line = f"手牌 {count}/10"
+        # A player who already declared end gets no "keep acting" nudge.
+        if count >= 8 and not getattr(me, "declared_end", False):
+            line += "；手牌接近上限：优先打出可支付且有用的行动牌，避免弃牌。"
+        return line
+
+    def user_message(
+        self,
+        context: Any,
+        candidates: Any,
+        *,
+        progress: str | None = None,
+    ) -> dict[str, str]:
+        """Web user message: hand block + state + candidates.
+
+        ``progress`` (the PvE objective block) is intentionally ignored; the web
+        match has no stage objectives, so only the hand line is dynamic.
+        """
+        lines: list[str] = []
+        hand = self._hand_line(context)
+        if hand:
+            lines.append(hand)
+        lines.extend([self.describe_state(context), "", "合法动作："])
+        lines.extend(
+            self.describe_candidate(context, spec, index)
+            for index, (_code, spec) in enumerate(candidates)
+        )
+        return {"role": "user", "content": "\n".join(lines)}
+
     @staticmethod
     def _task_line(task: Any) -> str:
         if getattr(task, "stage", "") == "web":

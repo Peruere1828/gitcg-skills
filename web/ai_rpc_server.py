@@ -159,6 +159,7 @@ _LAZY_WEB_LLM_EXPORTS = {
     "WebStateRenderer",
     "filter_library_for_web",
     "is_web_skill",
+    "web_priority_key",
 }
 
 
@@ -581,7 +582,12 @@ class LLMPolicy:
                     task=task,
                     library=library,
                     rules_note=rules_note,
-                    config=AgentConfig(model=None, max_calls_per_game=80, top_k=5),
+                    config=AgentConfig(
+                        model=None,
+                        max_calls_per_game=80,
+                        candidate_cap=24,
+                        top_k=5,
+                    ),
                 )
                 _warn(
                     f"LLM 策略已加载：{self.name}（base={self.base_spec}, "
@@ -616,7 +622,15 @@ class LLMPolicy:
             if latest_state is None:
                 raise RuntimeError("尚未收到任何 notification.state")
             before = len(getattr(policy, "decisions", []) or [])
-            resp = _repo_decide(policy, who, method, value, latest_state, self._step_index)
+            resp = _repo_decide(
+                policy,
+                who,
+                method,
+                value,
+                latest_state,
+                self._step_index,
+                web_llm=True,
+            )
             self._step_index += 1
             decisions = getattr(policy, "decisions", []) or []
             if len(decisions) > before:
@@ -703,6 +717,35 @@ def _flatten_ts_oneofs(descriptor: Any, obj: Any) -> Any:
     return out
 
 
+def _reorder_for_web_llm(built: Any) -> Any:
+    """Stable presentation reorder for the web LLM candidate list.
+
+    Only the three parallel tuples on ``DecisionContext`` move; ``payload_by_
+    low_level_code`` stays keyed by the original engine action code, so the
+    model's chosen code still resolves to the correct engine payload. Ties keep
+    the engine order (``sorted`` is stable).
+    """
+    from dataclasses import replace
+
+    from web.llm_render import web_priority_key
+
+    context = built.context
+    specs = tuple(context.legal_low_level_specs)
+    codes = tuple(context.legal_low_level_codes)
+    mask = tuple(context.legal_low_level_mask)
+    order = sorted(
+        range(len(specs)),
+        key=lambda index: web_priority_key(context, specs[index]),
+    )
+    reordered = replace(
+        context,
+        legal_low_level_codes=tuple(codes[index] for index in order),
+        legal_low_level_specs=tuple(specs[index] for index in order),
+        legal_low_level_mask=tuple(mask[index] for index in order),
+    )
+    return replace(built, context=reordered)
+
+
 def _repo_decide(
     policy: Any,
     who: int,
@@ -710,6 +753,8 @@ def _repo_decide(
     value: dict[str, Any],
     latest_state: Any,
     step_index: int,
+    *,
+    web_llm: bool = False,
 ) -> dict[str, Any]:
     """用仓库策略跑一次决策：request JSON -> proto -> 决策上下文 -> 响应 JSON。"""
     from google.protobuf import json_format
@@ -737,6 +782,8 @@ def _repo_decide(
         full_state_json=None,
         step_index=int(step_index),
     )
+    if web_llm:
+        built = _reorder_for_web_llm(built)
     code = int(policy.choose(built))
     payload = built.payload_by_low_level_code.get(code)
     if payload is None:

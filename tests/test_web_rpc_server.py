@@ -1663,7 +1663,13 @@ def test_web_state_renderer_skill_candidate_has_type_and_description():
     assert "伤害" not in switch_line  # 不编造伤害
 
 
-def _web_state_view(*, opp_aura: int = 0):
+def _web_state_view(
+    *,
+    opp_aura: int = 0,
+    hand_count: int = 0,
+    me_declared_end: bool = False,
+    opp_declared_end: bool = False,
+):
     """Minimal masked-state shape for ``describe_state`` / reaction tests."""
     from types import SimpleNamespace
 
@@ -1682,13 +1688,14 @@ def _web_state_view(*, opp_aura: int = 0):
     me = SimpleNamespace(
         characters=[character(1403, aura=3, active=True)],
         dice=[3, 3, 8],
-        hand_cards=[],
-        declared_end=False,
+        hand_cards=[SimpleNamespace(definition_id=1) for _ in range(hand_count)],
+        declared_end=me_declared_end,
     )
     opp = SimpleNamespace(
         characters=[character(3302, aura=opp_aura, active=True)],
         hand_cards=[],
         dice=[],
+        declared_end=opp_declared_end,
     )
     return SimpleNamespace(
         round_number=2,
@@ -1819,6 +1826,7 @@ def test_llm_policy_prompt_has_web_tactics_and_filtered_library(captured):
     policy = make_policy("dynamic", _POOL_DECK)
     policy.decide(0, "action", _payload(entry), _state(entry))
     agent = policy._policy
+    assert agent.config.candidate_cap == 24
     assert agent.library is not None
     assert all(
         skill.layer == "rule" or skill.skill_id.startswith("strat_")
@@ -1865,3 +1873,162 @@ def test_ai_endpoint_reports_applied_and_filtered_counts(monkeypatch):
         assert extra["applied_skills"] == extra["skills"] - extra["filtered_out"]
     finally:
         server.close()
+
+
+# --------------------------------------------------------------------------- #
+# 网页候选排序 / 手牌提示 / 战术增补
+# --------------------------------------------------------------------------- #
+def _action_spec(kind, *, subject: int = 0, code: int = 0):
+    from reps.schema import DecisionType, LowLevelActionSpec
+
+    return LowLevelActionSpec(
+        action_code=code,
+        request_type=DecisionType.ACTION,
+        kind=kind,
+        label="",
+        subject_definition_id=subject,
+    )
+
+
+def test_web_priority_key_tiers_and_stability():
+    from types import SimpleNamespace
+
+    from reps.schema import OptionKind
+
+    try:
+        from agents.scripted.assets import load_assets
+
+        load_assets().skill(23012)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"assets 缓存不可用：{exc}")
+
+    def key(view, spec):
+        return srv.web_priority_key(
+            SimpleNamespace(player_view=view, acting_player=0), spec
+        )
+
+    icy = _web_state_view(opp_aura=1)
+    clear = _web_state_view(opp_aura=0)
+    reaction = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23012)  # 火 E vs 冰
+    burst = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23013)
+    elemental = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23012)
+    card = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=100)
+    normal = _action_spec(OptionKind.ACTION_USE_SKILL, subject=23011)
+    switch = _action_spec(OptionKind.ACTION_SWITCH_ACTIVE, subject=1403)
+    tuning = _action_spec(OptionKind.ACTION_ELEMENTAL_TUNING)
+    end = _action_spec(OptionKind.ACTION_DECLARE_END)
+
+    assert key(icy, reaction) == 0
+    assert key(clear, burst) == 1
+    assert key(clear, elemental) == 2
+    assert key(clear, card) == 3
+    assert key(clear, normal) == 4
+    assert key(clear, switch) == 5
+    assert key(clear, tuning) == 5
+    assert key(clear, end) == 6
+
+    # 同优先级保持原顺序（sorted 稳定）。
+    card_b = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=101)
+    specs = [card, card_b, end, normal]
+    order = sorted(range(len(specs)), key=lambda i: key(clear, specs[i]))
+    assert [specs[i].subject_definition_id for i in order] == [100, 101, 23011, 0]
+    assert key(clear, card) == key(clear, card_b)
+
+
+def test_web_llm_reorder_keeps_payload_by_code():
+    from reps.action_adapter import BuiltDecisionContext
+    from reps.schema import (
+        DecisionContext,
+        DecisionType,
+        OptionKind,
+    )
+
+    end = _action_spec(OptionKind.ACTION_DECLARE_END, code=7)
+    card = _action_spec(OptionKind.ACTION_PLAY_CARD, subject=100, code=8)
+    switch = _action_spec(OptionKind.ACTION_SWITCH_ACTIVE, subject=1403, code=9)
+    payloads = {
+        7: {"chosen_action_index": 5, "used_dice": []},
+        8: {"chosen_action_index": 2, "used_dice": [8]},
+        9: {"chosen_action_index": 4, "used_dice": [8]},
+    }
+    context = DecisionContext(
+        acting_player=0,
+        request_type=DecisionType.ACTION,
+        step_index=0,
+        full_state=None,  # type: ignore[arg-type]
+        legal_low_level_codes=(7, 8, 9),
+        legal_low_level_specs=(end, card, switch),
+        legal_low_level_mask=(True, True, True),
+        player_view=None,
+    )
+    built = BuiltDecisionContext(
+        context=context,
+        payload_by_low_level_code=payloads,
+        label_by_low_level_code={},
+        low_to_high_code={},
+    )
+    reordered = srv._reorder_for_web_llm(built)
+    assert reordered.context.legal_low_level_codes == (8, 9, 7)
+    assert [spec.kind for spec in reordered.context.legal_low_level_specs] == [
+        OptionKind.ACTION_PLAY_CARD,
+        OptionKind.ACTION_SWITCH_ACTIVE,
+        OptionKind.ACTION_DECLARE_END,
+    ]
+    assert reordered.context.legal_low_level_mask == (True, True, True)
+    # payload 表按原引擎 code 映射，未随排序改动。
+    assert reordered.payload_by_low_level_code == payloads
+    for code in reordered.context.legal_low_level_codes:
+        assert code in reordered.payload_by_low_level_code
+    assert reordered.payload_by_low_level_code[7]["chosen_action_index"] == 5
+
+
+def test_web_state_and_user_message_hand_hints():
+    from types import SimpleNamespace
+
+    from reps.schema import OptionKind
+
+    try:
+        from agents.scripted.assets import load_assets
+
+        assets = load_assets()
+        assets.character(1403)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"assets 缓存不可用：{exc}")
+
+    renderer = srv.WebStateRenderer(assets)
+    view = _web_state_view(hand_count=8, opp_declared_end=True)
+    context = SimpleNamespace(player_view=view, acting_player=0)
+    state_text = renderer.describe_state(context)
+    assert "（8/10）" in state_text
+    assert "对方已宣布结束=True" in state_text
+
+    end = _action_spec(OptionKind.ACTION_DECLARE_END, code=3)
+    user = renderer.user_message(context, [(3, end)], progress="PLACEHOLDER")
+    content = user["content"]
+    assert "手牌 8/10" in content
+    assert "手牌接近上限" in content
+    assert "未完成目标" not in content
+    assert "PLACEHOLDER" not in content  # PvE progress 不再显示
+
+    # 已宣布结束时不再提示继续行动。
+    ended_view = _web_state_view(hand_count=9, me_declared_end=True)
+    ended = renderer.user_message(
+        SimpleNamespace(player_view=ended_view, acting_player=0),
+        [(3, end)],
+    )
+    assert "手牌接近上限" not in ended["content"]
+
+
+def test_web_tactics_cover_card_and_position_bias():
+    from web.llm_render import WEB_TACTICS
+
+    for phrase in (
+        "每轮先检查手牌",
+        "手牌接近 10 先打掉会溢出的牌",
+        "元素调和凑同色",
+        "普通攻击只是默认动作",
+        "普通攻击常排在候选 0",
+        "结束回合是最后手段",
+        "天赋/装备牌注意出战角色/武器匹配",
+    ):
+        assert phrase in WEB_TACTICS

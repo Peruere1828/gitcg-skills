@@ -78,6 +78,14 @@
   解析「造成N点X元素伤害 / 物理伤害」给出「将附着X」或「将对附着Y的出战角色触发
   融化/蒸发/…」；打牌候选追加卡牌描述；切人只标注「切换出战角色」，解析失败或
   切人不编造伤害。
+- **手牌/回合动态块**：状态行显示 `我方手牌（N/10）` 与 `对方已宣布结束`；user message
+  不再显示 PvE 的「未完成目标」进度行，改为网页手牌块（手牌 ≥8 且未宣布结束时提示
+  「手牌接近上限」）。`WEB_TACTICS` 增补「先检查手牌/凑色/结束回合是最后手段/
+  位置不代表优先级」等条目。
+- **候选稳定重排**：LLM 决策前把合法候选按「反应技能 → 爆发 → 战技 → 行动牌 →
+  普通攻击 → 切换/调和 → 宣布结束」稳定排序（同优先级保持引擎顺序），只改呈现顺序，
+  `payload_by_low_level_code` 仍按原引擎 code 映射；脚本策略/实验路径不变。
+  `web_llm` 的 `candidate_cap` 从 16 提到 24，减少行动牌被截断。
 - **决策日志可审计**：LLM 步骤的 `decisions.jsonl` 追加 `request`、`n_candidates`、
   `model_choice`（模型候选下标，可为 `null`；不是引擎 `chosenActionIndex`）。
 
@@ -88,8 +96,9 @@
 带 `used_skills` / `system_hash` / `llm_calls` / `library` /
 `request` / `n_candidates` / `model_choice`。
 
-组牌器与配置页的两个牌组预览也已改用同一份带 `customData` 的 `AssetsManager`，
-所以 2301 等 NPC 卡牌的静态详情显示引擎 `.gts` 的 13 血，而不是官方镜像的 11。
+组牌器与配置页的两个牌组预览也已改用同一份带 `customData` 的 `AssetsManager`；
+官方可玩角色（2301/2202）的 datum 不再由 CustomData 覆盖，静态详情回退官方卡面
+（11/10），而 NPC 阵容角色（3302/3101 等）仍显示引擎 `.gts` 的难度值。
 
 reps/torch 只在请求模型策略时延迟导入，默认路径仍是零依赖。任何加载 /
 转换 / `choose()` / 非法动作码失败都写 stderr 并回退占位策略，handler 不 500
