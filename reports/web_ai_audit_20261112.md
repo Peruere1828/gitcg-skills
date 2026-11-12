@@ -242,12 +242,29 @@ $PY -c "import json;d=json.load(open('data/assets/expert_system_assets_chs_lates
 并消除了 PvE 关卡特化技能污染；剩余普攻主要是骰子约束。要继续验证「切人打反应」，
 需要更多局或一套能稳定凑同色骰的牌组，单局不足以断言。
 
-## 7. 血量显示补充（修复后）
+## 7. 血量语义更正（2026-11-12 补丁）
 
-- 对局内：棋盘只渲染**当前血量**（上游 `web-ui-core` 的 `Health` 组件），所以 R2 被
-  打 2 点后显示 11；角色详情显示 `11/13`，引擎 `maxHealth` 恒为 13。
-- 组牌器与配置页牌组预览现在传入带 `customData` 的 `AssetsManager`（`App.tsx` 的
-  `npcAssetsManager`），静态角色详情与引擎 `.gts` 对齐（2301 `hp=13`），不再回退到
-  官方镜像的 11。
-- 若仍在某个界面看到「11」被当作上限，请指出具体界面（组牌器 / 摆盘器 / 对局详情 /
-  棋盘），因为引擎与 CustomData 两处证据都表明上限是 13。
+上一版把「2301 上限 13」当成结论是**错的**。正确语义：
+
+- **官方可玩角色卡**：2301（愚人众·火之债务处理人）上限 **11**，2202（镜女）上限
+  **10**。这是角色卡数据。
+- **PvE NPC 难度补丁**：`hp_table.json` 把同一 `.gts` 的 `health` 补到 **13 / 12**；
+  NPC 阵容使用这个难度值。
+- 此前全局 `.gts` 只有一套值，网页里 AI 牌组的 2301 角色卡也读到 13，属于真 bug。
+
+网页层修复（不改 `skillloop/`，引擎 `.gts` 仍保留 NPC 难度值）：
+
+- `StandaloneParent.createGame`：仅在新开局、且该座位**不是** NPC 阵容时，按官方静态
+  卡面覆盖初始 `health`/`maxHealth`（`DEFAULT_ASSETS_MANAGER.getDataSync(...).hp`）。
+  NPC 阵容（如布兰琪的 3302/3101）保留 `.gts` 难度值；`resume`/导入日志传入的
+  state 不覆盖。
+- `web/npc_assets.py`：从 `hp_table.json` 的 `source == "upstream-override"` 条目解析
+  `.gts` 角色 id（当前 2301/2202，不硬编码），CustomData 不再输出这些官方角色的
+  datum，浏览器回退官方静态数据（11/10）；NPC 专属角色（3302/3101 等）仍保留。
+- 组牌器与配置页牌组预览共用同一份过滤后的 `AssetsManager`，因此静态详情显示官方值。
+- 对局内棋盘只渲染当前血量；详情面板在拿到引擎状态时显示 `当前/上限`。AI 的 2301
+  现在是 `11/11`，NPC 阵容角色仍是引擎值。
+- **PvE Python runner 仍受影响**：`envs/`/`gitcg` binding 没有 per-instance HP 接口，
+  PvE 关卡继续使用 `.gts` 全局难度值（2301=13、2202=12）；网页层的按座位覆盖不适用
+  于 runner。若以后要在同一进程里同时跑两种语义，需要 binding 支持 per-instance HP
+  或改为按关卡实例化数据。

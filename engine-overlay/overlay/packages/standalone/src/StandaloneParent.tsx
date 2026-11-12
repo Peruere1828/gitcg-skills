@@ -40,6 +40,16 @@ import {
 import mergeErrorCause from "merge-error-cause";
 import { createAiHttpIo } from "./ai-http-io";
 
+/**
+ * `CharacterState.variables` 的映射类型保留了 `readonly`（`Required<C>` 不会去掉
+ * 属性修饰符），但**初始状态**是在 `createInitialState` 之后、`new Game(state)` 之前
+ * 构造的普通对象，可以安全写入。用局部可写视图避免把 `any` 扩散到整条链路。
+ */
+interface InitialCharacterVariables {
+  health: number;
+  maxHealth: number;
+}
+
 export interface StandaloneParentProps {
   logs?: GameStateLogEntry[];
   /** C1/C4：一局一个会话 id（App 在开局时生成），桥按它隔离状态/策略/日志 */
@@ -469,11 +479,42 @@ export function StandaloneParent(props: StandaloneParentProps) {
 
   const createGame = async (state?: GameState, seqBase: SeqBaseline = {}) => {
     if (!state) {
-      state = Game.createInitialState({
+      const initial = Game.createInitialState({
         decks: SEAT_DECKS,
         data: getData(props.version),
         versionBehavior: props.version,
       });
+      // 血量语义：引擎 `.gts` 里的 health 是 **NPC 难度值**（本仓库把 2301/2202
+      // 补丁成 13/12）；官方可玩角色卡用静态卡面值（11/10）。两者只在
+      // 「玩家牌组里的角色卡」和「NPC 阵容」之间区分：NPC 阵容保留引擎难度值，
+      // 普通牌组按官方卡面覆盖初始 health/maxHealth（初始状态两者相等）。
+      // 只在**新开局**执行；resume / 导入日志传入 state 时不动历史状态。
+      await DEFAULT_ASSETS_MANAGER.prepareForSync().catch(() => undefined);
+      for (const who of [0, 1] as const) {
+        if (isNpcDeck(SEAT_DECKS[who])) {
+          continue;
+        }
+        for (const character of initial.players[who].characters) {
+          // 官方静态数据可能没缓存（网络失败）或本就没有该 id（NPC 专有角色）：
+          // 取不到就保持引擎值，绝不让一次查询失败拖垮开局。
+          let hp: number;
+          try {
+            const data = DEFAULT_ASSETS_MANAGER.getDataSync(character.definition.id);
+            if (!("hp" in data) || typeof data.hp !== "number" || data.hp <= 0) {
+              continue;
+            }
+            hp = data.hp;
+          } catch {
+            continue;
+          }
+          const variables = character.variables as InitialCharacterVariables;
+          if (variables.maxHealth !== hp) {
+            variables.maxHealth = hp;
+            variables.health = hp;
+          }
+        }
+      }
+      state = initial;
     }
     await setAsyncContext(true);
     // 上一局遗留的在途请求（含「从此处继续」cancel 不到的 AI 桥 rpc）先掐掉，

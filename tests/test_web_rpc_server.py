@@ -1126,6 +1126,11 @@ def test_npc_decks_endpoint():
         assets = payload["assets"]
         assert len(assets["characters"]) >= 17
         assert all(ch["name"] and ch["skills"] for ch in assets["characters"])
+        # 官方可玩角色（2301/2202）交给官方静态数据（角色卡 11/10），
+        # CustomData 只保留官方镜像没有的 NPC 专属角色。
+        custom_ids = {ch["id"] for ch in assets["characters"]}
+        assert 2301 not in custom_ids and 2202 not in custom_ids
+        assert 3302 in custom_ids
         # 返回的是牌组对象（NPC 角色编不出分享码，前端直传）
         timmie = next(d for d in payload["decks"] if d["slug"] == "timmie")
         assert timmie["n_on_field"] == 2 and timmie["n_support"] == 0

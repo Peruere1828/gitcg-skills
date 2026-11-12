@@ -13,7 +13,22 @@ from web.npc_assets import (
     ENTITY_TYPES,
     npc_custom_data,
     npc_custom_data_summary,
+    upstream_override_character_ids,
 )
+
+
+def test_upstream_override_characters_are_not_overridden():
+    """官方可玩角色（2301/2202）不塞进 CustomData，浏览器回退官方卡面血量。
+
+    `.gts` 的 health 是 PvE 难度值（2301=13 / 2202=12），官方角色卡是 11/10；
+    CustomData 若覆盖角色 datum，详情面板会把难度值当成卡面上限。
+    """
+    overrides = upstream_override_character_ids()
+    assert {2301, 2202} <= overrides, "应从 hp_table 的 upstream-override 条目解析出 ids"
+    ids = {ch["id"] for ch in npc_custom_data()["characters"]}
+    assert not ids & overrides, f"官方角色不应出现在 CustomData：{sorted(ids & overrides)}"
+    # NPC 专属角色仍必须由 CustomData 提供（官方镜像没有它们）。
+    assert {3302, 3101} <= ids
 
 
 def test_custom_data_has_all_npc_characters_and_skills():
