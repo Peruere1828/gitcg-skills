@@ -53,7 +53,8 @@ cd "$REPO"
 ## 3. 对局与复现
 
 - `envs/match.py` 在 Python 侧按种子预洗牌并设 `NO_SHUFFLE=1`；每局开始 `reset_default_hierarchical_action_codebook()`。
-- policy spec 走 `envs.policy.build_policy`：`expert:<slug>` / `heuristic` / `legal_random` / `random` / `llm:<name>`。
+- policy spec：脚本走 `envs.policy.build_policy`（`expert:<slug>` / `heuristic` / `legal_random` / `random`）；
+  LLM 技能智能体走 web 桥的 `--policy llm:<none|llm_empty|static|dynamic>`（`dynamic` 取 `built_at` 最新的进化库）。
 - 关卡/敌人数据权威在 `configs/npc/`；血量补丁用 `scripts/patch_npc_hp.py`（规则与审计见 `configs/npc/hp_table.json`）。
 - `gitcg 0.21.0`：`ActionRequest.action` 是候选列表；`ActionResponse(chosen_action_index=..., used_dice=[...])`；
   `game.status()` 是方法；`State.query` 跨版本不兼容，用前小样本验证。

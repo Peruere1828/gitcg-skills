@@ -35,6 +35,7 @@ import {
 } from "@gi-tcg/core";
 import { StandaloneChild } from "./StandaloneChild";
 import { StandaloneParent } from "./StandaloneParent";
+import { DeckPreview } from "./DeckPreview";
 import { IS_BETA, SERVER_HOST, WEB_CLIENT_BASE_PATH } from "@gi-tcg/config";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import "@gi-tcg/deck-builder/style.css";
@@ -75,6 +76,105 @@ interface NpcPayload {
   semantics: Record<string, string>;
   /** C3：NPC 的 CustomData（名字/技能描述/骰子费用），喂给 AssetsManager */
   assets?: CustomData;
+}
+
+/** `GET /ai` 返回的技能库摘要（selection 为选项值，resolved 为实际加载的库） */
+interface AiLibraryInfo {
+  selection: string;
+  resolved: string;
+  path: string;
+  version: number;
+  skills: number;
+  built_at: string;
+  kind: string;
+}
+
+/** `GET /ai` 的技能库下拉选项 */
+interface AiLibraryOption {
+  value: string;
+  label: string;
+}
+
+/** `GET /ai` 的 AI 引擎/技能库状态；外部数据解析后收窄成这个形状 */
+interface AiStatus {
+  mode: string;
+  spec: string;
+  llm_available: boolean;
+  llm_error: string | null;
+  model: string;
+  library: AiLibraryInfo | null;
+  options: AiLibraryOption[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(
+  source: Record<string, unknown>,
+  key: string,
+  fallback = "",
+): string {
+  const value = source[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function parseAiLibrary(raw: unknown): AiLibraryInfo | null {
+  if (!isRecord(raw) || typeof raw.selection !== "string") {
+    return null;
+  }
+  return {
+    selection: raw.selection,
+    resolved: readString(raw, "resolved"),
+    path: readString(raw, "path"),
+    version: typeof raw.version === "number" ? raw.version : 0,
+    skills: typeof raw.skills === "number" ? raw.skills : 0,
+    built_at: readString(raw, "built_at"),
+    kind: readString(raw, "kind"),
+  };
+}
+
+function parseAiOptions(raw: unknown): AiLibraryOption[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      typeof item.value !== "string" ||
+      typeof item.label !== "string"
+    ) {
+      return [];
+    }
+    return [{ value: item.value, label: item.label }];
+  });
+}
+
+function parseAiStatus(raw: unknown): AiStatus | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  return {
+    mode: readString(raw, "mode"),
+    spec: readString(raw, "spec"),
+    llm_available:
+      typeof raw.llm_available === "boolean" ? raw.llm_available : true,
+    llm_error: typeof raw.llm_error === "string" ? raw.llm_error : null,
+    model: readString(raw, "model"),
+    library: parseAiLibrary(raw.library),
+    options: parseAiOptions(raw.options),
+  };
+}
+
+/** 当前选项值：优先 library.selection，其次从 `llm:dynamic` 这类 spec 里取 */
+function aiSelectionOf(status: AiStatus): string {
+  if (status.library?.selection) {
+    return status.library.selection;
+  }
+  // `/ai?session=` 的 spec 可能带内部编码 `llm:none#deck=<slug>`，丢掉 # 片段。
+  return status.spec.startsWith("llm:")
+    ? status.spec.slice(4).split("#", 1)[0]
+    : status.spec;
 }
 
 /** C1：`POST /choose-deck` 的反选结果 */
@@ -145,6 +245,13 @@ export function App() {
   const [aiSelfPlay, setAiSelfPlay] = createSignal(false);
   // T3：桥声明的 AI 座位牌组 slug（拿到后回填到「AI 牌组」）
   const [aiDeckSlug, setAiDeckSlug] = createSignal<string | null>(null);
+  // 桥的 AI 引擎模式与技能库状态（GET /ai；桥未起时不可用，不拦开局）
+  const [aiStatus, setAiStatus] = createSignal<AiStatus | null>(null);
+  const [aiStatusError, setAiStatusError] = createSignal<string | null>(null);
+  const [aiLibrarySelection, setAiLibrarySelection] = createSignal("");
+  const [aiLibraryBusy, setAiLibraryBusy] = createSignal(false);
+  const [aiLibraryNote, setAiLibraryNote] = createSignal<string | null>(null);
+  const [aiLibraryError, setAiLibraryError] = createSignal<string | null>(null);
   // 开局解析完的配置；切到 Standalone 前必须有值
   const [gameCfg, setGameCfg] = createSignal<GameConfig | null>(null);
 
@@ -290,8 +397,98 @@ export function App() {
     }
   };
 
+  /** `GET /ai`：拉桥的 AI 引擎与技能库状态；取不到只提示，不拦开局 */
+  const loadAiStatus = async () => {
+    try {
+      const resp = await fetch(`${bridgeBase()}/ai`);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const raw: unknown = await resp.json();
+      const status = parseAiStatus(raw);
+      if (!status) {
+        throw new Error(`返回异常：${JSON.stringify(raw).slice(0, 200)}`);
+      }
+      setAiStatus(status);
+      setAiStatusError(null);
+      setAiLibrarySelection(aiSelectionOf(status));
+      setAiLibraryNote(null);
+      setAiLibraryError(null);
+    } catch (e) {
+      console.warn("[ai] 拉取 AI 引擎状态失败", e);
+      setAiStatusError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  /** AI 技能库下拉选项（桥未返回时为空） */
+  const aiOptions = () => aiStatus()?.options ?? [];
+
+  /** 一句话状态：LLM 模式展示 model 与技能库摘要，脚本模式技能库不适用 */
+  const aiEngineText = createMemo(() => {
+    const status = aiStatus();
+    if (!status) {
+      return aiStatusError() ? `AI 引擎：不可用（${aiStatusError()}）` : "";
+    }
+    if (status.mode !== "llm") {
+      return `AI 引擎：脚本（${status.spec}） · 技能库：不适用`;
+    }
+    const library = status.library
+      ? `${status.library.selection}（${status.library.resolved}，v${status.library.version}，${status.library.skills} 条，built_at ${status.library.built_at}）`
+      : "未知";
+    const unavailable = status.llm_available
+      ? ""
+      : `（不可用：${status.llm_error ?? "原因未知"}）`;
+    return `AI 引擎：LLM（model=${status.model || "?"}）${unavailable} · 技能库：${library}`;
+  });
+
+  /** `POST /ai-library`：切换技能库；失败回滚下拉并提示错误 */
+  const changeAiLibrary = async (next: string) => {
+    const previous = aiLibrarySelection();
+    if (!next || next === previous) {
+      return;
+    }
+    setAiLibrarySelection(next);
+    setAiLibraryBusy(true);
+    setAiLibraryError(null);
+    setAiLibraryNote(null);
+    try {
+      const resp = await fetch(`${bridgeBase()}/ai-library`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ library: next }),
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const raw: unknown = await resp.json();
+      if (!isRecord(raw) || raw.ok !== true) {
+        throw new Error(`返回异常：${JSON.stringify(raw).slice(0, 200)}`);
+      }
+      const status = aiStatus();
+      if (status) {
+        const parsed = parseAiLibrary(raw.library);
+        setAiStatus({
+          ...status,
+          library:
+            parsed ??
+            (status.library
+              ? { ...status.library, selection: next }
+              : null),
+        });
+      }
+      setAiLibrarySelection(next);
+      setAiLibraryNote(readString(raw, "note", "下一局生效"));
+    } catch (e) {
+      setAiLibrarySelection(previous);
+      setAiLibraryError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiLibraryBusy(false);
+    }
+  };
+
   onMount(() => {
     void loadNpcDecks();
+    void loadAiStatus();
   });
 
   const importLog = async () => {
@@ -578,6 +775,7 @@ export function App() {
                       setAiOpponent(on);
                       if (on) {
                         void fetchAiDeck();
+                        void loadAiStatus();
                       } else {
                         setAiDeckSlug(null);
                       }
@@ -601,6 +799,78 @@ export function App() {
                   />{" "}
                   双方 AI 自对弈
                 </label>
+              </div>
+              <div
+                class="config-panel__deck"
+                style={{ "align-items": "center" }}
+              >
+                <label>AI 技能库</label>
+                <select
+                  disabled={
+                    aiLibraryBusy() ||
+                    (aiStatus() !== null && aiStatus()!.mode !== "llm") ||
+                    aiStatus()?.llm_available === false
+                  }
+                  // options 是异步拉到的：value 之外再给 option 标 selected，
+                  // 否则浏览器会在选项出现前把 value 重置成第一项（显示成 none）。
+                  value={aiLibrarySelection()}
+                  onChange={(e) =>
+                    void changeAiLibrary(e.currentTarget.value)
+                  }
+                >
+                  <Show when={aiOptions().length === 0}>
+                    <option value="">（桥未连接）</option>
+                  </Show>
+                  <For each={aiOptions()}>
+                    {(opt) => (
+                      <option
+                        value={opt.value}
+                        selected={opt.value === aiLibrarySelection()}
+                      >
+                        {opt.label}
+                      </option>
+                    )}
+                  </For>
+                </select>
+                <Show when={aiLibraryNote()}>
+                  <span style={{ color: "#2e7d32" }}>（{aiLibraryNote()}）</span>
+                </Show>
+                <Show when={aiLibraryError()}>
+                  <span style={{ color: "#b00020" }}>
+                    （切换失败：{aiLibraryError()}）
+                  </span>
+                </Show>
+              </div>
+              <div
+                class="config-panel__deck"
+                style={{ "flex-wrap": "wrap" }}
+              >
+                <Show when={aiEngineText()}>
+                  <span>{aiEngineText()}</span>
+                </Show>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.75rem",
+                  "align-items": "flex-start",
+                  "margin-bottom": "1rem",
+                }}
+              >
+                <div style={{ flex: "1 1 0", "min-width": "0" }}>
+                  <DeckPreview
+                    title="我的牌组"
+                    deck={npcPick() ?? deckOrEmpty(myDeckCode())}
+                    npcAssets={npcList()?.assets}
+                  />
+                </div>
+                <div style={{ flex: "1 1 0", "min-width": "0" }}>
+                  <DeckPreview
+                    title={aiOpponent() ? "AI 牌组" : "对面牌组"}
+                    deck={deckOrEmpty(otherDeckCode())}
+                    npcAssets={npcList()?.assets}
+                  />
+                </div>
               </div>
               <div class="config-panel__description">
                 点击下方按钮开始对局：本页面永远是**我**的棋盘，对面座位按「先手」与

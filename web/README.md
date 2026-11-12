@@ -48,9 +48,24 @@
 | 档位 | 触发 | 行为 |
 |---|---|---|
 | 占位策略（默认） | 不给 `--policy` | 纯标准库；`--strategy greedy\|random` + `--seed` |
-| 模型桥 | `--policy SPEC` | `envs.policy.build_policy` 全 spec（`neural:<ckpt>[#t=]` / `heuristic` / `legal_random` / `expert:<slug>` / `random`）；**每个 (会话, 座位) 一个独立实例** |
+| 脚本桥 | `--policy SPEC` | `envs.policy.build_policy` 的脚本 spec（`heuristic` / `legal_random` / `expert:<slug>` / `random`；`neural:` 在本仓库显式报错）；**每个 (会话, 座位) 一个独立实例** |
+| LLM 技能智能体 | `--policy llm:<library>` | `skillloop.agent.SkillAgentPolicy`：机械决策交给牌组脚本，战略决策问模型；**只有 `meta.ai_seat` 那侧用 LLM**，其它座位仍按牌组派脚本 |
 
-reps/train/torch 只在请求模型策略时延迟导入，默认路径仍是零依赖。任何加载 /
+`llm:` 的 `<library>`（页面「AI 技能库」下拉可切，`POST /ai-library`，**下一局生效**）：
+
+| 选择 | 库 | 说明 |
+|---|---|---|
+| `none` | 无 | 不注入任何技能，也不注入规则层 |
+| `llm_empty` | 空库 v0 | ②′ 空库组；行为上与 none 相同，只是语义不同 |
+| `static` | `data/skills/static_v1`（27 条） | 规则层；缺失时退回 `kind=rules` 中 `built_at` 最新的库 |
+| `dynamic` | `kind=evolved` 中 **`built_at` 最新**者（当前 `dyn_v4`，40 条） | 注意按 built_at 选，不是目录名/version |
+
+`GET /ai` 报告当前引擎/库（`/ai?session=` 报该会话实际用的座位），`GET /health` 仍是
+存活探针。LLM 不可用（`.env` 没 key/base_url/model）时 `/session` 直接把 AI 座位
+改派回 `expert:<slug>`/`heuristic`，不会每步都走 fallback；决策日志里 LLM 步骤额外
+带 `used_skills` / `system_hash` / `llm_calls` / `library`。
+
+reps/torch 只在请求模型策略时延迟导入，默认路径仍是零依赖。任何加载 /
 转换 / `choose()` / 非法动作码失败都写 stderr 并回退占位策略，handler 不 500
 也不挂死，**且回退会落进决策日志**（`fallback:true` + `error`）。
 
@@ -180,13 +195,22 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 浏览器打开 `http://<本机IP>:7001/`（局域网另一台机器也能访问）：
 
 1. 「NPC 阵容」选一个关卡 —— 这成为**我的座位**（NPC 阵容，桥自动改派 `heuristic`）；
-2. 勾「AI 对手（HTTP 桥）」+「双方 AI 自对弈」—— 桥的 `--policy expert:<slug>`
-   驱动对面座位，牌组由 `/ai-deck` 自动回填；
+2. 勾「AI 对手（HTTP 桥）」+「双方 AI 自对弈」—— 桥的 `--policy` 驱动对面座位，
+   牌组由 `/ai-deck` 自动回填；「AI 技能库」下拉可切 `none/llm_empty/static/dynamic`，
+   下方状态行显示**实际解析到的库**（目录、版本、条数、built_at）；
 3. 「开始对局」实时观战（`observeIo` 把通知同时喂给棋盘，否则自对弈时棋盘会停在
    「正在等待…」）。
 
-可用 `PORT` / `BRIDGE_PORT` / `POLICY` / `SEED` / `CONDA_ENV` 覆盖默认值，
-例如 `POLICY=heuristic bash scripts/serve_web_demo.sh`。
+配置页还会并排预览**我的牌组 / AI 牌组**（角色缩略图 + 行动牌按 id 去重计数；NPC
+角色从 `/npc-decks` 的 `assets` 取名字，缺图的角色/卡牌只显示名字）。
+
+可用 `PORT` / `BRIDGE_PORT` / `POLICY` / `AI_DECK` / `SEED` / `CONDA_ENV` 覆盖默认值。
+默认 `POLICY=llm:dynamic`（LLM + 最新进化库，需要 `.env` 的 key）；想用脚本 AI：
+
+```sh
+POLICY=expert:superconduct_aggro bash scripts/serve_web_demo.sh
+POLICY=llm:none bash scripts/serve_web_demo.sh   # LLM，不注入技能库
+```
 
 CORS 默认只放行本机 Origin（`localhost`/`127.0.0.1`/`::1`）；如需其他来源
 （例如经局域网 IP 访问 dev server）用 `--cors-origin <origin|*>` 显式放行。

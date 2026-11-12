@@ -140,11 +140,21 @@ package.json 只导出 `dist/`，Vite dev 无法直接解析其源码，因此�
 `seq` 基线、故障局 `io_error` 归档、`deck_mismatch`/`seat_specs` 落盘）。
 协议与近似语义见 `web/README.md`。
 
+**新增（2026-11-12）**：
+
+- **LLM 技能智能体** `--policy llm:<none|llm_empty|static|dynamic>`：只有
+  `meta.ai_seat` 那侧走 `skillloop.agent.SkillAgentPolicy`（其它座位仍派脚本）；
+  `dynamic` 按 `built_at` 取最新进化库。页面「AI 技能库」下拉可切（`POST /ai-library`，
+  下一局生效），状态行显示实际解析到的库；`GET /ai` 是机器可读版本。
+- **牌组预览**：配置页并排显示我的牌组 / AI 牌组（角色与行动牌的缩略图、名字、
+  牌数），NPC 角色名从 `/npc-decks` 的 `assets` 回退。
+- **自对弈观战**：`observeIo` 把通知同时喂给棋盘（此前双方 AI 时棋盘停在「正在等待…」）。
+
 **下一步**：
 
 1. **组牌器直通**：在 `@gi-tcg/deck-builder` 里选完直接回填「我的牌组」
    （现在要手动贴分享码）。
-2. **LLM 辅助档**：把 `agents/llm_assist.build_llm_assist_policy` 接成
-   `--policy llm:<slug>`，干预记进决策日志（分开报分、不进口径验收）。
+2. **LLM 辅助档**：`agents/llm_assist.build_llm_assist_policy`（脚本先提议、LLM 重排）
+   是另一种模式，尚未接线；与上面的「LLM 直接决策」分开报分、不进口径验收。
 3. **`/notify` 降流量**：每步一次全量状态（一局数千条）→ seq/节流/合并。
 4. **e2e 固化**：把无头 Chromium 冒烟（NPC 阵容 × 先手 × 反选）落成仓库脚本。

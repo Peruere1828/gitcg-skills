@@ -39,13 +39,21 @@
 #       selectCard   -> 候选第一张
 #       action       -> 优先选“合法且非 declareEnd”的动作；否则第一个合法；
 #                       usedDice 用该动作的 autoSelectedDice（引擎提示的自动选骰）。
-#   * `--policy SPEC`（C2 模型桥）：把五种请求都路由到仓库已训练策略
+#   * `--policy SPEC`（C2 模型桥）：把五种请求都路由到仓库策略
 #       `envs.policy.build_policy(SPEC, seed=SEED, role=…)` +
 #       `reps.action_adapter.build_decision_context`。SPEC 支持
-#       `neural:<checkpoint.pt>[#t=<temp>]`、`heuristic`、`legal_random`、
-#       `expert:<slug>`、`random`。reps/train/torch 等依赖只在请求模型策略时
-#       才延迟导入，默认路径仍是零依赖。任何加载/转换/选择失败都回退占位策略
-#       （回退会写进决策日志的 `fallback` 字段）。
+#       `heuristic`、`legal_random`、`expert:<slug>`、`random`，以及 LLM 技能
+#       智能体 `llm:<library>`（library ∈ none | llm_empty | static | dynamic）。
+#       LLM 策略包在 `skillloop.agent.SkillAgentPolicy` 里：机械决策交给牌组脚本，
+#       战略决策才问模型；`none` 不注入技能/规则层，`llm_empty` 是空库组，
+#       `static` 用 `data/skills/static_v1`（缺失时退回 built_at 最新的 rules 库），
+#       `dynamic` 取 `data/skills/` 下 `meta.kind=="evolved"` 中 `built_at` **最新**
+#       的库（当前 dyn_v4；按 built_at 而不是目录名/version 选）。
+#       LLM 需要仓库根 `.env` 里的 key/base_url/model；不可用时 AI 座位退回
+#       `expert:<slug>`/`heuristic` 并在 `/session` 的 `ai` 字段记录原因。
+#       `GET /ai` 报告全局设置，`POST /ai-library {"library": ...}` 改后续新会话的库。
+#       reps/torch 等依赖只在请求模型策略时才延迟导入，默认路径仍是零依赖。
+#       任何加载/转换/选择失败都回退占位策略（回退写进决策日志的 `fallback`）。
 #
 # T3 牌组对齐：`--ai-deck <slug>`（或 `--policy expert:<slug>` 隐含）声明 AI 座位
 # 应该用的牌组，`/ai-deck` 把它给前端回填；开局 `/session` 里浏览器上报实际牌组，
@@ -55,7 +63,8 @@
 # C1 反选（D19）：`POST /choose-deck` 拿人的牌组 → `web.counterpick` 用对位矩阵挑
 # 一套应对牌组，结果记进会话；开局 `/session` 时若 base 策略是 deck-specific 的
 # `expert:*`，就按**各座位实际牌组**改派 `expert:<slug>`（人的牌组若也是池内 20 套
-# 之一，自对弈时同样派它自己的脚本）。`neural:` 等用户显式选的策略绝不被覆盖。
+# 之一，自对弈时同样派它自己的脚本）。base 是 `llm:*` 时只有 `meta.ai_seat` 那侧
+# 用 LLM，其它座位仍按牌组派脚本。`neural:` 等用户显式选的策略绝不被覆盖。
 #
 # C3 NPC 卡组（D18）：`GET /npc-decks` 给出可当玩家牌组用的 NPC 阵容
 # （角色取自 `configs/npc/`，牌由 decklab 池 C 填充）。
@@ -66,7 +75,9 @@
 #       --policy "neural:data/checkpoints/curve_dfbcsa_e15_d128_n48000.pt#t=0.2"
 #   conda run -n gitcg python web/ai_rpc_server.py --port 8770 \
 #       --policy expert:superconduct_aggro --ai-deck superconduct_aggro
+#   conda run -n gitcg python web/ai_rpc_server.py --port 8770 --policy llm:dynamic
 # 前端（standalone）里勾选「AI 对手（HTTP 桥）」并填 http://127.0.0.1:8770 即可。
+# LLM 策略需要仓库根 `.env`（GITCG_LLM_* / DEEPSEEK_*）；`GET /ai` 自查是否可用。
 
 from __future__ import annotations
 
@@ -130,6 +141,145 @@ _RESUME_SEQ_GAP = 1_000_000
 # 掩码 state 的 phase 枚举在 proto-JSON 里的各种写法（Python MessageToDict 与
 # protobuf-ts 的 toJson 都可能出现），用于识别终局。
 _END_PHASES = {"PHASE_TYPE_GAME_END", "GAME_END", "gameEnd", 5}
+
+# LLM 策略的四个技能库选项（`llm:<library>`）。none 不注入任何技能/规则；
+# llm_empty 是 ②′ 的空库组；static 是规则层；dynamic 取 built_at 最新的进化库。
+LLM_LIBRARY_CHOICES = ("none", "llm_empty", "static", "dynamic")
+_SKILLS_ROOT = os.path.join(_REPO_ROOT, "data", "skills")
+_LLM_LIBRARY_LABELS = {
+    "none": "none（无技能库）",
+    "llm_empty": "llm_empty（空库）",
+}
+
+
+def parse_llm_spec(spec: str | None) -> tuple[str, str | None] | None:
+    """解析 `llm:<library>[#deck=<slug>]`；非 llm spec 返回 None。
+
+    `#deck=` 是桥内部的座位编码（由 `assign_seat_specs` 写进 seat spec），
+    让 LLM 策略知道该用哪套牌组的机械兜底脚本。
+    """
+    if not isinstance(spec, str) or not spec.startswith("llm:"):
+        return None
+    body = spec[len("llm:"):]
+    deck: str | None = None
+    if "#" in body:
+        body, fragment = body.split("#", 1)
+        for part in fragment.split("&"):
+            key, _, value = part.partition("=")
+            if key == "deck" and value:
+                deck = value
+    return (body.strip() or "none"), deck
+
+
+def _library_roots() -> list[Path]:
+    root = Path(_SKILLS_ROOT)
+    if not root.is_dir():
+        return []
+    return [path for path in sorted(root.iterdir()) if (path / "library.json").is_file()]
+
+
+def _library_meta(path: Path) -> dict[str, Any]:
+    """只读 library.json 的 meta/version（避免为一个 label 构造整个 SkillLibrary）。"""
+    import json as _json
+
+    try:
+        payload = _json.loads((path / "library.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        "version": int(payload.get("library_version") or 0),
+        "skills": len(payload.get("skills") or []),
+        "meta": dict(payload.get("meta") or {}),
+    }
+
+
+def _library_info(path: Path, selection: str) -> dict[str, Any]:
+    payload = _library_meta(path)
+    meta = payload.get("meta") or {}
+    return {
+        "selection": selection,
+        "resolved": path.name,
+        "path": os.path.relpath(path, _REPO_ROOT),
+        "version": int(payload.get("version") or 0),
+        "skills": int(payload.get("skills") or 0),
+        "built_at": meta.get("built_at"),
+        "kind": meta.get("kind"),
+    }
+
+
+def _newest_library(kind: str) -> Path | None:
+    """meta.kind==kind 的库中 built_at 最新的一个（ISO 时间戳可直接字典序比）。"""
+    candidates = []
+    for path in _library_roots():
+        meta = _library_meta(path).get("meta") or {}
+        if meta.get("kind") != kind:
+            continue
+        candidates.append((str(meta.get("built_at") or ""), path.name, path))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: (item[0], item[1]))[2]
+
+
+def resolve_llm_library(selection: str) -> dict[str, Any] | None:
+    """把库选择解析成可序列化的描述；none 返回 None，未知选择也返回 None。"""
+    if selection == "none":
+        return None
+    if selection == "llm_empty":
+        return {
+            "selection": "llm_empty",
+            "resolved": "llm_empty",
+            "path": None,
+            "version": 0,
+            "skills": 0,
+            "built_at": None,
+            "kind": "llm_empty",
+        }
+    if selection == "static":
+        preferred = Path(_SKILLS_ROOT) / "static_v1"
+        path = preferred if (preferred / "library.json").is_file() else _newest_library("rules")
+    elif selection == "dynamic":
+        path = _newest_library("evolved")
+    else:
+        _warn(f"未知 LLM 技能库选择 {selection!r}；可选：{list(LLM_LIBRARY_CHOICES)}")
+        return None
+    return _library_info(path, selection) if path is not None else None
+
+
+def load_llm_library(selection: str) -> Any:
+    """按选择加载 SkillLibrary；none 返回 None（不注入技能，也不注入规则层）。"""
+    from skillloop.library import SkillLibrary
+
+    if selection == "none":
+        return None
+    if selection == "llm_empty":
+        return SkillLibrary.from_skills([], version=0, meta={"kind": "llm_empty"})
+    info = resolve_llm_library(selection)
+    if info is None or not info.get("path"):
+        raise RuntimeError(f"技能库 {selection!r} 未解析到目录")
+    return SkillLibrary.load(Path(_REPO_ROOT) / info["path"])
+
+
+def llm_library_options() -> list[dict[str, str]]:
+    """`/ai` 的 options：label 带解析到的目录名/条数，便于人直接看懂。"""
+    options: list[dict[str, str]] = []
+    for selection in LLM_LIBRARY_CHOICES:
+        if selection in _LLM_LIBRARY_LABELS:
+            label = _LLM_LIBRARY_LABELS[selection]
+        else:
+            info = resolve_llm_library(selection)
+            if info is None:
+                label = f"{selection}（未找到）"
+            else:
+                label = f"{selection}（{info['resolved']}，{info['skills']} 条）"
+        options.append({"value": selection, "label": label})
+    return options
+
+
+def _ai_seat_of(meta: dict[str, Any]) -> int:
+    try:
+        return int(meta.get("ai_seat") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _is_local_origin(origin: str) -> bool:
@@ -285,6 +435,161 @@ class RepoPolicy:
             self.last_fallback = True
             self.last_error = f"{type(exc).__name__}: {exc}"
             return resp
+
+
+class LLMPolicy:
+    """LLM 技能智能体（`skillloop.agent.SkillAgentPolicy`）的延迟构造包装。
+
+    与 `RepoPolicy` 一样，重型依赖与模型客户端都在**首次决策**时才构造。LLM 调用
+    失败/构造失败时回退到该牌组的脚本专家（池内 `expert:<slug>`；否则
+    `heuristic`），而不是每步都掉到占位策略。
+
+    `last_decision` 是这一步的审计信息（used_skills/system_hash/llm_calls）；
+    `library_info` 是该座位实际加载的库描述，供 decisions.jsonl 记录。
+    """
+
+    def __init__(
+        self,
+        selection: str,
+        deck: str | None,
+        *,
+        seed: int | None,
+        role: str,
+        fallback: Policy,
+        spec: str | None = None,
+        client_factory: Any = None,
+    ) -> None:
+        self.selection = selection
+        self.deck = deck
+        self.spec = spec or (
+            f"llm:{selection}#deck={deck}" if deck else f"llm:{selection}"
+        )
+        self.name = _llm_policy_name(selection)
+        self.seed = 0 if seed is None else int(seed)
+        self.role = role
+        self._fallback = fallback
+        self._client_factory = client_factory
+        self._policy: Any = None
+        self._load_error: str | None = None
+        self._scripted: RepoPolicy | None = None
+        self._step_index = 0
+        self.base_spec: str | None = None
+        self.library_info = resolve_llm_library(selection)
+        self.last_fallback = False
+        self.last_error: str | None = None
+        self.last_decision: dict[str, Any] | None = None
+
+    # -- construction --------------------------------------------------------
+    def _scripted_spec(self) -> str:
+        """机械兜底：池内 20 套用自家脚本，其它牌组用 deck-agnostic 的 heuristic。"""
+        if not self.deck:
+            return "heuristic"
+        try:
+            from envs.decks import expert_decks_by_name
+
+            if self.deck in expert_decks_by_name():
+                return f"expert:{self.deck}"
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"无法解析牌组池（{self.deck!r}），LLM 兜底改用 heuristic：{exc}")
+        return "heuristic"
+
+    def _ensure_policy(self) -> Any:
+        if self._policy is None and self._load_error is None:
+            try:
+                from common.llm import build_llm_client
+                from envs.policy import _asset_catalog, build_policy
+                from skillloop.agent import AgentConfig, SkillAgentPolicy
+                from skillloop.render import StateRenderer, TaskSpec
+
+                client = (
+                    self._client_factory()
+                    if self._client_factory is not None
+                    else build_llm_client()
+                )
+                if client is None:
+                    raise RuntimeError("LLM 不可用（.env 未配置 key/base_url/model）")
+                self.base_spec = self._scripted_spec()
+                base = build_policy(self.base_spec, seed=self.seed, role=self.role)
+                library = load_llm_library(self.selection)
+                renderer = StateRenderer(_asset_catalog(), opponent_name="对手")
+                task = TaskSpec(
+                    stage="web",
+                    display="网页对局",
+                    objectives=("赢得胜利",),
+                    deck=self.deck or "网页牌组",
+                    objective_types=("win",),
+                )
+                self._policy = SkillAgentPolicy(
+                    base,
+                    client,
+                    renderer=renderer,
+                    task=task,
+                    library=library,
+                    config=AgentConfig(model=None, max_calls_per_game=80, top_k=5),
+                )
+                _warn(
+                    f"LLM 策略已加载：{self.name}（base={self.base_spec}, "
+                    f"library={self.library_info['resolved'] if self.library_info else None}）"
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._load_error = f"{type(exc).__name__}: {exc}"
+                _warn(f"构造 LLM 策略 {self.spec!r} 失败，回退脚本策略：{self._load_error}")
+        return self._policy
+
+    def _scripted_policy(self) -> RepoPolicy:
+        if self._scripted is None:
+            self._scripted = RepoPolicy(
+                self._scripted_spec(),
+                seed=self.seed,
+                role=self.role,
+                fallback=self._fallback,
+            )
+        return self._scripted
+
+    # -- decision ------------------------------------------------------------
+    def decide(
+        self, who: int, method: str, value: dict[str, Any], latest_state: Any = None
+    ) -> dict[str, Any]:
+        self.last_fallback = False
+        self.last_error = None
+        self.last_decision = None
+        try:
+            policy = self._ensure_policy()
+            if policy is None:
+                raise RuntimeError(self._load_error or "policy unavailable")
+            if latest_state is None:
+                raise RuntimeError("尚未收到任何 notification.state")
+            before = len(getattr(policy, "decisions", []) or [])
+            resp = _repo_decide(policy, who, method, value, latest_state, self._step_index)
+            self._step_index += 1
+            decisions = getattr(policy, "decisions", []) or []
+            if len(decisions) > before:
+                decision = decisions[-1]
+                self.last_decision = {
+                    "used_skills": list(getattr(decision, "used", ()) or ()),
+                    "system_hash": getattr(decision, "system_hash", "") or "",
+                    "llm_calls": int(getattr(decision, "http_calls", 0) or 0),
+                }
+            else:
+                self.last_decision = {
+                    "used_skills": [],
+                    "system_hash": getattr(policy, "_system_hash", "") or "",
+                    "llm_calls": 0,
+                }
+            return resp
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"LLM 策略决策失败（{method}），回退脚本策略：{type(exc).__name__}: {exc}")
+            resp = self._scripted_policy().decide(who, method, value, latest_state)
+            self.last_fallback = True
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            return resp
+
+
+def _llm_policy_name(selection: str) -> str:
+    info = resolve_llm_library(selection)
+    if info is None or selection in ("none", "llm_empty"):
+        return f"llm:{selection}"
+    return f"llm:{selection}[{info['resolved']}]"
 
 
 def _flatten_ts_oneofs(descriptor: Any, obj: Any) -> Any:
@@ -576,6 +881,8 @@ class State:
         ai_deck: dict[str, Any] | None = None,
         seat_specs: dict[tuple[str, int], str] | None = None,
         base_spec: str | None = None,
+        llm_client_factory: Any = None,
+        library_choice: str | None = None,
     ) -> None:
         self.policy = policy
         self.policy_factory = policy_factory
@@ -585,6 +892,16 @@ class State:
         # 只在 policy_factory 读它时生效（座位一旦建好就不再改）。
         self.seat_specs = seat_specs if seat_specs is not None else {}
         self.base_spec = base_spec
+        # LLM 库选择可被 `POST /ai-library` 改（只影响后续新会话）。base spec
+        # 自带的选择是初始值；测试可注入 client_factory 避免真实网络。
+        parsed = parse_llm_spec(base_spec)
+        self.library_choice = (
+            library_choice if library_choice is not None
+            else (parsed[0] if parsed is not None else None)
+        )
+        self.llm_client_factory = llm_client_factory
+        # LLM 不可用的原因按会话记（/session 的 ai 字段与 /ai?session= 读它）。
+        self._session_ai_errors: dict[str, str | None] = {}
         # C1 反选结果，按会话记（/session 校验 AI 座位牌组时优先于 --ai-deck）。
         self.picks: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
@@ -639,6 +956,7 @@ class State:
             "fallbacks_1": 0,
             "stale_drops": 0,
             "game_log": False,
+            "ai": None,
             "meta": {},
         }
 
@@ -814,16 +1132,27 @@ class State:
         return self.ai_deck
 
     def assign_seat_specs(self, session: str, meta: dict[str, Any]) -> dict[int, str]:
-        """开局时按各座位**实际**牌组派生策略 spec（**只在 base 是 `expert:*` 时改派**）。
+        """开局时按各座位**实际**牌组派生策略 spec。
 
-        * 牌组是池内 20 套之一 → 派它自己的脚本 `expert:<slug>`（deck-specific 的
-          规则只认自家牌组，牌组对齐到脚本才是对的）；
-        * 牌组不在池内（NPC 阵容 / 自改牌组 / decklab 牌组）→ 改派 **deck-agnostic
-          的 `heuristic`**：硬套 `expert:<别的牌组>` 会让规则每步找不到自家卡而回退，
-          既慢又难看（决策日志里会刷一屏 fallback）；
-        * base 不是 `expert:*`（`neural:`/`heuristic`/占位等用户显式选的）一律不动。
+        * base 是 `expert:*`：牌组是池内 20 套之一 → 派它自己的脚本
+          `expert:<slug>`；否则改派 deck-agnostic 的 `heuristic`（硬套别人的脚本
+          每步都会找不到自家卡而回退）。
+        * base 是 `llm:*`：**只有 `meta.ai_seat` 那一侧**用
+          `llm:<library>#deck=<pool_slug或空>`，其它座位仍按实际牌组派
+          `expert:<slug>` / `heuristic`（人类执恰好一方）。LLM 不可用时 AI 座位
+          也退回脚本，并把原因记进会话（不让每步都走 fallback）。
+        * 其它 base（`neural:`/`heuristic`/占位等用户显式选的）一律不动。
+
         座位已经建好（局中调用）就不改——策略实例是按 (会话, 座位) 一次性建的。
         """
+        llm_spec = parse_llm_spec(self.base_spec)
+        if llm_spec is None:
+            return self._assign_scripted_specs(session, meta)
+        return self._assign_llm_specs(session, meta, llm_spec[0])
+
+    def _assign_scripted_specs(
+        self, session: str, meta: dict[str, Any]
+    ) -> dict[int, str]:
         if not self.base_spec or not self.base_spec.startswith("expert:"):
             return {}
         decks = meta.get("decks")
@@ -853,6 +1182,134 @@ class State:
                     "（deck-specific 脚本只认自家牌组）。"
                 )
         return assigned
+
+    def _assign_llm_specs(
+        self, session: str, meta: dict[str, Any], base_selection: str
+    ) -> dict[int, str]:
+        from web.counterpick import pool_slug_for_deck
+
+        decks = meta.get("decks")
+        if not isinstance(decks, dict):
+            decks = {}
+        ai_seat = _ai_seat_of(meta)
+        available, error, _model = self.llm_probe()
+        with self.lock:
+            self._session_ai_errors[session] = None if available else error
+        if not available:
+            _warn(
+                f"会话 {session} 的 LLM 不可用（{error}），"
+                "AI 座位改用脚本策略（不会逐步回退占位）。"
+            )
+        selection = self.library_choice_value() or base_selection
+
+        targets: set[int] = set()
+        for key in decks:
+            try:
+                targets.add(int(key))
+            except (TypeError, ValueError):
+                continue
+        targets.add(ai_seat)
+
+        assigned: dict[int, str] = {}
+        for who in sorted(targets):
+            if self.peek_seat(session, who) is not None:
+                continue
+            deck = decks.get(str(who)) or decks.get(who)
+            slug = pool_slug_for_deck(deck) if isinstance(deck, dict) else None
+            if who == ai_seat and available:
+                spec = (
+                    f"llm:{selection}#deck={slug}" if slug else f"llm:{selection}"
+                )
+            else:
+                spec = f"expert:{slug}" if slug else _NON_POOL_DECK_SPEC
+            if spec == self.base_spec:
+                continue  # 与 base 相同，没必要覆盖
+            with self.lock:
+                self.seat_specs[(session, who)] = spec
+            assigned[who] = spec
+            if slug is None and not (who == ai_seat and available):
+                _warn(
+                    f"会话 {session} 座位 {who} 的牌组不在评测池 20 套里，"
+                    f"已把策略从 {self.base_spec!r} 改派成 {spec!r}"
+                    "（deck-specific 脚本只认自家牌组）。"
+                )
+        return assigned
+
+    # -- LLM 状态 / /ai ------------------------------------------------------ #
+    def llm_probe(self) -> tuple[bool, str | None, str | None]:
+        """探测 LLM 可用性：返回 `(available, error, model)`，不发任何网络请求。"""
+        try:
+            from common.llm import build_llm_client, load_llm_config
+        except Exception as exc:  # noqa: BLE001
+            return False, f"{type(exc).__name__}: {exc}", None
+        try:
+            client = (
+                self.llm_client_factory()
+                if self.llm_client_factory is not None
+                else build_llm_client()
+            )
+        except Exception as exc:  # noqa: BLE001
+            return False, f"{type(exc).__name__}: {exc}", None
+        model = getattr(getattr(client, "config", None), "model", None)
+        if client is None:
+            try:
+                config = load_llm_config()
+                model = config.model if config is not None else model
+            except Exception:  # noqa: BLE001
+                pass
+            return False, "LLM 不可用（.env 未配置 key/base_url/model）", model
+        return True, None, model if isinstance(model, str) else None
+
+    def library_choice_value(self) -> str | None:
+        with self.lock:
+            return self.library_choice
+
+    def set_library_choice(self, selection: str) -> None:
+        with self.lock:
+            self.library_choice = selection
+
+    def ai_info(self, session: str | None = None) -> dict[str, Any]:
+        """序列化 AI 信息（`/ai`、`/session` 共用）。
+
+        带 session 时报**该会话实际用到**的座位 spec（LLM 不可用时就是回落后的
+        `expert:*`/`heuristic`）；不带 session 时报全局设置（当前库选择）。
+        """
+        info = self.session_info(session) if session is not None else None
+        parsed = parse_llm_spec(self.base_spec)
+        spec = self.base_spec
+        session_error: str | None = None
+        if parsed is not None:
+            if info is not None:
+                seat_specs = info.get("seat_specs") or {}
+                spec = seat_specs.get(str(_ai_seat_of(info.get("meta") or {}))) or spec
+                with self.lock:
+                    session_error = self._session_ai_errors.get(session)
+            else:
+                selection = self.library_choice_value() or parsed[0]
+                spec = f"llm:{selection}"
+        return self._ai_payload(spec, session_error)
+
+    def _ai_payload(
+        self, spec: str | None, session_error: str | None = None
+    ) -> dict[str, Any]:
+        parsed = parse_llm_spec(spec)
+        if parsed is not None:
+            mode = "llm"
+        elif spec:
+            mode = "scripted"
+        else:
+            mode = "placeholder"
+        available, error, model = self.llm_probe()
+        library = resolve_llm_library(parsed[0]) if parsed is not None else None
+        return {
+            "mode": mode,
+            "spec": spec,
+            "llm_available": available,
+            "llm_error": session_error or error,
+            "model": model,
+            "library": library,
+            "options": llm_library_options(),
+        }
 
 
 def _notify_rounds(state_json: Any) -> Any:
@@ -947,6 +1404,15 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                 notify_seq = seat.applied_seq
                 state_seq = seat.state_seq
                 run = seat.run
+            # LLM 策略另带审计字段（used_skills/system_hash/llm_calls/library）；
+            # 其它策略没有 last_decision，字段不变，保持旧日志格式兼容。
+            llm_extra: dict[str, Any] = {}
+            decision_info = getattr(seat.policy, "last_decision", None)
+            if isinstance(decision_info, dict):
+                llm_extra["used_skills"] = list(decision_info.get("used_skills") or ())
+                llm_extra["system_hash"] = decision_info.get("system_hash") or ""
+                llm_extra["llm_calls"] = int(decision_info.get("llm_calls") or 0)
+                llm_extra["library"] = getattr(seat.policy, "library_info", None)
             self._log_decision(
                 session=session,
                 who=who,
@@ -960,6 +1426,7 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                 fallback=fallback,
                 error=getattr(seat.policy, "last_error", None),
                 response=resp_value,
+                **llm_extra,
             )
             return {"response": {"$case": method, "value": resp_value}}
 
@@ -986,8 +1453,13 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
             stored = state.update_session_info(
                 session, deck_mismatch=mismatch, seat_specs=seat_specs
             )
+            # 该会话**实际**使用的 AI 信息（LLM 不可用时这里会如实显示回落后的
+            # 脚本 spec 与原因），复用 /ai 的序列化函数。
+            ai_info = state.ai_info(session)
+            stored = state.update_session_info(session, ai=ai_info) or stored
             info["deck_mismatch"] = mismatch
             info["seat_specs"] = seat_specs
+            info["ai"] = ai_info
             info["runs"] = (stored or info).get("runs", 1)
             info["seq_base"] = state.seq_baseline(session)
             if state.log is not None and stored is not None:
@@ -1108,6 +1580,9 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                         "sessions": state.sessions(),
                     }
                 )
+            elif path == "/ai":
+                session = self._query().get("session", [None])[0]
+                self._json(state.ai_info(session))
             else:
                 self._json(
                     {
@@ -1122,6 +1597,8 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                             "/health",
                             "/state",
                             "/ai-deck",
+                            "/ai",
+                            "/ai-library",
                             "/npc-decks",
                             "/results",
                         ],
@@ -1191,11 +1668,11 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                         {
                             "session": session,
                             "base_policy": state.base_spec,
-                            # 只有 deck-specific 的 expert:* 才会被按牌组改派；
-                            # neural:/heuristic/占位保持不动（牌组照用）。
+                            # 只有 deck-specific 的 expert:* / 按座位派生的 llm:*
+                            # 会被重新分配；neural:/heuristic/占位保持不动（牌组照用）。
                             "policy_applied": bool(
                                 state.base_spec
-                                and state.base_spec.startswith("expert:")
+                                and state.base_spec.startswith(("expert:", "llm:"))
                             ),
                         }
                     )
@@ -1209,6 +1686,35 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                     self._json({"error": str(e)}, status=400)
                     return
                 self._json(payload)
+            elif path == "/ai-library":
+                # 只改**后续新会话**的库选择；已建好的座位不受影响。
+                try:
+                    if not isinstance(body, dict):
+                        raise ValueError("body must be a JSON object")
+                    selection = body.get("library")
+                    if selection not in LLM_LIBRARY_CHOICES:
+                        raise ValueError(
+                            f"library must be one of {list(LLM_LIBRARY_CHOICES)}"
+                        )
+                    library = resolve_llm_library(selection)
+                    if selection not in ("none",) and library is None:
+                        raise ValueError(f"技能库 {selection!r} 未解析到目录")
+                    state.set_library_choice(selection)
+                    out = {
+                        "ok": True,
+                        "library": library,
+                        "note": "下一局生效",
+                    }
+                    print(
+                        f"[ai-bridge] LLM 技能库选择已更新：{selection} "
+                        f"({library['resolved'] if library else None})，下一局生效",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                except ValueError as e:
+                    self._json({"error": str(e)}, status=400)
+                    return
+                self._json(out)
             elif path == "/game-end":
                 try:
                     if not isinstance(body, dict):
@@ -1332,14 +1838,17 @@ def build_policy_from_args(
     args: argparse.Namespace,
     *,
     seat_specs: dict[tuple[str, int], str] | None = None,
+    client_factory: Any = None,
 ) -> tuple[Any, Any]:
     """按命令行参数组装策略：返回 `(seat0 策略, policy_factory)`。
 
     `policy_factory(session, who)` 每次返回**新实例**（T1：座位/会话隔离，
-    独立 RNG 与 step 计数）。有 `--policy` 走模型桥，否则纯占位。
+    独立 RNG 与 step 计数）。有 `--policy` 走模型桥，否则纯占位；
+    `--policy llm:<library>` 走 LLM 技能智能体。
 
     `seat_specs` 是 C1 的按座位 spec 覆盖（`/choose-deck` + `/session` 派生，
     见 `State.assign_seat_specs`）；没有覆盖时用 `args.policy`。
+    `client_factory` 是测试注入入口（默认 `common.llm.build_llm_client`）。
     """
     from common.seeding import derive_seed
 
@@ -1352,6 +1861,17 @@ def build_policy_from_args(
         spec = spec or args.policy
         if not spec:
             return placeholder
+        llm_spec = parse_llm_spec(spec)
+        if llm_spec is not None:
+            return LLMPolicy(
+                llm_spec[0],
+                llm_spec[1],
+                seed=base_seed,
+                role=role,
+                fallback=placeholder,
+                spec=spec,
+                client_factory=client_factory,
+            )
         return RepoPolicy(
             spec=spec,
             seed=base_seed,
@@ -1368,6 +1888,9 @@ def resolve_ai_deck(args: argparse.Namespace) -> dict[str, Any] | None:
     policy_spec = args.policy or ""
     if not slug and policy_spec.startswith("expert:"):
         slug = policy_spec.split(":", 1)[1]
+    llm_spec = parse_llm_spec(policy_spec)
+    if not slug and llm_spec is not None and llm_spec[1]:
+        slug = llm_spec[1]
     if not slug:
         return None
     if policy_spec.startswith("expert:") and policy_spec.split(":", 1)[1] != slug:
@@ -1399,8 +1922,13 @@ def main() -> None:
         "--policy",
         default=None,
         help=(
-            "模型桥策略 spec（走 envs.policy.build_policy）；留空则用 --strategy 占位策略。"
-            " 例：neural:<ckpt.pt>[#t=<temp>] | heuristic | legal_random | expert:<slug> | random"
+            "策略 spec；留空则用 --strategy 占位策略。"
+            " 脚本：expert:<slug> | heuristic | legal_random | random；"
+            " LLM 技能智能体：llm:<library>，library ∈ "
+            "none（无技能库）| llm_empty（②′ 空库）| static（data/skills/static_v1，缺省退回最新 rules 库）"
+            " | dynamic（data/skills 下 meta.kind=evolved 中 built_at 最新者，当前 dyn_v4）。"
+            " 例：--policy llm:dynamic。LLM 不可用时 AI 座位自动退回脚本策略；"
+            " 需要仓库根 .env 里的 LLM key/base_url/model。"
         ),
     )
     ap.add_argument(

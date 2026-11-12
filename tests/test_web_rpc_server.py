@@ -1342,3 +1342,261 @@ def test_session_check_fields_land_in_files(tmp_path):
         assert "seat_specs" in summary
     finally:
         server.close()
+
+
+# --------------------------------------------------------------------------- #
+# LLM 技能智能体：库解析 / 座位分配 / /ai / /ai-library / 延迟构造
+# --------------------------------------------------------------------------- #
+_POOL_DECK = "natlan_battleship"
+_NPC_DECK = {"characters": [3302, 3302, 3101], "cards": [1, 2, 3]}
+
+
+def test_parse_llm_spec():
+    assert srv.parse_llm_spec("llm:dynamic") == ("dynamic", None)
+    assert srv.parse_llm_spec("llm:static#deck=natlan_battleship") == (
+        "static",
+        "natlan_battleship",
+    )
+    assert srv.parse_llm_spec("llm:none") == ("none", None)
+    assert srv.parse_llm_spec("expert:x") is None
+    assert srv.parse_llm_spec(None) is None
+
+
+def test_resolve_llm_library_choices():
+    assert srv.resolve_llm_library("none") is None
+
+    empty = srv.resolve_llm_library("llm_empty")
+    assert empty["resolved"] == "llm_empty"
+    assert empty["version"] == 0 and empty["skills"] == 0
+    assert empty["kind"] == "llm_empty" and empty["path"] is None
+
+    static = srv.resolve_llm_library("static")
+    assert static["resolved"] == "static_v1"
+    assert static["kind"] == "rules"
+    assert static["version"] == 1 and static["skills"] == 27
+    assert static["path"] == os.path.join("data", "skills", "static_v1")
+
+    # dynamic 必须按 built_at 选，而不是目录名/version：dyn_v4 的 version 是 2，
+    # 但它是 evolved 库里最新的一个。
+    dynamic = srv.resolve_llm_library("dynamic")
+    assert dynamic["resolved"] == "dyn_v4"
+    assert dynamic["kind"] == "evolved"
+    assert dynamic["version"] == 2 and dynamic["skills"] == 40
+    assert dynamic["built_at"] == "2026-11-02T11:44:13Z"
+
+
+def test_llm_library_options_always_list_four():
+    options = srv.llm_library_options()
+    assert [o["value"] for o in options] == ["none", "llm_empty", "static", "dynamic"]
+    labels = {o["value"]: o["label"] for o in options}
+    assert "static_v1" in labels["static"] and "27" in labels["static"]
+    assert "dyn_v4" in labels["dynamic"] and "40" in labels["dynamic"]
+
+
+def _llm_server(monkeypatch, *, available: bool, base: str = "llm:dynamic",
+                choice: str | None = "dynamic") -> "_Server":
+    monkeypatch.setattr(
+        "common.llm.build_llm_client",
+        lambda *a, **k: object() if available else None,
+    )
+    args = argparse.Namespace(policy=base, strategy="greedy", seed=1, ai_deck=None)
+    seat_specs: dict[tuple[str, int], str] = {}
+    seat0, factory = srv.build_policy_from_args(args, seat_specs=seat_specs)
+    state = srv.State(
+        seat0,
+        policy_factory=factory,
+        seat_specs=seat_specs,
+        base_spec=base,
+        library_choice=choice,
+    )
+    return _Server(state=state)
+
+
+def _llm_session_body(session: str) -> dict:
+    return {
+        "session": session,
+        "meta": {
+            "ai_seat": 1,
+            "decks": {
+                "0": _NPC_DECK,
+                "1": _deck_payload(_POOL_DECK),
+            },
+        },
+    }
+
+
+def test_llm_seat_assignment_only_ai_seat(monkeypatch, capsys):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        status, out = server.request("POST", "/session", _llm_session_body("gllm"))
+        assert status == 200
+        assert out["seat_specs"] == {
+            "0": "heuristic",  # NPC 阵容 → deck-agnostic 脚本
+            "1": f"llm:dynamic#deck={_POOL_DECK}",  # 只有 ai_seat 用 LLM
+        }
+        assert server.state.seat_specs[("gllm", 1)] == (
+            f"llm:dynamic#deck={_POOL_DECK}"
+        )
+        # /session 的 ai 字段复用 /ai 序列化
+        assert out["ai"]["mode"] == "llm"
+        assert out["ai"]["llm_available"] is True
+        assert out["ai"]["library"]["resolved"] == "dyn_v4"
+        seat1 = server.state.seat("gllm", 1)
+        assert seat1.policy.spec == f"llm:dynamic#deck={_POOL_DECK}"
+        assert isinstance(seat1.policy, srv.LLMPolicy)
+    finally:
+        server.close()
+
+
+def test_llm_unavailable_falls_back_at_seat_assignment(monkeypatch, capsys):
+    server = _llm_server(monkeypatch, available=False)
+    capsys.readouterr()
+    try:
+        status, out = server.request("POST", "/session", _llm_session_body("gnollm"))
+        assert status == 200
+        assert out["seat_specs"] == {
+            "0": "heuristic",
+            "1": f"expert:{_POOL_DECK}",  # 池内牌组 → 自家脚本，而不是 llm:*
+        }
+        assert out["ai"]["mode"] == "scripted"
+        assert out["ai"]["llm_available"] is False
+        assert out["ai"]["llm_error"]
+        err = capsys.readouterr().err
+        assert "LLM 不可用" in err
+        # 座位建好就是脚本策略，不会每步走 LLMPolicy 的 fallback
+        assert isinstance(server.state.seat("gnollm", 1).policy, srv.RepoPolicy)
+    finally:
+        server.close()
+
+
+def test_ai_endpoint_reports_llm_and_options(monkeypatch):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        status, out = server.request("GET", "/ai")
+        assert status == 200
+        assert out["mode"] == "llm"
+        assert out["spec"] == "llm:dynamic"
+        assert out["llm_available"] is True
+        assert out["llm_error"] is None
+        assert out["library"]["resolved"] == "dyn_v4"
+        assert [o["value"] for o in out["options"]] == [
+            "none", "llm_empty", "static", "dynamic"
+        ]
+    finally:
+        server.close()
+
+
+def test_ai_library_updates_only_future_sessions(monkeypatch):
+    server = _llm_server(monkeypatch, available=True)
+    try:
+        _, first = server.request(
+            "POST", "/session",
+            {"session": "g_before", "meta": {"ai_seat": 0,
+                                             "decks": {"0": _deck_payload(_POOL_DECK)}}},
+        )
+        assert first["seat_specs"] == {
+            "0": f"llm:dynamic#deck={_POOL_DECK}"
+        }
+        built = server.state.seat_specs[("g_before", 0)]
+
+        status, out = server.request("POST", "/ai-library", {"library": "static"})
+        assert status == 200
+        assert out["ok"] is True
+        assert out["note"] == "下一局生效"
+        assert out["library"]["resolved"] == "static_v1"
+
+        # 已建好的座位 spec 不变
+        assert server.state.seat_specs[("g_before", 0)] == built
+        assert server.state.seat("g_before", 0).policy.spec == built
+
+        # /ai 全局设置立刻反映新选择
+        _, ai = server.request("GET", "/ai")
+        assert ai["library"]["resolved"] == "static_v1"
+
+        # 后续新会话使用新库
+        _, second = server.request(
+            "POST", "/session",
+            {"session": "g_after", "meta": {"ai_seat": 0,
+                                            "decks": {"0": _deck_payload(_POOL_DECK)}}},
+        )
+        assert second["seat_specs"] == {
+            "0": f"llm:static#deck={_POOL_DECK}"
+        }
+        _, session_ai = server.request("GET", "/ai?session=g_after")
+        assert session_ai["library"]["resolved"] == "static_v1"
+
+        status, bad = server.request("POST", "/ai-library", {"library": "bogus"})
+        assert status == 400 and "error" in bad
+    finally:
+        server.close()
+
+
+def test_llm_policy_constructs_skill_agent_with_injected_client(captured):
+    from common.llm import MockLLMClient
+    from skillloop.agent import SkillAgentPolicy
+
+    entry = captured["action"]
+    mock = MockLLMClient(['{"choice": 0, "used": []}'])
+    policy = srv.LLMPolicy(
+        "dynamic",
+        _POOL_DECK,
+        seed=1,
+        role="web0",
+        fallback=srv.Policy(strategy="random", seed=1),
+        spec=f"llm:dynamic#deck={_POOL_DECK}",
+        client_factory=lambda: mock,
+    )
+    out = policy.decide(0, "action", _payload(entry), _state(entry))
+    assert set(out) == {"chosenActionIndex", "usedDice"}
+    assert 0 <= out["chosenActionIndex"] < len(_payload(entry)["action"])
+    assert isinstance(policy._policy, SkillAgentPolicy)
+    assert policy._policy.library is not None
+    assert policy.name == "llm:dynamic[dyn_v4]"
+    assert policy.base_spec == f"expert:{_POOL_DECK}"
+    assert policy.library_info["resolved"] == "dyn_v4"
+    assert mock.prompts, "应真的走了一次 LLM 客户端（injected fake）"
+    assert policy.last_decision["llm_calls"] == 1
+    assert policy.last_decision["system_hash"]
+
+
+def test_llm_decision_log_has_audit_fields(captured, tmp_path, monkeypatch):
+    from common.llm import MockLLMClient
+
+    entry = captured["action"]
+    policy = srv.LLMPolicy(
+        "dynamic",
+        _POOL_DECK,
+        seed=1,
+        role="web0",
+        fallback=srv.Policy(strategy="random", seed=1),
+        client_factory=lambda: MockLLMClient(['{"choice": 0, "used": []}']),
+    )
+    server = _Server(
+        state=srv.State(policy, log=srv.DecisionLog(tmp_path))
+    )
+    try:
+        server.request("POST", "/session", {"session": "glog", "meta": {}})
+        server.request(
+            "POST", "/notify",
+            {"session": "glog", "who": 0, "seq": 1,
+             "notification": json.loads(entry["notification_json"])},
+        )
+        status, resp = server.request(
+            "POST", "/rpc",
+            {"session": "glog", "who": 0,
+             "request": {"request": {"$case": "action", "value": _payload(entry)}}},
+        )
+        assert status == 200 and "response" in resp
+        session_dir = Path(server.state.session_info("glog")["dir"])
+        decision = json.loads(
+            (session_dir / "decisions.jsonl").read_text().splitlines()[0]
+        )
+        assert "used_skills" in decision
+        assert decision["system_hash"]
+        assert decision["llm_calls"] == 1
+        assert decision["library"]["resolved"] == "dyn_v4"
+        # 旧字段保持不变
+        assert decision["type"] == "decision"
+        assert decision["fallback"] is False
+    finally:
+        server.close()
