@@ -99,6 +99,7 @@ from npc.policy import npc_policy_for_stage
 from npc.spec import get_stage, stage_names
 from npc.stage_rules import stage_rules_json
 from reps.schema import DeckSpec
+from skillloop.era import deck_spec_from_deck, era_policy
 
 ERA_VERSION = "v3.3.0"
 ERA_TUPLE = (3, 3, 0)
@@ -301,6 +302,13 @@ def _wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 def _fmt_ci(k: int, n: int) -> str:
     lo, hi = _wilson_ci(k, n)
     return f"{100 * lo:.0f}%-{100 * hi:.0f}%"
+
+
+def _rounds_three_cell(stats: dict[str, Any]) -> str:
+    """``mean rounds among 3★ (n 3★ games)``; an em dash when there are none."""
+    mean = stats.get("mean_rounds_three")
+    count = int(stats.get("three_stars") or 0)
+    return f"{mean:.1f} ({count})" if mean is not None else f"— ({count})"
 
 
 def _seed_list(value: str) -> tuple[int, ...]:
@@ -824,69 +832,13 @@ def build_fallback_pool(pool: dict[str, Any]) -> dict[str, dict[str, Any]]:
 # policy + one game
 # --------------------------------------------------------------------------- #
 def _scripted_policy(deck: dict[str, Any]):
-    """ExpertRuleAgent with a synthetic profile (no registry/deck-rule entry)."""
-    from agents.scripted.agent import ExpertRuleAgent
-    from agents.scripted.assets import load_assets
-    from agents.scripted.models import DeckProfile, DeckRuleConfig
-    from envs.policy import ScriptedPolicy
+    """ExpertRuleAgent with a synthetic profile (no registry/deck-rule entry).
 
-    assets = load_assets()
-    characters = tuple(int(character) for character in deck["characters"])
-    names = tuple(str(name) for name in deck["character_names"])
-    elements = tuple(str(element) for element in deck["character_elements"])
-
-    def _kind(card_id: int) -> str:
-        card = assets.cards.get(int(card_id))
-        tags = set(card.tags) if card is not None else set()
-        if "GCG_TAG_TALENT" in tags:
-            return "talent"
-        if "GCG_TAG_WEAPON" in tags:
-            return "weapon"
-        if "GCG_TAG_ARTIFACT" in tags:
-            return "artifact"
-        if {"GCG_TAG_ALLY", "GCG_TAG_PLACE", "GCG_TAG_ITEM"} & tags:
-            return "support"
-        return "event"
-
-    talents: list[int] = []
-    supports: list[int] = []
-    equipment: list[int] = []
-    events: list[int] = []
-    for card_id in deck["cards"]:
-        kind = _kind(card_id)
-        if kind == "talent":
-            talents.append(int(card_id))
-        elif kind == "support":
-            supports.append(int(card_id))
-        elif kind in {"weapon", "artifact"}:
-            equipment.append(int(card_id))
-        else:
-            events.append(int(card_id))
-    profile = DeckProfile(
-        slug=str(deck["name"]),
-        name=str(deck["name"]),
-        author="scripts/era_decks.py",
-        tags=("era", ERA_VERSION),
-        share_code="",
-        characters=characters,
-        cards=tuple(int(card_id) for card_id in deck["cards"]),
-        character_names=names,
-        character_elements=elements,
-        rule_config=DeckRuleConfig(
-            slug=str(deck["name"]),
-            opener=names[0],
-            carry=names[:2],
-            bench=names[2:],
-            preferred_elements=elements,
-            style="era",
-        ),
-        talent_cards=tuple(talents),
-        support_cards=tuple(supports),
-        equipment_cards=tuple(equipment + talents),
-        event_cards=tuple(events),
-    )
-    agent = ExpertRuleAgent(assets=assets, profile=profile, seed=0)
-    return ScriptedPolicy(agent, name=f"expert:{deck['name']}")
+    The implementation lives in :mod:`skillloop.era` so the matrix and the
+    experiment runner play era decks with the same policy; this wrapper keeps
+    existing callers (``scripts/probe_stall.py``) working.
+    """
+    return era_policy(deck, seed=0)
 
 
 def _objective_keys(objectives: Iterable[Any]) -> list[str]:
@@ -903,11 +855,7 @@ def _objective_keys(objectives: Iterable[Any]) -> list[str]:
 def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     """Play one (stage, era deck, seed) game; top-level for ``spawn`` pools."""
     deck_payload = payload["deck"]
-    deck = DeckSpec(
-        name=str(deck_payload["name"]),
-        characters=tuple(int(c) for c in deck_payload["characters"]),
-        cards=tuple(int(c) for c in deck_payload["cards"]),
-    )
+    deck = deck_spec_from_deck(deck_payload)
     stage = get_stage(str(payload["stage"]))
     npc_deck = DeckSpec(
         name=f"npc_{stage.name}",
@@ -1186,7 +1134,15 @@ def play_item(item: dict[str, Any]) -> dict[str, Any]:
 # aggregation
 # --------------------------------------------------------------------------- #
 def _empty_cell() -> dict[str, int]:
-    return {"n": 0, "wins": 0, "three_stars": 0, "stars": 0, "rounds": 0, "draws": 0}
+    return {
+        "n": 0,
+        "wins": 0,
+        "three_stars": 0,
+        "stars": 0,
+        "rounds": 0,
+        "rounds_three": 0,
+        "draws": 0,
+    }
 
 
 def _stats(cell: dict[str, int]) -> dict[str, Any]:
@@ -1197,11 +1153,15 @@ def _stats(cell: dict[str, int]) -> dict[str, Any]:
         "three_stars": cell["three_stars"],
         "stars": cell["stars"],
         "rounds": cell["rounds"],
+        "rounds_three": cell["rounds_three"],
         "draws": cell["draws"],
         "win_rate": cell["wins"] / n if n else 0.0,
         "three_star_rate": cell["three_stars"] / n if n else 0.0,
         "mean_stars": cell["stars"] / n if n else 0.0,
         "mean_rounds": cell["rounds"] / n if n else 0.0,
+        "mean_rounds_three": (
+            cell["rounds_three"] / cell["three_stars"] if cell["three_stars"] else None
+        ),
         "draw_rate": cell["draws"] / n if n else 0.0,
     }
 
@@ -1216,6 +1176,7 @@ def aggregate(
     cells: dict[str, dict[str, dict[str, int]]] = {
         stage: {deck: _empty_cell() for deck in decks} for stage in stages
     }
+    overall = _empty_cell()
     invalid = 0
     valid_rows = 0
     for row in rows:
@@ -1230,12 +1191,16 @@ def aggregate(
             continue
         cell = cells[stage][deck]
         valid_rows += 1
-        cell["n"] += 1
-        cell["wins"] += int(row.get("winner") == 0)
-        cell["three_stars"] += int(bool(row.get("three_star")))
-        cell["stars"] += int(row.get("stars") or 0)
-        cell["rounds"] += int(row.get("rounds") or 0)
-        cell["draws"] += int(row.get("winner") not in (0, 1))
+        rounds = int(row.get("rounds") or 0)
+        three_star = bool(row.get("three_star"))
+        for target in (cell, overall):
+            target["n"] += 1
+            target["wins"] += int(row.get("winner") == 0)
+            target["three_stars"] += int(three_star)
+            target["stars"] += int(row.get("stars") or 0)
+            target["rounds"] += rounds
+            target["rounds_three"] += rounds if three_star else 0
+            target["draws"] += int(row.get("winner") not in (0, 1))
 
     by_stage = {
         stage: {deck: _stats(cell) for deck, cell in deck_cells.items()}
@@ -1253,6 +1218,7 @@ def aggregate(
             pooled["three_stars"] += cell["three_stars"]
             pooled["stars"] += cell["stars"]
             pooled["rounds"] += cell["rounds"]
+            pooled["rounds_three"] += cell["rounds_three"]
             pooled["draws"] += cell["draws"]
             if cell["n"]:
                 per_stage_win.append(cell["win_rate"])
@@ -1268,6 +1234,7 @@ def aggregate(
     return {
         "cells": by_stage,
         "by_deck": by_deck,
+        "overall": _stats(overall),
         "invalid": invalid,
         "valid": valid_rows,
     }
@@ -1596,6 +1563,7 @@ def render_report(
     agg = aggregate(rows, stages, list(decks), matrix_seeds)
     cells = agg["cells"]
     by_deck = agg["by_deck"]
+    overall = agg["overall"]
     ranked_decks = sorted(decks, key=lambda name: _rank_key(by_deck[name], name))
     recs = {stage: recommend_for_stage(stage, cells[stage], decks) for stage in stages}
     best_era = _best_era_per_stage(agg, stages, decks)
@@ -1682,6 +1650,22 @@ def render_report(
         "(fewer is better), deck name."
     )
     add("")
+    if overall["n"]:
+        three_star_mean = (
+            f"{overall['mean_rounds_three']:.1f} over {overall['three_stars']} 3★ games"
+            if overall["mean_rounds_three"] is not None
+            else "n/a (no 3★ games)"
+        )
+        add(
+            f"**Pooled over the whole matrix (all decks, all stages, all seeds):** "
+            f"{overall['n']} games, 3★ {_cp(overall['three_stars'], overall['n'])}, "
+            f"mean rounds {overall['mean_rounds']:.1f}, mean rounds among 3★ "
+            f"{three_star_mean}. "
+            "This line mixes deck strength; the per-deck pooled rows are in §3.1. "
+            "Rounds are only comparable inside the 3★ subset (see "
+            "`docs/EVAL_PROTOCOL.md`)."
+        )
+        add("")
     if len(decks) < 8:
         add(
             f"> **Pool size: {len(decks)} deck(s).** The original target was 8-12; "
@@ -2123,18 +2107,44 @@ def render_report(
     add("")
     add(
         f"Pooled over all {len(stages)} stages x {len(matrix_seeds)} matrix seeds. "
-        "`mean stage 3★` averages the per-stage rates (each stage weighs equally)."
+        "`mean stage 3★` averages the per-stage rates (each stage weighs equally). "
+        "Rounds are reported twice: over every game and, under the user's rule "
+        "(`在达成三星的前提下，越少回合越好`), over three-star games only, with the "
+        "number of 3★ games in parentheses."
     )
     add("")
-    add("| rank | deck | 3★ | win | mean stars | mean rounds | mean stage 3★ |")
-    add("|---|---|---|---|---|---|---|")
+    add(
+        "| rank | deck | 3★ | win | mean stars | mean rounds (all) | "
+        "mean rounds (3★ only) | mean stage 3★ |"
+    )
+    add("|---|---|---|---|---|---|---|---|")
     for rank, name in enumerate(ranked_decks, start=1):
         stats = by_deck[name]
         add(
             f"| {rank} | {name} | {_cp(stats['three_stars'], stats['n'])} | "
             f"{_cp(stats['wins'], stats['n'])} | {stats['mean_stars']:.2f} | "
-            f"{stats['mean_rounds']:.1f} | {_pct(stats['mean_stage_three_star_rate'])} |"
+            f"{stats['mean_rounds']:.1f} | {_rounds_three_cell(stats)} | "
+            f"{_pct(stats['mean_stage_three_star_rate'])} |"
         )
+    add("")
+    add("### 3.2 Rounds per stage")
+    add("")
+    add(
+        "Cell = `mean rounds (all games) / mean rounds among 3★ (n 3★ games)`. "
+        "The left number is context only: a fast loss is not a fast clear. "
+        "Rounds are comparable between decks only within the 3★ subset."
+    )
+    add("")
+    add("| stage | " + " | ".join(decks) + " |")
+    add("|---" * (len(decks) + 1) + "|")
+    for stage in stages:
+        cells_text = []
+        for name in decks:
+            stats = cells[stage][name]
+            cells_text.append(
+                f"{stats['mean_rounds']:.1f} / {_rounds_three_cell(stats)}"
+            )
+        add(f"| {stage} | " + " | ".join(cells_text) + " |")
     add("")
 
     # ------------------------------------------------------------------ #
@@ -2196,15 +2206,16 @@ def render_report(
     )
     add("")
     add(
-        "| stage | recommended deck | win | 3★ | mean rounds | objective coverage | "
+        "| stage | recommended deck | win | 3★ | mean rounds (all) | "
+        "mean rounds (3★ only) | objective coverage | "
         "strength-only pick | win-rate gap | trade-off? |"
     )
-    add("|---|---|---|---|---|---|---|---|---|")
+    add("|---|---|---|---|---|---|---|---|---|---|")
     for stage in stages:
         rec = recs[stage]
         if rec["recommended"] is None or rec["recommended_stats"] is None:
             add(
-                f"| {stage} | — | — | — | — | no deck satisfies the objective | — | — | — |"
+                f"| {stage} | — | — | — | — | — | no deck satisfies the objective | — | — | — |"
             )
             continue
         stats = rec["recommended_stats"]
@@ -2220,7 +2231,8 @@ def render_report(
         add(
             f"| {stage} | **{rec['recommended']}** | "
             f"{_cp(stats['wins'], stats['n'])} | "
-            f"{_cp(stats['three_stars'], stats['n'])} | {stats['mean_rounds']:.1f} | "
+            f"{_cp(stats['three_stars'], stats['n'])} | "
+            f"{stats['mean_rounds']:.1f} | {_rounds_three_cell(stats)} | "
             f"{coverage} | {rec['best_any']} | {gap} | {tradeoff} |"
         )
     add("")

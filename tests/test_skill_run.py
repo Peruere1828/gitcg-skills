@@ -78,6 +78,71 @@ def test_fingerprint_tracks_spec_changes():
     assert "engine_lock" in a and "hp_table" in a
 
 
+def test_fingerprint_tracks_trace_flag():
+    base = dict(group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro")
+    plain = RunSpec(**base).fingerprint()
+    traced = RunSpec(**base, trace=True).fingerprint()
+    assert plain["trace"] is False and traced["trace"] is True
+    assert plain != traced
+
+
+# -- compact trace rows ------------------------------------------------------
+def _fake_match_record():
+    decisions = [
+        SimpleNamespace(
+            player=0, step_index=1, request_type="action",
+            chosen_label="use_skill:0:1", chosen_kind="action_use_skill",
+            used_dice=(1,), player_view={"round_number": 1},
+            subject_definition_id=32031, card_kind=None,
+        ),
+        SimpleNamespace(
+            player=1, step_index=1, request_type="action",
+            chosen_label="declare_end:0:none", chosen_kind="action_declare_end",
+            used_dice=(), player_view={"round_number": 2},
+            subject_definition_id=0, card_kind=None,
+        ),
+    ]
+    events = [
+        SimpleNamespace(kind="reaction", player=0, round_number=1,
+                        reaction_type="superconduct"),
+    ]
+    return SimpleNamespace(
+        winner=0, rounds=2, error=None, truncated=False,
+        decisions=decisions, events=events,
+    )
+
+
+def test_play_one_adds_trace_keys_only_when_enabled(monkeypatch):
+    monkeypatch.setattr(run_module, "run_match", lambda *args, **kwargs: _fake_match_record())
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+
+    def play(*, trace: bool) -> dict:
+        spec = RunSpec(
+            group="scripted", stages=("timmie",), seeds=(0,),
+            deck="superconduct_aggro", trace=trace,
+        )
+        return run_module.play_one(
+            {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+        )
+
+    plain = play(trace=False)
+    assert "trace" not in plain and "trace_meta" not in plain
+
+    traced = play(trace=True)
+    assert isinstance(traced["trace"], list) and traced["trace"]
+    assert traced["trace_meta"] == {"n_decisions": 2, "truncated": False}
+    assert any(line.startswith("结局 ") for line in traced["trace"])
+    json.dumps(traced, ensure_ascii=False)          # JSON-serialisable
+
+
+def test_cli_trace_flag():
+    args = run_module.build_parser().parse_args(["--group", "scripted", "--trace"])
+    assert args.trace is True
+
+
 def test_play_one_records_decisions_for_card_objectives():
     """Regression: the scored row must see what the contestant played.
 
@@ -124,7 +189,7 @@ def _v33_deck(*, name: str = "superconduct_aggro", post_330_card: int | None = N
 def test_card_version_pins_the_pool_and_is_recorded(monkeypatch):
     """A v3.3-only scripted game plays under the pin and the row records it."""
     deck = _v33_deck()
-    monkeypatch.setattr(run_module, "deck_spec", lambda name: deck)
+    monkeypatch.setattr(run_module, "resolve_deck", lambda name: deck)
     spec = RunSpec(
         group="scripted",
         stages=("timmie",),
@@ -145,7 +210,7 @@ def test_card_version_pins_the_pool_and_is_recorded(monkeypatch):
 def test_card_version_rejects_out_of_pool_cards_as_a_row_error(tmp_path, monkeypatch):
     """A post-3.3 card fails the engine's state build; the grid gets error rows."""
     deck = _v33_deck(post_330_card=_POST_330_CARD)
-    monkeypatch.setattr(run_module, "deck_spec", lambda name: deck)
+    monkeypatch.setattr(run_module, "resolve_deck", lambda name: deck)
     monkeypatch.delenv("GITCG_LLM_BUDGET_USD", raising=False)
     spec = RunSpec(
         group="scripted",

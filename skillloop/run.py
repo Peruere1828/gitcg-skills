@@ -37,14 +37,13 @@ from pathlib import Path
 from typing import Any
 
 from common.seeding import derive_seed
-from envs.decks import deck_spec
 from envs.match import run_match
-from envs.policy import expert_policy
 from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage, get_stage, stage_names
 from npc.stage_rules import stage_rules_json
 from skillloop.agent import AgentConfig, SkillAgentPolicy
+from skillloop.era import resolve_base_policy, resolve_deck
 from skillloop.library import SkillLibrary
 from skillloop.loadout import (
     Loadout,
@@ -55,6 +54,7 @@ from skillloop.loadout import (
     stage_task,
 )
 from skillloop.render import StateRenderer, TaskSpec
+from skillloop.replay import compact_trace
 
 GROUPS = ("scripted", "contestant", "llm_empty", "static", "dynamic")
 LIBRARY_GROUPS = ("static", "dynamic")
@@ -85,6 +85,9 @@ class RunSpec:
     # the engine through ``ATTR_CREATEPARAM_STAGE_RULES``. The rule belongs to the
     # stage, so it applies identically to every group.
     stage_rules: bool = False
+    # Store a compact single-game trace per row (``skillloop.replay``), so skill
+    # extraction can show *where* a game went wrong instead of only statistics.
+    trace: bool = False
 
     def fingerprint(self) -> dict[str, Any]:
         library_version = 0
@@ -105,6 +108,7 @@ class RunSpec:
             "model": self.model,
             "rotation": self.rotation,
             "stage_rules": self.stage_rules,
+            "trace": self.trace,
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -225,11 +229,11 @@ def build_policy(
     if deck is None:
         deck = _stage_decks_for_spec(spec).get(stage.name, spec.deck)
     if spec.group == "scripted":
-        return expert_policy(deck, seed=0)
+        return resolve_base_policy(deck, seed=0)
     if spec.group == "contestant":
         from npc.contestant import build_contestant_policy
 
-        return build_contestant_policy(deck_spec(deck), stage, inject_objectives=True)
+        return build_contestant_policy(resolve_deck(deck), stage, inject_objectives=True)
     if spec.group not in GROUPS:
         raise SystemExit(f"unknown group {spec.group!r}; expected one of {GROUPS}")
 
@@ -240,7 +244,7 @@ def build_policy(
         library = SkillLibrary.load(spec.library_root)
     renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
     return SkillAgentPolicy(
-        expert_policy(deck, seed=0),
+        resolve_base_policy(deck, seed=0),
         client,
         renderer=renderer,
         task=task_spec(stage, deck),
@@ -307,7 +311,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     policy0 = build_policy(
         spec, stage, client=client, deck=deck, pinned_skills=pinned_skills
     )
-    contestant = deck_spec(deck)
+    contestant = resolve_deck(deck)
     npc_deck = type(contestant)(
         name=f"npc_{stage.name}", characters=stage.deck_characters, cards=contestant.cards
     )
@@ -354,7 +358,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         library_version = loadout.library_version
     else:
         library_version = SkillLibrary.load(spec.library_root).version if spec.library_root else 0
-    return {
+    row = {
         "task_index": payload.get("task_index", 0),
         "stage": stage.name,
         "seed": seed,
@@ -384,6 +388,16 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "cached_tokens": int(getattr(usage, "cached_tokens", 0) or 0),
         "cost_usd": round(float(getattr(usage, "cost_usd", 0.0) or 0.0), 6),
     }
+    if spec.trace:
+        match_decisions = list(getattr(record, "decisions", None) or ())
+        match_events = list(getattr(record, "events", None) or ())
+        trace_meta: dict[str, Any] = {}
+        row["trace"] = compact_trace(row, match_decisions, match_events, meta=trace_meta)
+        row["trace_meta"] = {
+            "n_decisions": len(match_decisions),
+            "truncated": bool(trace_meta.get("truncated", False)),
+        }
+    return row
 
 
 def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
@@ -588,6 +602,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="pin the engine card pool (e.g. v3.3.0); default: engine default pool")
     parser.add_argument("--stage-rules", action="store_true",
                         help="send each stage's special rules (configs/npc/special_rules.json)")
+    parser.add_argument("--trace", action="store_true",
+                        help="store a compact single-game trace per row (for skill extraction)")
     parser.add_argument("--out", default=None)
     return parser
 
@@ -619,6 +635,7 @@ def main(argv: list[str] | None = None) -> int:
         loadout_root=args.loadout,
         card_version=args.card_version,
         stage_rules=args.stage_rules,
+        trace=args.trace,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))

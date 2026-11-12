@@ -1,68 +1,68 @@
 {
   "stages": {
     "blanche": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_shuanghuo",
+      "notes": "user-verified manual line with 刻晴双火 (blanche: +2 energy -> round-1 burst); post-rules era matrix 3★ 0/5 for this deck, manual line supersedes"
     },
     "buyun": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "nvpu_shuangyan_era",
+      "notes": "post-rules era matrix 3★ 1/5 (seeds 1-5, stage_rules on)"
     },
     "chefmao": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "ellin": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 4/5 (seeds 1-5, stage_rules on)"
     },
     "irontonguetian": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "jifang": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "lan": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 4/5 (seeds 1-5, stage_rules on)"
     },
     "liusu": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "marjorie": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "linghua_yongdong",
+      "notes": "post-rules era matrix 3★ 3/5 (seeds 1-5, stage_rules on)"
     },
     "patton": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "shitou": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "swan": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "timaeus": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; artifact objective is reachable with this deck; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_shuanghuo",
+      "notes": "user-verified manual line with 刻晴双火 (timaeus: 3 artifacts + draw cards); post-rules era matrix 3★ 0/5 for this deck, manual line supersedes"
     },
     "timmie": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "uncletian": {
-      "deck": "superconduct_aggro",
-      "notes": "placeholder for one fixed deck per stage; event objective is reachable with this deck; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "keqing_jihua",
+      "notes": "post-rules era matrix 3★ 5/5 (seeds 1-5, stage_rules on)"
     },
     "wagner": {
-      "deck": "superconduct_mika_attack",
-      "notes": "weapon-carrying deck for the 打出1张武器牌 objective; matrix-based pick (scripts/deck_matrix.py) lands later"
+      "deck": "nvpu_shuangyan_era",
+      "notes": "post-rules era matrix 3★ 4/5 (seeds 1-5, stage_rules on)"
     }
   }
 }

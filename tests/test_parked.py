@@ -491,7 +491,7 @@ def test_card_version_reaches_parked_games_and_rows(monkeypatch):
     import skillloop.parked as parked_module
 
     deck = _v33_deck()
-    monkeypatch.setattr(parked_module, "deck_spec", lambda name: deck)
+    monkeypatch.setattr(parked_module, "resolve_deck", lambda name: deck)
     seen: dict = {}
     real_build = parked_module._build_create_param
 
@@ -517,7 +517,7 @@ def test_out_of_pool_card_is_a_parked_row_error(monkeypatch):
     import skillloop.parked as parked_module
 
     deck = _v33_deck(post_330_card=_POST_330_CARD)
-    monkeypatch.setattr(parked_module, "deck_spec", lambda name: deck)
+    monkeypatch.setattr(parked_module, "resolve_deck", lambda name: deck)
     spec = RunSpec(
         group="llm_empty", stages=("timmie",), seeds=(0,), deck=DECK,
         card_version="v3.3.0", out="data/runs/unused-in-tests.jsonl",

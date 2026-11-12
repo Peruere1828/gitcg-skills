@@ -63,15 +63,14 @@ from typing import Any, Callable
 
 from gitcg import Game, State
 
-from envs.decks import deck_spec
 from envs.match import MatchEvent, PolicyPlayer, _build_create_param
-from envs.policy import expert_policy
 from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage
 from npc.stage_rules import stage_rules_json
 from skillloop.agent import AgentConfig, parse_choice
 from skillloop.cards import card_kind, skill_kind
+from skillloop.era import resolve_base_policy, resolve_deck
 from skillloop.library import SkillLibrary
 from skillloop.loadout import Loadout
 from skillloop.render import (
@@ -357,7 +356,7 @@ class ParkedRunner:
         config = replace(self.config, pinned_skills=pinned) if pinned else self.config
         renderer = StateRenderer(_assets(), opponent_name=f"NPC({task.stage.display})")
         policy = ParkablePolicy(
-            expert_policy(deck, seed=0),
+            resolve_base_policy(deck, seed=0),
             renderer=renderer,
             task=task_spec(task.stage, deck),
             library=self.library,
@@ -370,7 +369,7 @@ class ParkedRunner:
         return policy
 
     def _make_game(self, task: ParkedGame, policy: ParkablePolicy) -> Game:
-        contestant = deck_spec(self._deck(task.stage.name))
+        contestant = resolve_deck(self._deck(task.stage.name))
         npc_deck = type(contestant)(name=f"npc_{task.stage.name}",
                                     characters=task.stage.deck_characters, cards=contestant.cards)
         if task.snapshot is None:

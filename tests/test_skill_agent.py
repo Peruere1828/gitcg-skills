@@ -162,6 +162,24 @@ def test_agent_injects_skills_and_filters_citations():
     assert agent.decisions[0].used == ("speed_equip",)   # unknown id dropped
 
 
+def test_long_skill_description_reaches_system_prompt_verbatim():
+    """Detailed extracted prompts must not be truncated on the way into the model."""
+    long_description = (
+        "起手：先找武器牌，没有就换掉全部非角色牌。" * 20
+        + "自查：如果第3回合还没打出第一件装备，立刻停止铺场，转去抢血。END_MARKER"
+    )
+    lib = SkillLibrary.from_skills([
+        Skill(skill_id="long_plan", skill_name="长提示", description=long_description),
+    ])
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(client, library=lib, top_k=1)
+    agent.choose(_built(3))
+
+    system = client.calls[0][0]["content"]
+    assert len(long_description) > 400
+    assert long_description in system             # render.py injects the full text
+
+
 def test_system_prefix_is_built_once_per_game():
     client = _FakeClient('{"choice": 0}')
     agent = _agent(client)

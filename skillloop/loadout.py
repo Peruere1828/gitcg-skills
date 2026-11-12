@@ -174,9 +174,9 @@ def _enemies_block(stage: NpcStage) -> str:
 
 
 def _deck_block(deck: str) -> list[str]:
-    from envs.decks import deck_spec
+    from skillloop.era import resolve_deck
 
-    facts = deck_facts(deck_spec(deck))
+    facts = deck_facts(resolve_deck(deck))
     characters = "、".join(facts["characters"]) or "未知"
     elements = "、".join(f"{label}x{count}" for label, count in facts["elements"].items()) or "未知"
     cards = facts["cards"]
