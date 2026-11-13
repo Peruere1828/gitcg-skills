@@ -252,6 +252,14 @@ export function AiDecisionPanel(props: AiDecisionPanelProps) {
       <summary style={{ cursor: "pointer" }}>
         AI 决策 / 技能引用（最近 {MAX_ROWS} 条，只读监控）
       </summary>
+      <div style={{ margin: "0.3rem 0", "font-size": "0.8rem" }}>
+        <a
+          href={`${baseUrl}/ai-prompt-log?session=${encodeURIComponent(sessionId)}&who=${who}&format=md`}
+          download
+        >
+          导出本局 prompt / 思考日志（Markdown）
+        </a>
+      </div>
       <Show when={error()}>
         <div style={{ color: "#b00020", padding: "0.25rem 0.4rem" }}>
           监控不可用：{error()}

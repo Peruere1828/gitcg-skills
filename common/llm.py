@@ -30,6 +30,18 @@ from common.paths import REPO_ROOT
 _ENV_FILE = REPO_ROOT / ".env"
 _REDACT_PREFIXES = ("sk-", "oc_sk_")
 _TRACE_LOCK = threading.Lock()
+_TRACE_CONTEXT = threading.local()
+
+
+def set_trace_context(**fields: Any) -> None:
+    """Tag subsequent calls on this thread (session/who/step/method/stage).
+
+    Fields merge with the current thread's context; ``None`` keeps the old value
+    so the agent can add stage/step without clearing the bridge's session/who.
+    """
+    current = dict(getattr(_TRACE_CONTEXT, "fields", {}) or {})
+    current.update({k: v for k, v in fields.items() if v is not None})
+    _TRACE_CONTEXT.fields = current
 
 
 def _trace_call(record: dict[str, Any]) -> None:
@@ -41,6 +53,8 @@ def _trace_call(record: dict[str, Any]) -> None:
     path = os.environ.get("GITCG_LLM_TRACE")
     if not path:
         return
+    context = dict(getattr(_TRACE_CONTEXT, "fields", {}) or {})
+    record = {**context, **record} if context else record
     try:
         with _TRACE_LOCK, open(path, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")

@@ -23,7 +23,8 @@
    自动回填。
 3. **开始对局**：AI 固定 seat0 先手，人类 seat1 后手；没有版本、先手或反选选择。
 4. **对局中**：棋盘详情与导出日志保留；下方 AI 决策面板轮询
-   `GET /ai-decisions`，显示 AI 引用的技能、技能库版本与耗时。终局上报
+   `GET /ai-decisions`，显示 AI 引用的技能、技能库版本与耗时；面板顶部可
+   一键导出本局完整 prompt / 模型回复 / 思考（Markdown）。终局上报
    `POST /game-end`，引擎日志上报 `POST /game-log`。
 
 ## 3. 前端协议（需要的接口）
@@ -37,7 +38,8 @@
 | `POST /rpc` | 浏览器 → 桥的引擎 RPC：`{session, who, request}` → `RpcResponse`（AI 座位决策） |
 | `POST /notify` | 通知上行：`{session, who, seq, notification:{mutation,state}}`；座位内单调 `seq`，过期通知被丢弃 |
 | `GET /ai` | 只读状态：`protocol`/`stage`/`parity`/`group`/`library`/`card_version`/`eval_deck` 等 |
-| `GET /ai-decisions?session=&who=0&limit=20` | 只读决策行：`used_skills`/`used_skill_names`/`library`/`latency_ms`/`fallback` |
+| `GET /ai-decisions?session=&who=0&limit=20` | 只读决策行：`used_skills`/`used_skill_names`/`library`/`latency_ms`/`fallback`/`llm_error`/`finish_reason`/`reasoning` |
+| `GET /ai-prompt-log?session=&who=0&format=md` | 导出本局完整 prompt / 模型回复 / 思考（`md` 或 `jsonl`）；数据来自 `LLM_TRACE` |
 | `POST /game-end` | 终局：`{session, winner, rounds, aborted?, abort_reason?}` |
 | `POST /game-log` | 上传引擎日志：`{session, log}` |
 
@@ -92,7 +94,7 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 | `LOADOUT_ROOT` | `reports/loadouts/v4` | 冻结 loadout 根 |
 | `CARD_VERSION` | `v3.3.0` | 卡池版本 |
 | `REASONING` | `none` | AI 决策的 reasoning effort（`none`/`low`/`medium`/`high`；非 `none` 时回复预算 8192 token，仅调试用） |
-| `LLM_TRACE` | 空 | 可选：模型调用 JSONL 路径（完整 prompt + content + reasoning_content；不含 key） |
+| `LLM_TRACE` | `data/web/llm_trace.jsonl` | 模型调用 JSONL 路径（完整 prompt + content + reasoning_content；不含 key；设 `none` 关闭） |
 
 ## 6. 代码位置
 

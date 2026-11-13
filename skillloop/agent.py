@@ -27,6 +27,8 @@ from reps.action_adapter import BuiltDecisionContext
 from reps.schema import OptionKind
 from skillloop.cards import card_kind, skill_kind
 from skillloop.library import SkillLibrary
+from common.llm import set_trace_context
+
 from skillloop.render import (
     ProgressSignals,
     StateRenderer,
@@ -372,6 +374,11 @@ class SkillAgentPolicy:
                     self._last_plan_round = round_number
             user = {**user, "content": board + user["content"]}
         started = time.perf_counter()
+        set_trace_context(
+            stage=str(self.task.stage),
+            step=int(context.step_index),
+            method=context.request_type.value,
+        )
         raw = self.client.chat(
             [system, user],
             max_tokens=self.config.max_tokens,

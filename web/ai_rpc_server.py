@@ -811,6 +811,7 @@ class LLMPolicy:
         spec: str | None = None,
         client_factory: Any = None,
         stage: str | None = None,
+        session: str | None = None,
         eval_config: WebEvalConfig | None = None,
     ) -> None:
         self.selection = selection
@@ -822,6 +823,7 @@ class LLMPolicy:
         self.seed = 0 if seed is None else int(seed)
         self.role = role
         self.stage = stage
+        self.session = session
         self.eval_config = eval_config or WebEvalConfig()
         self._fallback = fallback
         self._client_factory = client_factory
@@ -936,6 +938,15 @@ class LLMPolicy:
                 raise RuntimeError(self._load_error or "policy unavailable")
             if latest_state is None:
                 raise RuntimeError("尚未收到任何 notification.state")
+            from common.llm import set_trace_context
+
+            set_trace_context(
+                session=self.session,
+                who=who,
+                step=self._step_index,
+                method=method,
+                stage=self.stage,
+            )
             before = len(getattr(policy, "decisions", []) or [])
             resp = _repo_decide(
                 policy,
@@ -2254,6 +2265,53 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                         "decisions": _read_ai_decisions(directory, who, limit),
                     }
                 )
+            elif path == "/ai-prompt-log":
+                query = self._query()
+                session = query.get("session", [None])[0]
+                who_raw = query.get("who", [None])[0]
+                try:
+                    who = int(who_raw) if who_raw not in (None, "") else None
+                except (TypeError, ValueError):
+                    self._json({"error": "who must be 0 or 1"}, status=400)
+                    return
+                fmt = (query.get("format", ["md"])[0] or "md").lower()
+                trace_path = os.environ.get("GITCG_LLM_TRACE")
+                if not trace_path:
+                    self._json(
+                        {"error": "GITCG_LLM_TRACE 未开启；重启时设置 LLM_TRACE=..."
+                         "（serve_web_demo.sh 默认 data/web/llm_trace.jsonl）"},
+                        status=404,
+                    )
+                    return
+                from skillloop.prompt_log import filter_trace, load_trace, render_markdown
+
+                rows = filter_trace(
+                    load_trace(trace_path), session=session, who=who
+                )
+                if fmt == "jsonl":
+                    body_text = "".join(
+                        json.dumps(row, ensure_ascii=False) + "\n" for row in rows
+                    )
+                    content_type = "application/x-ndjson; charset=utf-8"
+                    filename = f"prompt-{session or 'all'}.jsonl"
+                else:
+                    body_text = render_markdown(
+                        rows,
+                        title=f"Prompt log · session={session or 'all'}",
+                        max_reasoning=6000,
+                    )
+                    content_type = "text/markdown; charset=utf-8"
+                    filename = f"prompt-{session or 'all'}.md"
+                body = body_text.encode("utf-8")
+                self.send_response(200)
+                self.send_header("content-type", content_type)
+                self.send_header("content-length", str(len(body)))
+                self.send_header(
+                    "content-disposition", f'attachment; filename="{filename}"'
+                )
+                self._cors()
+                self.end_headers()
+                self.wfile.write(body)
             else:
                 self._json(
                     {
@@ -2270,6 +2328,7 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                             "/ai-deck",
                             "/ai",
                             "/ai-decisions",
+                            "/ai-prompt-log",
                             "/ai-library",
                             "/npc-decks",
                             "/results",
@@ -2565,6 +2624,7 @@ def build_policy_from_args(
                 spec=spec,
                 client_factory=client_factory,
                 stage=stages.get(session),
+                session=session,
                 eval_config=config,
             )
         if spec.startswith("npc:"):
