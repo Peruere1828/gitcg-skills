@@ -115,7 +115,11 @@
 | `--round-plan` | 记录板改为轮级计划（隐含 `--scratchpad`）：每轮第一次决策提示「目标/本轮路线/风险/留骰」 |
 | `--rich-render` | 状态/候选渲染更丰富：元素附着名、手牌 `N/10`、对手结束状态、技能类型与反应提示、卡牌描述 |
 | `--base-guard` | 只有模型引用了非 rule 技能时才采纳其选择；否则退回牌组 expert 的脚本动作 |
-| `--base-guard-strict` | 配合 `--base-guard`，只认 `stage_specific` 或含关卡名的技能 id |
+| `--base-guard-strict` | 配合 `--base-guard`，只认 `stage_specific` 或以 `_<stage>` 结尾的技能 id |
+| `--override-kinds` | 只允许模型在这些高层动作类型上越权（如 `action_use_skill`），其余交还 expert |
+| `--override-stages` | 只在这些关卡调用模型；其他关卡纯 expert，不产生 API 调用 |
+| `--expert-hint` | 把 expert 的脚本建议写进 user message，作为模型的先验 |
+| `--base-seed` | expert 的 tie-break seed（诊断用；比较时必须用同 seed 重跑 scripted） |
 
 `--base-guard*` 只是**决策兜底**，不改变模型调用次数与 prompt；它用同一 LLM 选择做门控，
 因此不会破坏同种子配对。爬坡结论见 `reports/dynamic_improvements_20261113.md`。

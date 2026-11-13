@@ -72,6 +72,17 @@ class AgentConfig:
     # current stage name, e.g. ``skill_liusu``) counts as evidence. Generic
     # ``strat_*`` advice no longer overrides the scripted expert.
     base_guard_strict: bool = False
+    # Hard kind gate: when non-empty, the model may only override on these
+    # high-level option kinds (``OptionKind`` values). Everything else keeps the
+    # deck expert's action. Empty means no restriction.
+    override_kinds: tuple[str, ...] = ()
+    # Stage allowlist: when non-empty, the model is not called at all on other
+    # stages and the deck expert plays the whole game (exact scripted parity).
+    override_stages: tuple[str, ...] = ()
+    # Show the deck expert's scripted recommendation in the user message. The
+    # expert is also the fallback, so this anchors the model to a strong prior
+    # without restricting its choice.
+    expert_hint: bool = False
 
 
 @dataclass
@@ -311,7 +322,7 @@ class SkillAgentPolicy:
             if not self.config.base_guard_strict:
                 return True
             if skill.layer == "stage_specific" or (
-                stage and f"_{stage}" in skill.skill_id
+                stage and skill.skill_id.endswith(f"_{stage}")
             ):
                 return True
         return False
@@ -322,6 +333,8 @@ class SkillAgentPolicy:
         base_code = int(self.base.choose(built))
         if context.request_type.value not in self.config.request_types:
             return self._finish(context, base_code)
+        if self.config.override_stages and str(self.task.stage) not in self.config.override_stages:
+            return self._finish(context, base_code)
         if self.calls >= self.config.max_calls_per_game:
             return self._finish(context, base_code)
         candidates = select_candidates(context, max_candidates=self.config.candidate_cap)
@@ -331,6 +344,12 @@ class SkillAgentPolicy:
         system = self._system_message(context)
         progress = progress_block(self.task, context, self._signals)
         user = self.renderer.user_message(context, candidates, progress=progress)
+        if self.config.expert_hint:
+            for index, (code, spec) in enumerate(candidates):
+                if int(code) == base_code:
+                    hint = self.renderer.describe_candidate(context, spec, index)
+                    user = {**user, "content": f"脚本 expert 建议：{hint}\n\n" + user["content"]}
+                    break
         if self.config.scratchpad:
             # Dynamic tail (user message), so the cached system prefix is untouched.
             previous = self._scratchpad or "（空；请先写本局路线与当前轮计划）"
@@ -363,6 +382,14 @@ class SkillAgentPolicy:
         guarded = False
         if index is None:
             final_code = base_code
+        elif (
+            self.config.override_kinds
+            and candidates[index][1].kind.value not in self.config.override_kinds
+        ):
+            # Hard kind gate: keep the expert for card play/switch/tuning unless
+            # the caller explicitly allows the model to override that kind.
+            final_code = base_code
+            guarded = True
         elif self.config.base_guard and not self._has_strategy_evidence(used):
             # No non-rule skill cited: the model's pick is unsupported, so keep the
             # deck expert's scripted (era/expert) action instead.

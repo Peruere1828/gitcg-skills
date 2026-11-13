@@ -589,6 +589,70 @@ def test_base_guard_strict_requires_stage_evidence():
     assert agent.decisions[-1].guarded is False
 
 
+def test_base_guard_strict_matches_stage_name_by_suffix_only():
+    """``lan`` must not match ``skill_blanche`` through a substring."""
+    lib = SkillLibrary.from_skills([
+        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
+        Skill(skill_id="skill_blanche", skill_name="布兰奇打法", description="别的关卡", layer="strategy"),
+    ])
+    task = TaskSpec(stage="lan", display="蓝", objectives=("5回合内胜利",), deck="x")
+    client = _FakeClient('{"choice": 2, "used": ["skill_blanche"]}')
+    agent = SkillAgentPolicy(
+        _Base(),
+        client,
+        renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+        task=task,
+        library=lib,
+        config=AgentConfig(
+            pinned_skills=("rule_x", "skill_blanche"),
+            base_guard=True, base_guard_strict=True,
+        ),
+    )
+    assert agent.choose(_built(3)) == 100
+    assert agent.decisions[-1].guarded is True
+
+
+# -- optional hard kind gate -------------------------------------------------
+def test_override_kinds_blocks_other_candidate_kinds():
+    client = _FakeClient('{"choice": 1}')
+    agent = _agent(client, override_kinds=("action_use_skill",))
+    assert agent.choose(_built_cards((100, 101))) == 200   # expert card play
+    assert agent.decisions[-1].guarded is True
+
+
+def test_override_kinds_allows_listed_kind():
+    client = _FakeClient('{"choice": 2}')
+    agent = _agent(client, override_kinds=("action_use_skill",))
+    assert agent.choose(_built(3)) == 102
+    assert agent.decisions[-1].guarded is False
+
+
+# -- optional stage allowlist ------------------------------------------------
+def test_override_stages_skips_the_model_outside_the_allowlist():
+    client = _FakeClient('{"choice": 2}')
+    agent = _agent(client, override_stages=("buyun",))
+    assert agent.choose(_built(3)) == 100          # expert, wagner not allowed
+    assert client.calls == []
+    assert agent.decisions == []
+
+
+def test_override_stages_calls_the_model_inside_the_allowlist():
+    client = _FakeClient('{"choice": 2}')
+    agent = _agent(client, override_stages=("wagner",))
+    assert agent.choose(_built(3)) == 102
+    assert len(client.calls) == 1
+
+
+# -- optional expert hint ----------------------------------------------------
+def test_expert_hint_puts_the_base_recommendation_first():
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(client, expert_hint=True)
+    agent.choose(_built(3))
+    user = client.calls[0][1]["content"]
+    assert user.startswith("脚本 expert 建议：")
+    assert "skill0" in user.split("\n", 1)[0]
+
+
 def test_base_guard_off_lets_model_choice_stand_without_citations():
     client = _FakeClient('{"choice": 2}')
     agent = _agent(client)

@@ -109,6 +109,7 @@ class PendingDecision:
     key: tuple[str, tuple[int, ...]]
     prompt: list[dict[str, str]]
     codes: list[int]
+    kinds: list[str]
     step: int
     request: str
     snapshot: str
@@ -243,11 +244,22 @@ class ParkablePolicy:
         )
         if not parkable:
             return base_code
+        if (
+            self.config.override_stages
+            and str(self.task.stage) not in self.config.override_stages
+        ):
+            return base_code
 
         assert self.snapshot_fn is not None, "snapshot_fn not wired"
         self.calls += 1
         progress = progress_block(self.task, context, self._progress_signals(context))
         user = self.renderer.user_message(context, candidates, progress=progress)
+        if self.config.expert_hint:
+            for index, (code, spec) in enumerate(candidates):
+                if int(code) == base_code:
+                    hint = self.renderer.describe_candidate(context, spec, index)
+                    user = {**user, "content": f"脚本 expert 建议：{hint}\n\n" + user["content"]}
+                    break
         if self.config.scratchpad:
             previous = self.scratchpad or "（空；请先写本局路线与当前轮计划）"
             board = f"本局记录板（上一决策）：\n{previous}\n\n"
@@ -265,6 +277,7 @@ class ParkablePolicy:
             key=key,
             prompt=[self._system(context), user],
             codes=list(codes),
+            kinds=[spec.kind.value for _code, spec in candidates],
             step=int(context.step_index),
             request=context.request_type.value,
             snapshot=self.snapshot_fn(),
@@ -368,6 +381,9 @@ class ParkedRunner:
             round_plan=spec.round_plan,
             base_guard=spec.base_guard,
             base_guard_strict=spec.base_guard_strict,
+            override_kinds=tuple(spec.override_kinds),
+            override_stages=tuple(spec.override_stages),
+            expert_hint=spec.expert_hint,
             max_tokens=160 if (spec.scratchpad or spec.round_plan) else 64,
         )
         self._meter: _UsageMeter | None = None
@@ -404,7 +420,7 @@ class ParkedRunner:
         renderer_cls = RichStateRenderer if self.spec.rich_render else StateRenderer
         renderer = renderer_cls(_assets(), opponent_name=f"NPC({task.stage.display})")
         policy = ParkablePolicy(
-            resolve_base_policy(deck, seed=0),
+            resolve_base_policy(deck, seed=self.spec.base_seed),
             renderer=renderer,
             task=task_spec(task.stage, deck),
             library=self.library,
@@ -583,6 +599,11 @@ class ParkedRunner:
                     if index is None:
                         task.errors += 1
                         code = pending.fallback_code      # model failed -> expert
+                    elif (
+                        self.config.override_kinds
+                        and pending.kinds[index] not in self.config.override_kinds
+                    ):
+                        code = pending.fallback_code      # kind not allowed -> expert
                     elif self.config.base_guard and not self._has_strategy_evidence(
                         used, task.stage.name
                     ):
@@ -660,7 +681,9 @@ class ParkedRunner:
                 continue
             if not self.spec.base_guard_strict:
                 return True
-            if skill.layer == "stage_specific" or (stage and f"_{stage}" in skill.skill_id):
+            if skill.layer == "stage_specific" or (
+                stage and skill.skill_id.endswith(f"_{stage}")
+            ):
                 return True
         return False
 
@@ -685,6 +708,10 @@ class ParkedRunner:
             "round_plan": bool(self.spec.round_plan),
             "base_guard": bool(self.spec.base_guard),
             "base_guard_strict": bool(self.spec.base_guard_strict),
+            "override_kinds": list(self.spec.override_kinds),
+            "override_stages": list(self.spec.override_stages),
+            "expert_hint": bool(self.spec.expert_hint),
+            "base_seed": int(self.spec.base_seed),
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,

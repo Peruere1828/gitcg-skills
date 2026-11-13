@@ -116,6 +116,18 @@ class RunSpec:
     round_plan: bool = False
     base_guard: bool = False
     base_guard_strict: bool = False
+    # High-level kinds the model may override (empty = all). Values are
+    # ``OptionKind`` strings, e.g. ``action_use_skill``.
+    override_kinds: tuple[str, ...] = ()
+    # Stage allowlist for LLM overrides (empty = all stages). Other stages are
+    # played entirely by the deck expert, exactly like ``scripted``.
+    override_stages: tuple[str, ...] = ()
+    # Put the deck expert's recommendation in the user message (default off).
+    expert_hint: bool = False
+    # Tie-break seed for the deck expert (scripted control uses 0). Diagnostic
+    # only: changing it means the scripted reference must be rerun with the same
+    # base seed before any comparison.
+    base_seed: int = 0
 
     def fingerprint(self) -> dict[str, Any]:
         library_root = resolved_library_root(self)
@@ -144,6 +156,10 @@ class RunSpec:
             "round_plan": self.round_plan,
             "base_guard": self.base_guard,
             "base_guard_strict": self.base_guard_strict,
+            "override_kinds": list(self.override_kinds),
+            "override_stages": list(self.override_stages),
+            "expert_hint": self.expert_hint,
+            "base_seed": self.base_seed,
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -278,7 +294,7 @@ def build_policy(
     if deck is None:
         deck = _stage_decks_for_spec(spec).get(stage.name, spec.deck)
     if spec.group == "scripted":
-        return resolve_base_policy(deck, seed=0)
+        return resolve_base_policy(deck, seed=spec.base_seed)
     if spec.group == "contestant":
         from npc.contestant import build_contestant_policy
 
@@ -302,7 +318,7 @@ def build_policy(
         renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
     scratchpad = spec.scratchpad or spec.round_plan
     return SkillAgentPolicy(
-        resolve_base_policy(deck, seed=0),
+        resolve_base_policy(deck, seed=spec.base_seed),
         client,
         renderer=renderer,
         task=task_spec(stage, deck),
@@ -316,6 +332,9 @@ def build_policy(
             round_plan=spec.round_plan,
             base_guard=spec.base_guard,
             base_guard_strict=spec.base_guard_strict,
+            override_kinds=tuple(spec.override_kinds),
+            override_stages=tuple(spec.override_stages),
+            expert_hint=spec.expert_hint,
             # A note plus the usual JSON needs more than the 64-token reply budget;
             # keep the default arm at 64 so its cost/behaviour is unchanged.
             max_tokens=160 if scratchpad else 64,
@@ -445,6 +464,10 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "round_plan": bool(spec.round_plan),
         "base_guard": bool(spec.base_guard),
         "base_guard_strict": bool(spec.base_guard_strict),
+        "override_kinds": list(spec.override_kinds),
+        "override_stages": list(spec.override_stages),
+        "expert_hint": bool(spec.expert_hint),
+        "base_seed": int(spec.base_seed),
         "model": spec.model,
         "library_root": library_root,
         "library_version": library_version,
@@ -702,6 +725,17 @@ def build_parser() -> argparse.ArgumentParser:
                         help="keep the scripted expert action unless the LLM cites a non-rule skill")
     parser.add_argument("--base-guard-strict", action="store_true",
                         help="with --base-guard: only stage-specific/stage-named skills count")
+    parser.add_argument("--override-kinds", default="",
+                        help="comma-separated OptionKind values the model may override, "
+                             "e.g. action_use_skill; empty = all")
+    parser.add_argument("--override-stages", default="",
+                        help="comma-separated stage names where the model may override; "
+                             "other stages are pure expert (empty = all)")
+    parser.add_argument("--expert-hint", action="store_true",
+                        help="show the deck expert's scripted recommendation in the prompt")
+    parser.add_argument("--base-seed", type=int, default=0,
+                        help="tie-break seed for the deck expert (diagnostic; rerun scripted "
+                             "with the same seed before comparing)")
     parser.add_argument("--rich-render", action="store_true",
                         help="richer state/candidate rendering: effects, auras, reactions, hand count")
     parser.add_argument("--out", default=None)
@@ -741,6 +775,14 @@ def main(argv: list[str] | None = None) -> int:
         round_plan=args.round_plan,
         base_guard=args.base_guard,
         base_guard_strict=args.base_guard_strict,
+        override_kinds=tuple(
+            item.strip() for item in args.override_kinds.split(",") if item.strip()
+        ),
+        override_stages=tuple(
+            item.strip() for item in args.override_stages.split(",") if item.strip()
+        ),
+        expert_hint=args.expert_hint,
+        base_seed=args.base_seed,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))

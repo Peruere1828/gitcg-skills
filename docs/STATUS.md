@@ -125,14 +125,20 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
   （基线 75/144 = 52.08%）；配对门控合并 Δ = +0.049，CI [−0.059, +0.157]，
   **未过门**。`scripted` 同 9 seeds 95/144 = 65.97%。
 - `round-plan` 与 `base-guard-strict` 中途分别 20/42、7/19 三星，已停止。
-- 结论：不作为默认配置；报告 [`../reports/dynamic_improvements_20261113.md`](../reports/dynamic_improvements_20261113.md)。
+- 进一步尝试（均 16 关 × seeds1–5）：`base-guard-strict` 全关 **48/80 = 60.00%**
+  （scripted 57/80）；skills-only 越权 18/30、expert-hint 15/30、非战斗越权 7/25，
+  对照 scripted 分别为 27/30、27/30、10/25。expert 规则旋钮网格（免费）默认配置
+  即最优，`--base-seed 1` 与 seed 0 逐局一致。
+- 结论：当前模型/库/逐动作架构下 dynamic **无法超过 scripted**；全部实验约 $1.42。
+  报告 [`../reports/dynamic_improvements_20261113.md`](../reports/dynamic_improvements_20261113.md)。
 
 ## 7. 下一步
 
 1. dynamic 迭代停留在 3 轮/12 seeds（目标未达）；不要继续消耗预算刷同一架构。
-2. 共享智能体的 `rich-render`/`base-guard` 组合未过门（合并 144 局 CI 跨 0）；
-   若继续，先记录**逐决策** `guarded/final_code` 并做单开关 A/B，避免本轮两个
-   杠杆混测；再按 50 seeds/关 或预注册多 seed 验证，别用 5 seeds 选型。
+2. 逐动作越权已被证明是负收益：rich/base-guard、strict、skills-only、expert-hint、
+   非战斗越权均低于同配对 scripted；expert 规则旋钮也无余量。不要再在同一架构上
+   调 prompt。若要继续冲 scripted，需换架构（回放/搜索、LLM 写可执行规则、或更强
+   模型 + 推理），并重跑全部基线。
 3. 5 seeds 结果只作冒烟；全量按 50 seeds/关、6 workers 跑，预算按
    `EVAL_PROTOCOL.md §6` 分组设置。
 4. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。

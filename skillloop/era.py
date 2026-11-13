@@ -10,6 +10,7 @@ the same way and an era deck can be played wherever an expert deck can.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
@@ -67,7 +68,12 @@ def resolve_deck(name: str) -> DeckSpec:
     return deck_spec(name)
 
 
-def era_policy(deck: Mapping[str, Any], *, seed: int = 0):
+def era_policy(
+    deck: Mapping[str, Any],
+    *,
+    seed: int = 0,
+    rule_overrides: Mapping[str, Any] | None = None,
+):
     """ExpertRuleAgent with a synthetic profile (era decks have no rule module)."""
     from agents.scripted.agent import ExpertRuleAgent
     from agents.scripted.assets import load_assets
@@ -106,6 +112,16 @@ def era_policy(deck: Mapping[str, Any], *, seed: int = 0):
             equipment.append(int(card_id))
         else:
             events.append(int(card_id))
+    rule_config = DeckRuleConfig(
+        slug=str(deck["name"]),
+        opener=names[0],
+        carry=names[:2],
+        bench=names[2:],
+        preferred_elements=elements,
+        style="era",
+    )
+    if rule_overrides:
+        rule_config = replace(rule_config, **dict(rule_overrides))
     profile = DeckProfile(
         slug=str(deck["name"]),
         name=str(deck["name"]),
@@ -116,14 +132,7 @@ def era_policy(deck: Mapping[str, Any], *, seed: int = 0):
         cards=tuple(int(card_id) for card_id in deck["cards"]),
         character_names=names,
         character_elements=elements,
-        rule_config=DeckRuleConfig(
-            slug=str(deck["name"]),
-            opener=names[0],
-            carry=names[:2],
-            bench=names[2:],
-            preferred_elements=elements,
-            style="era",
-        ),
+        rule_config=rule_config,
         talent_cards=tuple(talents),
         support_cards=tuple(supports),
         equipment_cards=tuple(equipment + talents),

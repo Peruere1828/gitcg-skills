@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from skillloop.era import is_era, load_era_decks, resolve_base_policy, resolve_deck
+from skillloop.era import (
+    era_policy,
+    is_era,
+    load_era_decks,
+    resolve_base_policy,
+    resolve_deck,
+)
 
 
 def test_load_era_decks_reads_the_configured_pool():
@@ -40,6 +46,20 @@ def test_resolve_base_policy_works_for_era_and_expert_decks():
     expert = resolve_base_policy("superconduct_aggro")
     assert expert.name == "expert:superconduct_aggro"
     assert expert.agent.profile.slug == "superconduct_aggro"
+
+
+def test_era_policy_rule_overrides_apply_without_touching_defaults():
+    default = era_policy(load_era_decks()["keqing_jihua"])
+    assert default.agent.profile.rule_config.setup_rounds == 2
+
+    tuned = era_policy(
+        load_era_decks()["keqing_jihua"],
+        rule_overrides={"setup_rounds": 0, "switch_hp_threshold": 6},
+    )
+    assert tuned.agent.profile.rule_config.setup_rounds == 0
+    assert tuned.agent.profile.rule_config.switch_hp_threshold == 6
+    # Untouched fields keep their defaults.
+    assert tuned.agent.profile.rule_config.keep_tags == default.agent.profile.rule_config.keep_tags
 
 
 class _StubClient:
