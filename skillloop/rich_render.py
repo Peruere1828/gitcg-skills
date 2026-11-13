@@ -273,7 +273,7 @@ class RichStateRenderer(StateRenderer):
                 continue
             label = _NPC_SKILL_KINDS.get(skill.kind, "")
             cost = self._npc_cost(skill.cost)
-            detail = f"{label}，{cost}" if label and cost else (label or cost)
+            detail = f"{label}{cost}"
             lines.append(
                 f"    - {skill.name_cn or skill.name}"
                 + (f"（{detail}）" if detail else "")
@@ -393,9 +393,17 @@ class RichStateRenderer(StateRenderer):
         for card in cards:
             definition_id = int(getattr(card, "definition_id", 0) or 0)
             info = self._card_info(definition_id)
-            # Effects live in the cached knowledge block; the per-turn state only
-            # needs to identify the card and its cost.
-            lines.append(f"  - {self._card(definition_id)}{self._cost(info)}")
+            # Repeat the effect here as well: generated cards (e.g. 雷楔) are not
+            # part of the static deck knowledge, and a hand card must never be
+            # identifiable by name only.
+            description = _one_line(
+                getattr(info, "description", "") if info is not None else "",
+                _HAND_DESCRIPTION_LIMIT,
+            )
+            suffix = f"：{description}" if description else ""
+            lines.append(
+                f"  - {self._card(definition_id)}{self._cost(info)}{suffix}"
+            )
         return "\n" + "\n".join(lines)
 
     def _attachments(self, character: Any) -> str:

@@ -1,17 +1,17 @@
-# Prompt log · ellin_new.jsonl
+# Prompt log · ellin_final.jsonl
 
 - calls: **1**
 - truncated (finish=length): **0**
 - empty content: **0**
-- wall time: 3.6s
+- wall time: 2.1s
 - models: deepseek-v4.1-flash
 - reasoning effort: none
 
 ## 1. step 1 · switch_hands · stage=ellin
 
-- 2026-11-13 17:27:57 UTC
-- finish: **stop** · max_tokens=64 · effort=none · 3.6s
-- usage: prompt=3659 · completion=12 · cached=768
+- 2026-11-13 17:33:42 UTC
+- finish: **stop** · max_tokens=64 · effort=none · 2.1s
+- usage: prompt=3659 · completion=12 · cached=3584
 
 ### system
 
@@ -149,5 +149,5 @@ NPC(艾琳)状态：无
 ### reply
 
 ```json
-{"choice": 0, "used": []}
+{"choice": 1, "used": []}
 ```

@@ -82,8 +82,8 @@ def test_state_shows_character_tags_and_hand_card_costs_only():
     assert "运筹帷幄" in text
     assert "［1同色］" in text
     assert "我方手牌（1/10）" in text
-    # Card effects live in the knowledge block, not in every turn's state.
-    assert "抓2张牌" not in text
+    # Generated cards are not in the deck knowledge, so the hand repeats effects.
+    assert "抓2张牌" in text
 
 
 def test_knowledge_message_lists_character_skills_and_deck_effects():
