@@ -84,6 +84,7 @@ from skillloop.render import (
     progress_block,
     select_candidates,
 )
+from skillloop.rich_render import RichStateRenderer
 from skillloop.run import (
     RunSpec,
     _assets,
@@ -179,7 +180,10 @@ class ParkablePolicy:
                     **system,
                     "content": system["content"]
                     + "\n"
-                    + scratchpad_instruction(self.config.note_max_chars),
+                    + scratchpad_instruction(
+                        self.config.note_max_chars,
+                        round_plan=self.config.round_plan,
+                    ),
                 }
             self.system = system
             self.system_hash = hashlib.sha1(self.system["content"].encode("utf-8")).hexdigest()[:12]
@@ -246,10 +250,17 @@ class ParkablePolicy:
         user = self.renderer.user_message(context, candidates, progress=progress)
         if self.config.scratchpad:
             previous = self.scratchpad or "（空；请先写本局路线与当前轮计划）"
-            user = {
-                **user,
-                "content": f"本局记录板（上一决策）：\n{previous}\n\n" + user["content"],
-            }
+            board = f"本局记录板（上一决策）：\n{previous}\n\n"
+            if self.config.round_plan:
+                round_number = None
+                if context.player_view is not None:
+                    round_number = int(context.player_view.round_number)
+                last_round = self.book.plan_round if self.book is not None else None
+                if round_number != last_round:
+                    board = "新一轮：请更新记录板（目标/本轮路线/风险/留骰）。\n" + board
+                    if self.book is not None:
+                        self.book.plan_round = round_number
+            user = {**user, "content": board + user["content"]}
         self.pending = PendingDecision(
             key=key,
             prompt=[self._system(context), user],
@@ -300,6 +311,8 @@ class ParkedGame:
     skills: list[Any] = field(default_factory=list)
     # Per-game scratchpad, carried across resumes like ``system``/``skills``.
     scratchpad: str = ""
+    # Last round for which the "new round" plan prompt was issued (round plan mode).
+    plan_round: int | None = None
     # Per-game action codebook. ``reps.action_adapter`` keeps a process-global codebook
     # that ``run_match`` resets per game; parked games are interleaved, so they each
     # carry their own and ``advance`` installs it around the engine call. Without
@@ -351,8 +364,11 @@ class ParkedRunner:
             # by the expert, so advertising it would only desynchronise the budget
             # from the synchronous agent.
             request_types=PARKABLE_REQUESTS,
-            scratchpad=spec.scratchpad,
-            max_tokens=160 if spec.scratchpad else 64,
+            scratchpad=spec.scratchpad or spec.round_plan,
+            round_plan=spec.round_plan,
+            base_guard=spec.base_guard,
+            base_guard_strict=spec.base_guard_strict,
+            max_tokens=160 if (spec.scratchpad or spec.round_plan) else 64,
         )
         self._meter: _UsageMeter | None = None
         self._client_ready = client is not _CLIENT_UNSET
@@ -385,7 +401,8 @@ class ParkedRunner:
         deck = self._deck(task.stage.name)
         pinned = self._pinned(task.stage.name)
         config = replace(self.config, pinned_skills=pinned) if pinned else self.config
-        renderer = StateRenderer(_assets(), opponent_name=f"NPC({task.stage.display})")
+        renderer_cls = RichStateRenderer if self.spec.rich_render else StateRenderer
+        renderer = renderer_cls(_assets(), opponent_name=f"NPC({task.stage.display})")
         policy = ParkablePolicy(
             resolve_base_policy(deck, seed=0),
             renderer=renderer,
@@ -556,8 +573,9 @@ class ParkedRunner:
                     task.cost += float(usage.get("cost_usd", 0.0))
                     task.llm_seconds += float(usage.get("seconds", 0.0))
                     index, used, error = parse_choice(raw, len(pending.codes))
-                    task.used.update(sid for sid in used if sid in pending.retrieved)
-                    if self.spec.scratchpad:
+                    used = tuple(sid for sid in used if sid in pending.retrieved)
+                    task.used.update(used)
+                    if self.config.scratchpad:
                         note = parse_note(raw)
                         if note:
                             note = note[: self.config.note_max_chars]
@@ -565,6 +583,12 @@ class ParkedRunner:
                     if index is None:
                         task.errors += 1
                         code = pending.fallback_code      # model failed -> expert
+                    elif self.config.base_guard and not self._has_strategy_evidence(
+                        used, task.stage.name
+                    ):
+                        # Mirror SkillAgentPolicy: no non-rule skill cited means the
+                        # pick is unsupported, so keep the deck expert's action.
+                        code = pending.fallback_code
                     else:
                         code = pending.codes[index]
                     if self.advance(task, pending, code) != "parked":
@@ -628,6 +652,18 @@ class ParkedRunner:
         usage["seconds"] = time.perf_counter() - started
         return raw, usage
 
+    def _has_strategy_evidence(self, used: tuple[str, ...], stage: str) -> bool:
+        """Mirror ``SkillAgentPolicy._has_strategy_evidence`` exactly."""
+        for skill_id in used:
+            skill = self.library.get(skill_id) if self.library is not None else None
+            if skill is None or skill.layer == "rule":
+                continue
+            if not self.spec.base_guard_strict:
+                return True
+            if skill.layer == "stage_specific" or (stage and f"_{stage}" in skill.skill_id):
+                return True
+        return False
+
     # -- row ---------------------------------------------------------------
     def _row(self, task: ParkedGame) -> dict[str, Any]:
         stars = None
@@ -644,7 +680,11 @@ class ParkedRunner:
             "card_version": self.spec.card_version,
             "group": self.spec.group,
             "stage_rules": bool(self.spec.stage_rules),
-            "scratchpad": bool(self.spec.scratchpad),
+            "scratchpad": bool(self.spec.scratchpad or self.spec.round_plan),
+            "rich_render": bool(self.spec.rich_render),
+            "round_plan": bool(self.spec.round_plan),
+            "base_guard": bool(self.spec.base_guard),
+            "base_guard_strict": bool(self.spec.base_guard_strict),
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,

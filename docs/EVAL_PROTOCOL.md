@@ -107,3 +107,15 @@
   且 `max_tokens` 从 64 提到 160。按 §6 重新标定 `completion_tokens/次`、`$/局` 后再上量。
 - **缓存**：记录板说明追加在 stable system 末尾（可缓存）；记录板正文只在 user message
   （动态尾部），不会破坏 system prefix 的缓存键。
+
+同属可选项、默认关闭、各自进指纹的还有三个实验开关（只在显式 A/B 时成组使用）：
+
+| 开关 | 作用 |
+|---|---|
+| `--round-plan` | 记录板改为轮级计划（隐含 `--scratchpad`）：每轮第一次决策提示「目标/本轮路线/风险/留骰」 |
+| `--rich-render` | 状态/候选渲染更丰富：元素附着名、手牌 `N/10`、对手结束状态、技能类型与反应提示、卡牌描述 |
+| `--base-guard` | 只有模型引用了非 rule 技能时才采纳其选择；否则退回牌组 expert 的脚本动作 |
+| `--base-guard-strict` | 配合 `--base-guard`，只认 `stage_specific` 或含关卡名的技能 id |
+
+`--base-guard*` 只是**决策兜底**，不改变模型调用次数与 prompt；它用同一 LLM 选择做门控，
+因此不会破坏同种子配对。爬坡结论见 `reports/dynamic_improvements_20261113.md`。

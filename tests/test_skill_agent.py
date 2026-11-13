@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from envs.decks import deck_spec
@@ -462,3 +463,135 @@ def test_scratchpad_is_per_policy_instance():
     assert client.calls[1][1]["content"].startswith(
         "本局记录板（上一决策）：\n（空；请先写本局路线与当前轮计划）"
     )
+
+
+# -- optional round-level plan ----------------------------------------------
+def _round_view(round_number: int):
+    player = SimpleNamespace(
+        characters=(), dice=(), hand_cards=(), declared_end=False,
+    )
+    return SimpleNamespace(
+        phase="action", round_number=round_number, current_turn=0,
+        winner=None, players=(player, player),
+    )
+
+
+def _built_round(n: int, round_number: int) -> BuiltDecisionContext:
+    built = _built(n)
+    context = built.context
+    return BuiltDecisionContext(
+        context=DecisionContext(
+            acting_player=context.acting_player,
+            request_type=context.request_type,
+            step_index=context.step_index,
+            full_state=context.full_state,
+            legal_low_level_codes=context.legal_low_level_codes,
+            legal_low_level_specs=context.legal_low_level_specs,
+            legal_low_level_mask=context.legal_low_level_mask,
+            player_view=_round_view(round_number),
+        ),
+        payload_by_low_level_code=built.payload_by_low_level_code,
+        label_by_low_level_code=built.label_by_low_level_code,
+        low_to_high_code=built.low_to_high_code,
+    )
+
+
+def test_round_plan_reminds_once_per_round_and_replays_note():
+    client = _FakeClient([
+        '{"choice": 0, "note": "目标：抢血/路线：铺装备/风险：爆发/留骰：2"}',
+        '{"choice": 1}',
+        '{"choice": 2, "note": "目标：收尾/路线：打脸/风险：反打/留骰：0"}',
+    ])
+    agent = _agent(client, scratchpad=True, round_plan=True)
+
+    agent.choose(_built_round(3, 1))
+    first = client.calls[0][1]["content"]
+    assert first.startswith("新一轮：请更新记录板")
+    assert "每轮第一次决策" in client.calls[0][0]["content"]
+
+    agent.choose(_built_round(3, 1))
+    second = client.calls[1][1]["content"]
+    assert "新一轮" not in second
+    assert "第一版" not in second
+    assert "目标：抢血/路线：铺装备/风险：爆发/留骰：2" in second
+
+    agent.choose(_built_round(3, 2))
+    third = client.calls[2][1]["content"]
+    assert third.startswith("新一轮：请更新记录板")
+    assert "本局记录板（上一决策）：\n目标：抢血" in third
+    assert agent._last_plan_round == 2
+
+
+def test_round_plan_requires_scratchpad():
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(client, round_plan=True)          # scratchpad off
+    agent.choose(_built_round(3, 1))
+    assert "新一轮" not in client.calls[0][1]["content"]
+    assert "记录板" not in client.calls[0][0]["content"]
+
+
+# -- optional base guard -----------------------------------------------------
+def _guard_lib() -> SkillLibrary:
+    return SkillLibrary.from_skills([
+        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
+        Skill(skill_id="strat_x", skill_name="策略", description="策略层打法", layer="strategy"),
+    ])
+
+
+def test_base_guard_falls_back_without_non_rule_evidence():
+    lib = _guard_lib()
+    for used in ((), ("rule_x",)):
+        client = _FakeClient(
+            '{"choice": 2' + (', "used": ["rule_x"]' if used else "") + "}"
+        )
+        agent = _agent(client, library=lib, pinned_skills=("rule_x", "strat_x"), base_guard=True)
+        code = agent.choose(_built(3))
+        assert code == 100                       # deck expert, not the model's 102
+        decision = agent.decisions[-1]
+        assert decision.guarded is True
+        assert decision.final_code == 100
+        assert decision.choice == 2              # model's raw pick is still recorded
+
+
+def test_base_guard_keeps_model_choice_with_strategy_evidence():
+    lib = _guard_lib()
+    client = _FakeClient('{"choice": 2, "used": ["strat_x"]}')
+    agent = _agent(client, library=lib, pinned_skills=("rule_x", "strat_x"), base_guard=True)
+    assert agent.choose(_built(3)) == 102
+    decision = agent.decisions[-1]
+    assert decision.guarded is False
+    assert decision.final_code == 102
+    assert decision.as_dict()["guarded"] is False
+    assert decision.as_dict()["final_code"] == 102
+
+
+def test_base_guard_strict_requires_stage_evidence():
+    lib = SkillLibrary.from_skills([
+        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
+        Skill(skill_id="strat_x", skill_name="策略", description="策略层打法", layer="strategy"),
+        Skill(skill_id="skill_wagner", skill_name="瓦格纳打法", description="本关打法", layer="strategy"),
+    ])
+    # 通用策略不算依据 -> 回退 base
+    client = _FakeClient('{"choice": 2, "used": ["strat_x"]}')
+    agent = _agent(
+        client, library=lib, pinned_skills=("rule_x", "strat_x", "skill_wagner"),
+        base_guard=True, base_guard_strict=True,
+    )
+    assert agent.choose(_built(3)) == 100
+    assert agent.decisions[-1].guarded is True
+    # 带当前关卡名的技能 -> 允许模型选择
+    client = _FakeClient('{"choice": 2, "used": ["skill_wagner"]}')
+    agent = _agent(
+        client, library=lib, pinned_skills=("rule_x", "strat_x", "skill_wagner"),
+        base_guard=True, base_guard_strict=True,
+    )
+    assert agent.choose(_built(3)) == 102
+    assert agent.decisions[-1].guarded is False
+
+
+def test_base_guard_off_lets_model_choice_stand_without_citations():
+    client = _FakeClient('{"choice": 2}')
+    agent = _agent(client)
+    assert agent.choose(_built(3)) == 102
+    assert agent.decisions[0].guarded is False
+    assert agent.decisions[0].final_code == 102

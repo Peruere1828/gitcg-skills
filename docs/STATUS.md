@@ -1,4 +1,4 @@
-# STATUS — 当前状态（2026-11-12）
+# STATUS — 当前状态（2026-11-13）
 
 > 只写「现在有效」的事实；历史结果见 [`../reports/`](../reports/)，负结果见 [`failures/`](./failures/)。
 > 任务与验收见 [`../PLAN.md`](../PLAN.md)，统计口径见 [`EVAL_PROTOCOL.md`](./EVAL_PROTOCOL.md)。
@@ -115,11 +115,24 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
   loadout 只列适用技能），但第 2/3 轮反而下降；瓶颈在 LLM 逐动作决策，不在技能文本。
 - 负结果与复现：[`failures/dynamic-vs-scripted-20261112.md`](./failures/dynamic-vs-scripted-20261112.md)。
 
+### 共享智能体开关（2026-11-13，未采纳）
+
+- 新增默认关的实验开关：`--rich-render`（丰富状态/候选渲染）、`--base-guard`
+  （无 strategy 引用时退回 expert 动作）、`--round-plan`（轮级记录板）、
+  `--base-guard-strict`；均写入 fingerprint，详见 `EVAL_PROTOCOL.md §7`。
+- `rich-render + base-guard`：seeds1–5 **51/80 = 63.75%**（基线 41/80），
+  seeds6–9 **31/64 = 48.44%**（基线 34/64），合并 **82/144 = 56.94%**
+  （基线 75/144 = 52.08%）；配对门控合并 Δ = +0.049，CI [−0.059, +0.157]，
+  **未过门**。`scripted` 同 9 seeds 95/144 = 65.97%。
+- `round-plan` 与 `base-guard-strict` 中途分别 20/42、7/19 三星，已停止。
+- 结论：不作为默认配置；报告 [`../reports/dynamic_improvements_20261113.md`](../reports/dynamic_improvements_20261113.md)。
+
 ## 7. 下一步
 
 1. dynamic 迭代停留在 3 轮/12 seeds（目标未达）；不要继续消耗预算刷同一架构。
-2. 若要继续冲 scripted，先改**共享评测协议/智能体**（expert 提议 + LLM 重排，
-   或共享 in-game prompt 加候选效果/反应），再重跑基线；见负结果报告。
+2. 共享智能体的 `rich-render`/`base-guard` 组合未过门（合并 144 局 CI 跨 0）；
+   若继续，先记录**逐决策** `guarded/final_code` 并做单开关 A/B，避免本轮两个
+   杠杆混测；再按 50 seeds/关 或预注册多 seed 验证，别用 5 seeds 选型。
 3. 5 seeds 结果只作冒烟；全量按 50 seeds/关、6 workers 跑，预算按
    `EVAL_PROTOCOL.md §6` 分组设置。
 4. 按关配对门控（`EVAL_PROTOCOL.md §4`）：看 Δ 与 CI，跨 0 不采纳。

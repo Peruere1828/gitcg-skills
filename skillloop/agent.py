@@ -61,6 +61,17 @@ class AgentConfig:
     scratchpad: bool = False
     scratchpad_max_chars: int = 600
     note_max_chars: int = 240
+    # Round-level planning (requires ``scratchpad``). The first decision of each
+    # round must refresh the notebook with goal/route/risk/dice, and the user
+    # message carries a one-line per-round reminder. Off by default.
+    round_plan: bool = False
+    # Base guard: only let the model's choice stand when it cites at least one
+    # non-rule skill; otherwise fall back to the deck expert. Off by default.
+    base_guard: bool = False
+    # Strict base guard: only a stage-specific skill (or a skill id carrying the
+    # current stage name, e.g. ``skill_liusu``) counts as evidence. Generic
+    # ``strat_*`` advice no longer overrides the scripted expert.
+    base_guard_strict: bool = False
 
 
 @dataclass
@@ -76,6 +87,8 @@ class Decision:
     http_calls: int = 0
     note: str = ""
     scratchpad_chars: int = 0
+    guarded: bool = False
+    final_code: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -90,6 +103,8 @@ class Decision:
             "http_calls": self.http_calls,
             "note": self.note,
             "scratchpad_chars": self.scratchpad_chars,
+            "guarded": self.guarded,
+            "final_code": self.final_code,
         }
 
 
@@ -128,12 +143,19 @@ def parse_note(raw: str | None) -> str:
     return " ".join(note.split())
 
 
-def scratchpad_instruction(note_max_chars: int) -> str:
+def scratchpad_instruction(note_max_chars: int, round_plan: bool = False) -> str:
     """Stable system suffix that widens the output contract when scratchpad is on.
 
     Kept as a module function so the parked runner (``skillloop.parked``) builds the
-    byte-identical prefix when it mirrors ``SkillAgentPolicy``.
+    byte-identical prefix when it mirrors ``SkillAgentPolicy``. With ``round_plan``
+    the notebook is scoped to the current round instead of the whole game.
     """
+    if round_plan:
+        return (
+            "记录板：每轮第一次决策必须写 note，格式为"
+            '"目标/本轮路线/下一轮风险/留骰"'
+            f"（≤{note_max_chars}字）；同一轮后续决策可简写；下次决策会回看。"
+        )
     return (
         '记录板：可在 JSON 的 "note" 字段写 1–3 句本局整体思路/当前轮计划/下一手意图'
         f"（≤{note_max_chars}字）；下次决策会原样回看；可省略。"
@@ -173,11 +195,17 @@ class SkillAgentPolicy:
         # Per-game working memory (``scratchpad`` arm only). Never persisted to the
         # skill library and never shared across ``SkillAgentPolicy`` instances.
         self._scratchpad: str = ""
+        # Last round for which the round-plan reminder was emitted. ``-1`` means
+        # no decision yet, so the first decision always gets the reminder.
+        self._last_plan_round: int | None = -1
 
     # -- prompt ---------------------------------------------------------------
     def _scratchpad_instruction(self) -> str:
         """Stable suffix appended after ``render.OUTPUT_CONTRACT`` (contract untouched)."""
-        return scratchpad_instruction(self.config.note_max_chars)
+        return scratchpad_instruction(
+            self.config.note_max_chars,
+            round_plan=self.config.round_plan,
+        )
 
     def _system_message(self, context: Any) -> dict[str, str]:
         """Build the stable prefix once per game (or when the library changes)."""
@@ -267,6 +295,27 @@ class SkillAgentPolicy:
         self._observe(context, int(code))
         return int(code)
 
+    def _has_strategy_evidence(self, used: Sequence[str]) -> bool:
+        """True when at least one cited skill can justify overriding the expert.
+
+        Normal mode: any non-rule layer. Strict mode: only ``stage_specific`` or
+        an id carrying this stage's name (the dyn libraries name stage skills
+        ``skill_<stage>``); generic ``strat_*`` advice is not enough.
+        """
+        by_id = {skill.skill_id: skill for skill in self._skills}
+        stage = str(getattr(self.task, "stage", "") or "")
+        for skill_id in used:
+            skill = by_id.get(skill_id)
+            if skill is None or skill.layer == "rule":
+                continue
+            if not self.config.base_guard_strict:
+                return True
+            if skill.layer == "stage_specific" or (
+                stage and f"_{stage}" in skill.skill_id
+            ):
+                return True
+        return False
+
     # -- policy ---------------------------------------------------------------
     def choose(self, built: BuiltDecisionContext) -> int:
         context = built.context
@@ -285,10 +334,17 @@ class SkillAgentPolicy:
         if self.config.scratchpad:
             # Dynamic tail (user message), so the cached system prefix is untouched.
             previous = self._scratchpad or "（空；请先写本局路线与当前轮计划）"
-            user = {
-                **user,
-                "content": f"本局记录板（上一决策）：\n{previous}\n\n" + user["content"],
-            }
+            board = f"本局记录板（上一决策）：\n{previous}\n\n"
+            if self.config.round_plan:
+                round_number = None
+                if context.player_view is not None:
+                    round_number = int(context.player_view.round_number)
+                if round_number != self._last_plan_round:
+                    board = (
+                        "新一轮：请更新记录板（目标/本轮路线/风险/留骰）。\n" + board
+                    )
+                    self._last_plan_round = round_number
+            user = {**user, "content": board + user["content"]}
         started = time.perf_counter()
         raw = self.client.chat(
             [system, user],
@@ -302,12 +358,18 @@ class SkillAgentPolicy:
         self.calls += 1
 
         index, used, error = parse_choice(raw, len(candidates))
-        if index is None:
-            final_code = base_code
-        else:
-            final_code = int(candidates[index][0])
         retrieved = [skill.skill_id for skill in self._skills]
         used = tuple(skill_id for skill_id in used if skill_id in retrieved)
+        guarded = False
+        if index is None:
+            final_code = base_code
+        elif self.config.base_guard and not self._has_strategy_evidence(used):
+            # No non-rule skill cited: the model's pick is unsupported, so keep the
+            # deck expert's scripted (era/expert) action instead.
+            final_code = base_code
+            guarded = True
+        else:
+            final_code = int(candidates[index][0])
         note = ""
         if self.config.scratchpad:
             note = parse_note(raw)
@@ -328,6 +390,8 @@ class SkillAgentPolicy:
             http_calls=1,
             note=note,
             scratchpad_chars=len(self._scratchpad),
+            guarded=guarded,
+            final_code=final_code,
         )
         self.decisions.append(decision)
         if self.on_decision is not None:

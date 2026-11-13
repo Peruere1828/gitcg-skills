@@ -108,6 +108,14 @@ class RunSpec:
     # is echoed into the next decision's user message. Off by default; recorded in
     # the fingerprint so scratchpad and baseline runs cannot be mixed on resume.
     scratchpad: bool = False
+    # Experimental prompt/agent levers (default off; separate fingerprints):
+    #   rich_render: candidate/state effects, auras, reaction hints, hand count
+    #   round_plan: structured per-round scratchpad plan (implies scratchpad)
+    #   base_guard: keep the scripted expert action unless the LLM cites a non-rule skill
+    rich_render: bool = False
+    round_plan: bool = False
+    base_guard: bool = False
+    base_guard_strict: bool = False
 
     def fingerprint(self) -> dict[str, Any]:
         library_root = resolved_library_root(self)
@@ -132,6 +140,10 @@ class RunSpec:
             "stage_rules": self.stage_rules,
             "trace": self.trace,
             "scratchpad": self.scratchpad,
+            "rich_render": self.rich_render,
+            "round_plan": self.round_plan,
+            "base_guard": self.base_guard,
+            "base_guard_strict": self.base_guard_strict,
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -280,7 +292,15 @@ def build_policy(
         if not library_root:
             raise SystemExit(f"group {spec.group!r} needs a skill library")
         library = SkillLibrary.load(library_root)
-    renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
+    if spec.rich_render:
+        from skillloop.rich_render import RichStateRenderer
+
+        renderer = RichStateRenderer(
+            _assets(), opponent_name=f"NPC({stage.display or stage.name})"
+        )
+    else:
+        renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
+    scratchpad = spec.scratchpad or spec.round_plan
     return SkillAgentPolicy(
         resolve_base_policy(deck, seed=0),
         client,
@@ -292,10 +312,13 @@ def build_policy(
             max_calls_per_game=spec.max_calls,
             top_k=spec.top_k,
             pinned_skills=tuple(pinned_skills),
-            scratchpad=spec.scratchpad,
+            scratchpad=scratchpad,
+            round_plan=spec.round_plan,
+            base_guard=spec.base_guard,
+            base_guard_strict=spec.base_guard_strict,
             # A note plus the usual JSON needs more than the 64-token reply budget;
             # keep the default arm at 64 so its cost/behaviour is unchanged.
-            max_tokens=160 if spec.scratchpad else 64,
+            max_tokens=160 if scratchpad else 64,
         ),
     )
 
@@ -417,7 +440,11 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "card_version": spec.card_version,
         "group": spec.group,
         "stage_rules": bool(spec.stage_rules),
-        "scratchpad": bool(spec.scratchpad),
+        "scratchpad": bool(spec.scratchpad or spec.round_plan),
+        "rich_render": bool(spec.rich_render),
+        "round_plan": bool(spec.round_plan),
+        "base_guard": bool(spec.base_guard),
+        "base_guard_strict": bool(spec.base_guard_strict),
         "model": spec.model,
         "library_root": library_root,
         "library_version": library_version,
@@ -669,6 +696,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scratchpad", action="store_true",
                         help="in-game notebook (局内记录板), default off; for A/B only "
                              "(adds the previous note to every prompt and raises max_tokens to 160)")
+    parser.add_argument("--round-plan", action="store_true",
+                        help="structured per-round plan in the scratchpad (implies --scratchpad)")
+    parser.add_argument("--base-guard", action="store_true",
+                        help="keep the scripted expert action unless the LLM cites a non-rule skill")
+    parser.add_argument("--base-guard-strict", action="store_true",
+                        help="with --base-guard: only stage-specific/stage-named skills count")
+    parser.add_argument("--rich-render", action="store_true",
+                        help="richer state/candidate rendering: effects, auras, reactions, hand count")
     parser.add_argument("--out", default=None)
     return parser
 
@@ -702,6 +737,10 @@ def main(argv: list[str] | None = None) -> int:
         stage_rules=args.stage_rules,
         trace=args.trace,
         scratchpad=args.scratchpad,
+        rich_render=args.rich_render,
+        round_plan=args.round_plan,
+        base_guard=args.base_guard,
+        base_guard_strict=args.base_guard_strict,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
