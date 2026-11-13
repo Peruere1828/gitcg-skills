@@ -142,10 +142,21 @@ def era_policy(
     return ScriptedPolicy(agent, name=f"expert:{deck['name']}")
 
 
-def resolve_base_policy(name: str, seed: int = 0):
-    """Base deterministic policy for a deck name (era synthetic or expert rule)."""
+def resolve_base_policy(
+    name: str,
+    seed: int = 0,
+    *,
+    rule_overrides: Mapping[str, Any] | None = None,
+):
+    """Base deterministic policy for a deck name (era synthetic or expert rule).
+
+    ``rule_overrides`` tunes the synthetic era profile; non-era expert decks have
+    no such knobs and ignore it.
+    """
     if is_era(name):
-        return era_policy(load_era_decks()[name], seed=seed)
+        return era_policy(
+            load_era_decks()[name], seed=seed, rule_overrides=rule_overrides
+        )
     from envs.policy import expert_policy
 
     return expert_policy(name, seed=seed)

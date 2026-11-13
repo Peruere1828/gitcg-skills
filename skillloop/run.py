@@ -132,6 +132,10 @@ class RunSpec:
     # baseline). Anything else raises the reply budget so hidden reasoning cannot
     # truncate the JSON answer.
     reasoning: str = "none"
+    # Optional per-stage expert-profile overrides (JSON: {"lan": {"setup_rounds": 0}}).
+    # Applies to the scripted/era base policy for every group so treatment and
+    # control can be compared under the same profile; default off.
+    stage_profiles: str | None = None
 
     def fingerprint(self) -> dict[str, Any]:
         library_root = resolved_library_root(self)
@@ -165,6 +169,9 @@ class RunSpec:
             "expert_hint": self.expert_hint,
             "base_seed": self.base_seed,
             "reasoning": self.reasoning,
+            "stage_profiles": (
+                _sha1(Path(self.stage_profiles)) if self.stage_profiles else "none"
+            ),
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -256,6 +263,21 @@ def _stage_decks_for_spec(spec: RunSpec) -> dict[str, str]:
     return load_stage_decks(path)
 
 
+def load_stage_profiles(path: str | None) -> dict[str, dict[str, Any]]:
+    """Load ``{stage: {"setup_rounds": 0, ...}}`` for the expert base policy."""
+    if not path:
+        return {}
+    source = Path(path)
+    if not source.exists():
+        raise SystemExit(f"--stage-profiles file not found: {path}")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    stages = payload.get("stages") if isinstance(payload, dict) else None
+    if not isinstance(stages, dict):
+        raise SystemExit(f"--stage-profiles must be {{'stages': {{stage: overrides}}}}: {path}")
+    return {str(name): dict(overrides) for name, overrides in stages.items()
+            if isinstance(overrides, dict)}
+
+
 def _loadouts_for_spec(spec: RunSpec, *, library: SkillLibrary | None = None) -> dict[str, Loadout]:
     """Load + validate frozen loadouts once (static/dynamic only)."""
     if not spec.loadout_root or spec.group not in LOADOUT_GROUPS:
@@ -298,8 +320,11 @@ def build_policy(
     """Return the policy for one group (the only thing that differs across groups)."""
     if deck is None:
         deck = _stage_decks_for_spec(spec).get(stage.name, spec.deck)
+    profile = load_stage_profiles(spec.stage_profiles).get(stage.name) or None
     if spec.group == "scripted":
-        return resolve_base_policy(deck, seed=spec.base_seed)
+        return resolve_base_policy(
+            deck, seed=spec.base_seed, rule_overrides=profile
+        )
     if spec.group == "contestant":
         from npc.contestant import build_contestant_policy
 
@@ -329,7 +354,7 @@ def build_policy(
     if reasoning not in ("", "none"):
         max_tokens = max(max_tokens, 2048)
     return SkillAgentPolicy(
-        resolve_base_policy(deck, seed=spec.base_seed),
+        resolve_base_policy(deck, seed=spec.base_seed, rule_overrides=profile),
         client,
         renderer=renderer,
         task=task_spec(stage, deck),
@@ -481,6 +506,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "expert_hint": bool(spec.expert_hint),
         "base_seed": int(spec.base_seed),
         "reasoning": spec.reasoning,
+        "stage_profiles": spec.stage_profiles,
         "model": spec.model,
         "library_root": library_root,
         "library_version": library_version,
@@ -752,6 +778,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reasoning", default="none",
                         help="provider reasoning effort for in-game decisions "
                              "(none/low/medium/high; non-none raises max_tokens to 2048)")
+    parser.add_argument("--stage-profiles", default=None,
+                        help="JSON {stages: {stage: rule overrides}} for the expert base "
+                             "(e.g. configs/stage_profiles.json)")
     parser.add_argument("--rich-render", action="store_true",
                         help="richer state/candidate rendering: effects, auras, reactions, hand count")
     parser.add_argument("--out", default=None)
@@ -800,6 +829,7 @@ def main(argv: list[str] | None = None) -> int:
         expert_hint=args.expert_hint,
         base_seed=args.base_seed,
         reasoning=args.reasoning,
+        stage_profiles=args.stage_profiles,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))

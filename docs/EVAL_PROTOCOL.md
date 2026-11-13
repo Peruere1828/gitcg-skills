@@ -121,6 +121,7 @@
 | `--expert-hint` | 把 expert 的脚本建议写进 user message，作为模型的先验 |
 | `--base-seed` | expert 的 tie-break seed（诊断用；比较时必须用同 seed 重跑 scripted） |
 | `--reasoning` | 模型推理强度（默认 `none` 对局；`low`/`medium`/`high` 会把回复预算提到 2048 token） |
+| `--stage-profiles` | 按关卡覆盖 era expert 规则参数（如 `configs/stage_profiles.json` 的 lan `setup_rounds=0`）；进指纹，treatment/control 可用同一画像比较 |
 
 `--base-guard*` 只是**决策兜底**，不改变模型调用次数与 prompt；它用同一 LLM 选择做门控，
 因此不会破坏同种子配对。爬坡结论见 `reports/dynamic_improvements_20261113.md`。

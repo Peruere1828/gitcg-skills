@@ -129,7 +129,12 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
   （scripted 57/80）；skills-only 越权 18/30、expert-hint 15/30、非战斗越权 7/25，
   对照 scripted 分别为 27/30、27/30、10/25。expert 规则旋钮网格（免费）默认配置
   即最优，`--base-seed 1` 与 seed 0 逐局一致。
-- 结论：当前模型/库/逐动作架构下 dynamic **无法超过 scripted**；全部实验约 $1.42。
+- **唯一数值超过 scripted 的配置不含 LLM 调用**：`configs/stage_profiles.json`
+  给 lan 设 `setup_rounds=0`（1–5: 5/5、6–9: 3/4、10–15: 6/6，合计 13/15；
+  默认 10/15）。dynamic 组 `--stage-profiles --max-calls 0` 全 15 seeds
+  **162/240 = 67.50%** vs scripted **159/240 = 66.25%**（+3 局，全部来自 lan，
+  McNemar 不显著）。这是 expert 画像，不是 LLM 逐动作策略。
+- 结论：LLM dynamic 逐动作策略**无法超过 scripted**；全部实验约 $1.42。
   报告 [`../reports/dynamic_improvements_20261113.md`](../reports/dynamic_improvements_20261113.md)。
 
 ## 7. 下一步

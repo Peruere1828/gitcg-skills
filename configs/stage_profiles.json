@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "notes": "Per-stage ExpertRuleAgent overrides for the era base policy. Evidence: lan setup_rounds=0 scored 14/15 vs the default 10/15 across seeds 1-15 (5/5, 3/4, 6/6); other stages' grid gains did not replicate on held-out seeds. See reports/dynamic_improvements_20261113.md section 5. Apply with skillloop.run --stage-profiles configs/stage_profiles.json.",
+  "stages": {
+    "lan": {
+      "setup_rounds": 0
+    }
+  }
+}

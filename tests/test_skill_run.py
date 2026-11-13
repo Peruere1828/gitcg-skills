@@ -782,6 +782,20 @@ def test_build_policy_reasoning_raises_the_token_budget():
     assert low.config.max_tokens == 2048
 
 
+def test_stage_profiles_apply_to_the_era_base(tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps({"stages": {"lan": {"setup_rounds": 0}}}), encoding="utf-8")
+    base = dict(group="scripted", stages=("lan",), seeds=(0,), deck="keqing_jihua")
+
+    default = run_module.build_policy(RunSpec(**base), get_stage("lan"))
+    assert default.agent.profile.rule_config.setup_rounds == 2
+
+    spec = RunSpec(**base, stage_profiles=str(path))
+    tuned = run_module.build_policy(spec, get_stage("lan"))
+    assert tuned.agent.profile.rule_config.setup_rounds == 0
+    assert spec.fingerprint()["stage_profiles"] != "none"
+
+
 def test_play_one_records_scratchpad_flag(monkeypatch):
     monkeypatch.setattr(
         run_module, "run_match",

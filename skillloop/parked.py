@@ -92,6 +92,7 @@ from skillloop.run import (
     _stage_decks_for_spec,
     budget_exhausted,
     budget_from_env,
+    load_stage_profiles,
     resolved_library_root,
     summarize,
     task_spec,
@@ -357,6 +358,7 @@ class ParkedRunner:
         self.library_version = self.library.version if self.library is not None else 0
         # Fixed stage deck + frozen loadouts, resolved once (same contract as run.py).
         self.stage_decks = _stage_decks_for_spec(spec)
+        self.stage_profiles = load_stage_profiles(spec.stage_profiles)
         self.loadouts: dict[str, Loadout] = _loadouts_for_spec(spec, library=self.library)
         if self.loadouts:
             missing = [stage for stage in spec.stages if stage not in self.loadouts]
@@ -425,7 +427,11 @@ class ParkedRunner:
         renderer_cls = RichStateRenderer if self.spec.rich_render else StateRenderer
         renderer = renderer_cls(_assets(), opponent_name=f"NPC({task.stage.display})")
         policy = ParkablePolicy(
-            resolve_base_policy(deck, seed=self.spec.base_seed),
+            resolve_base_policy(
+                deck,
+                seed=self.spec.base_seed,
+                rule_overrides=self.stage_profiles.get(task.stage.name) or None,
+            ),
             renderer=renderer,
             task=task_spec(task.stage, deck),
             library=self.library,
@@ -718,6 +724,7 @@ class ParkedRunner:
             "expert_hint": bool(self.spec.expert_hint),
             "base_seed": int(self.spec.base_seed),
             "reasoning": self.spec.reasoning,
+            "stage_profiles": self.spec.stage_profiles,
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,
