@@ -98,6 +98,8 @@ def test_knowledge_message_lists_character_skills_and_deck_effects():
         opponent_characters=(1101,),
     )
     text = renderer.knowledge_message(task)
+    assert "规则要点（3.3）" in text
+    assert "超载：本次伤害+2" in text
     assert "对局资料" in text
     assert "甘雨[冰·弓] HP上限12" in text
     assert "普通攻击" in text and "流天射术" in text

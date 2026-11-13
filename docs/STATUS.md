@@ -144,10 +144,13 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
   双方角色全部技能、整套牌资料；user 局面给元素/武器/附着/区域/装备/手牌费用与效果。
 - effort=none、16 关 × seeds1–5：**45/80 = 56.25%**（同配对 scripted 57/80）；
   比旧紧凑 dynamic 41/80 有提升，但 iron/marjorie/shitou 仍低于 expert。
-- effort=low 单局约 $0.045、10–20 分钟；$0.8 门禁后完成 27 局：
-  **20/27 = 74.1%**，同配对 scripted 13/27 = 48.1%（合并 scripted 66.25%、
-  low 74.07%；配对 Δ=+0.233，CI [−0.076,+0.542]）。blanche 0→2、buyun 1→4、
-  chefmao 2→4、iron 4→5，ellin 4→3。完整 prompt + low 是首个正向信号。
+- effort=low 单局约 $0.045、10–20 分钟；分两批共 39 局、覆盖 10 关：
+  **32/39 = 82.05%**，同配对 scripted **24/39 = 61.54%**（+8 局；配对 Δ=+0.173，
+  CI [−0.007,+0.353]，贴近显著）。增益在 blanche 0→2、buyun 1→4、chefmao 2→4、
+  iron 4→5、marjorie 2→3；ellin 4→3。未测 6 关若与 scripted 持平，总投影
+  low 55/69≈79.7% vs scripted 47/69≈68.1%。
+- 结论：**完整 prompt 只有配合 low 思考才显著生效**；none 仍低于 scripted。
+  预算 none $0.263 + low $1.624 = **$1.887**（上限 $2）。
 - 报告：[`../reports/prompt_rewrite_20261113.md`](../reports/prompt_rewrite_20261113.md)；
   艾琳起手 prompt：[`../reports/prompts/ellin_mulligan_20261113.md`](../reports/prompts/ellin_mulligan_20261113.md)。
 

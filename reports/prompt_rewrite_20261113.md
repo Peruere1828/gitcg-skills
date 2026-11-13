@@ -87,8 +87,21 @@ GITCG_LLM_BUDGET_USD=0.8 $PY -m skillloop.run --group dynamic \
 - 配对门控（three_star）：Δ = **+0.233**，95% CI [−0.076, +0.542]；
   方向为正但样本不足以过门。
 - 合并（同一批 27 对）：scripted 66.25%，low **74.07%**；平均回合 5.56 → 4.63。
-- 剩余预算用于补测 none 亏损的 4 个关卡（liusu/marjorie/shitou/uncletian，
-  seeds1–3），结果见下方更新；总预算控制在 $2 内。
+
+补测 none 亏损的 4 个关卡（liusu/marjorie/shitou/uncletian × seeds1–3，
+12 局，$0.513）：low **12/12**，scripted 同配对 11/12（唯一差异 marjorie seed1）。
+
+两批合并（39 局、10 关）：
+
+| | low | scripted 同配对 | 差 |
+|---|---:|---:|---:|
+| 39 局合计 | **32/39 = 82.05%** | **24/39 = 61.54%** | **+8 局** |
+| three-star 配对门控 | — | — | Δ=+0.173，95% CI [−0.007, +0.353] |
+
+- CI 已贴近 0 但尚未过门；未测的 6 关（lan/patton/swan/timaeus/timmie/wagner）
+  共 30 局，scripted 为 23/30。若 low 与 scripted 持平，总投影为
+  low 55/69 ≈ 79.7% vs scripted 47/69 ≈ 68.1%；即使再丢 3 局仍高于 scripted。
+- 预算：none $0.263 + low 第一批 $1.111 + low 补测 $0.513 = **$1.887**（上限 $2）。
 
 ### low 的意义
 
