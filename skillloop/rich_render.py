@@ -60,6 +60,37 @@ _DAMAGE = re.compile(
 )
 
 _DESCRIPTION_LIMIT = 80
+_HAND_DESCRIPTION_LIMIT = 60
+
+_ELEMENT_TAGS = {
+    "GCG_TAG_ELEMENT_CRYO": "冰",
+    "GCG_TAG_ELEMENT_HYDRO": "水",
+    "GCG_TAG_ELEMENT_PYRO": "火",
+    "GCG_TAG_ELEMENT_ELECTRO": "雷",
+    "GCG_TAG_ELEMENT_ANEMO": "风",
+    "GCG_TAG_ELEMENT_GEO": "岩",
+    "GCG_TAG_ELEMENT_DENDRO": "草",
+}
+_WEAPON_TAGS = {
+    "GCG_TAG_WEAPON_BOW": "弓",
+    "GCG_TAG_WEAPON_CATALYST": "法器",
+    "GCG_TAG_WEAPON_CLAYMORE": "双手剑",
+    "GCG_TAG_WEAPON_SWORD": "单手剑",
+    "GCG_TAG_WEAPON_POLEARM": "长柄武器",
+}
+_COST_LABELS = {
+    "GCG_COST_DICE_SAME": "同色",
+    "GCG_COST_DICE_VOID": "任意",
+    "GCG_COST_DICE_CRYO": "冰",
+    "GCG_COST_DICE_HYDRO": "水",
+    "GCG_COST_DICE_PYRO": "火",
+    "GCG_COST_DICE_ELECTRO": "雷",
+    "GCG_COST_DICE_ANEMO": "风",
+    "GCG_COST_DICE_GEO": "岩",
+    "GCG_COST_DICE_DENDRO": "草",
+    "GCG_COST_ENERGY": "能量",
+    "GCG_COST_LEGEND": "秘传",
+}
 
 
 def _one_line(text: Any, limit: int = _DESCRIPTION_LIMIT) -> str:
@@ -156,6 +187,43 @@ class RichStateRenderer(StateRenderer):
         names = [self._entity(item) for item in (items or ())]
         return "、".join(names) if names else "无"
 
+    def _char_tags(self, definition_id: int) -> str:
+        """``[雷·单手剑]`` so the model knows the element/weapon at a glance."""
+        info = None
+        try:
+            info = self.assets.character(int(definition_id))
+        except Exception:
+            return ""
+        tags = tuple(getattr(info, "tags", ()) or ())
+        element = next((_ELEMENT_TAGS[t] for t in tags if t in _ELEMENT_TAGS), "")
+        weapon = next((_WEAPON_TAGS[t] for t in tags if t in _WEAPON_TAGS), "")
+        parts = [part for part in (element, weapon) if part]
+        return f"[{'·'.join(parts)}]" if parts else ""
+
+    def _cost(self, info: Any) -> str:
+        costs = getattr(info, "play_cost", ()) if info is not None else ()
+        parts = []
+        for kind, count in costs or ():
+            label = _COST_LABELS.get(str(kind), str(kind))
+            parts.append(f"{count}{label}" if int(count) != 1 else label)
+        return f"［{'，'.join(parts)}］" if parts else ""
+
+    def _hand(self, cards: Any) -> str:
+        cards = tuple(cards or ())
+        if not cards:
+            return "空"
+        lines = []
+        for card in cards:
+            info = self._card_info(int(getattr(card, "definition_id", 0) or 0))
+            name = self._card(int(getattr(card, "definition_id", 0) or 0))
+            description = _one_line(
+                getattr(info, "description", "") if info is not None else "",
+                _HAND_DESCRIPTION_LIMIT,
+            )
+            suffix = f"：{description}" if description else ""
+            lines.append(f"  - {name}{self._cost(info)}{suffix}")
+        return "\n" + "\n".join(lines)
+
     def _attachments(self, character: Any) -> str:
         names = [self._entity(item) for item in (getattr(character, "entities", ()) or ())]
         return f"（装备:{'、'.join(names)}）" if names else ""
@@ -170,7 +238,8 @@ class RichStateRenderer(StateRenderer):
 
         def side(player: Any) -> str:
             return "，".join(
-                f"{self._char(c.definition_id)} {c.health}/{c.max_health}"
+                f"{self._char(c.definition_id)}{self._char_tags(c.definition_id)} "
+                f"{c.health}/{c.max_health}"
                 + (f" 能量{c.energy}/{c.max_energy}" if getattr(c, "max_energy", 0) else "")
                 + f" {_aura_label(c)}"
                 + self._attachments(c)
@@ -180,12 +249,12 @@ class RichStateRenderer(StateRenderer):
             )
 
         dice = "".join(_dice_symbol(d) for d in me.dice) or "无"
-        hand = "，".join(self._card(c.definition_id) for c in me.hand_cards) or "空"
+        hand = self._hand(me.hand_cards)
         return "\n".join([
             f"第{state.round_number}轮 {_phase_label(state.phase)} 行动方={'我方' if state.current_turn == context.acting_player else '对方'}",
             f"我方：{side(me)}",
             f"我方骰子：{dice}（{len(me.dice)}个）",
-            f"我方手牌：{hand}（{len(me.hand_cards)}/10）",
+            f"我方手牌（{len(me.hand_cards)}/10）：{hand}",
             f"我方支援：{self._entities(getattr(me, 'supports', ()))}",
             f"我方召唤物：{self._entities(getattr(me, 'summons', ()))}",
             f"我方状态：{self._entities(getattr(me, 'combat_statuses', ()))}",

@@ -71,6 +71,20 @@ def test_state_renders_aura_names_and_hand_capacity():
     assert "对方已宣布结束=False" in text
 
 
+def test_state_shows_character_tags_and_hand_card_costs_effects():
+    renderer = RichStateRenderer(_assets())
+    context = _context()
+    context.player_view.players[0].hand_cards = (
+        SimpleNamespace(definition_id=332004),  # 运筹帷幄：1 同色，抓 2 张牌
+    )
+    text = renderer.describe_state(context)
+    assert "[冰·弓]" in text                    # 1101 甘雨：冰元素/弓
+    assert "运筹帷幄" in text
+    assert "［同色］" in text
+    assert "抓2张牌" in text
+    assert "我方手牌（1/10）" in text
+
+
 def test_state_renders_supports_summons_statuses_and_attachments():
     renderer = RichStateRenderer(_assets())
     context = _context()
