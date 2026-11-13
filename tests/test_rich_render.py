@@ -80,7 +80,7 @@ def test_state_shows_character_tags_and_hand_card_costs_only():
     text = renderer.describe_state(context)
     assert "[冰·弓]" in text                    # 1101 甘雨：冰元素/弓
     assert "运筹帷幄" in text
-    assert "［同色］" in text
+    assert "［1同色］" in text
     assert "我方手牌（1/10）" in text
     # Card effects live in the knowledge block, not in every turn's state.
     assert "抓2张牌" not in text
@@ -102,7 +102,7 @@ def test_knowledge_message_lists_character_skills_and_deck_effects():
     assert "甘雨[冰·弓] HP上限12" in text
     assert "普通攻击" in text and "流天射术" in text
     assert "我方牌组（2张）" in text
-    assert "运筹帷幄［同色］×2" in text
+    assert "运筹帷幄［1同色］×2" in text
     assert "抓2张牌" in text
 
 
@@ -150,6 +150,16 @@ def test_skill_candidate_adds_type_description_and_reaction():
     assert "使用技能" not in line
     assert "造成1点火元素伤害" in line
     assert "将对附着水的出战角色触发蒸发" in line
+    assert "本次伤害+2" in line
+
+
+def test_candidate_dice_cost_uses_grouped_notation():
+    renderer = RichStateRenderer(_assets())
+    spec = _spec(OptionKind.ACTION_USE_SKILL, 23012)
+    spec.used_dice = (1, 1, 2)
+    line = renderer.describe_candidate(_context(), spec, 0)
+    assert "花费［2冰+1水］" in line
+    assert "花费冰冰水" not in line
 
 
 def test_skill_candidate_without_aura_announces_attachment():

@@ -374,7 +374,7 @@ class ParkedRunner:
         reasoning = (spec.reasoning or "none").strip().lower()
         max_tokens = 160 if (spec.scratchpad or spec.round_plan) else 64
         if reasoning not in ("", "none"):
-            max_tokens = max(max_tokens, 8192)
+            max_tokens = max(max_tokens, 12288)
         self.config = AgentConfig(
             model=spec.model,
             max_calls_per_game=spec.max_calls,

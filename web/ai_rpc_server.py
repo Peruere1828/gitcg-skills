@@ -183,8 +183,8 @@ class WebEvalConfig:
     scratchpad: bool = False
     # Provider reasoning effort for AI decisions ("none" = current baseline).
     reasoning: str = "none"
-    # Richer state/candidate rendering (matches `skillloop.run --rich-render`).
-    rich_render: bool = False
+    # Full prompt is the default (matches skillloop.run); compact is opt-out.
+    rich_render: bool = True
 
 
 def _abs_path(value: str | os.PathLike[str]) -> Path:
@@ -2580,7 +2580,7 @@ def eval_config_from_args(args: argparse.Namespace) -> WebEvalConfig:
         stage_rules=bool(getattr(args, "stage_rules", True)),
         scratchpad=bool(getattr(args, "scratchpad", False)),
         reasoning=str(getattr(args, "reasoning", None) or "none"),
-        rich_render=bool(getattr(args, "rich_render", False)),
+        rich_render=not bool(getattr(args, "compact_render", False)),
     )
 
 
@@ -2757,13 +2757,12 @@ def main() -> None:
     ap.add_argument(
         "--reasoning",
         default="none",
-        help="AI 决策的 reasoning effort（none/low/medium/high；非 none 时 max_tokens=8192）",
+        help="AI 决策的 reasoning effort（none/low/medium/high；非 none 时 max_tokens=12288）",
     )
     ap.add_argument(
-        "--rich-render",
+        "--compact-render",
         action="store_true",
-        help="丰富状态渲染（附着元素名、支援/召唤物/状态/装备、手牌 N/10），"
-             "与 skillloop.run --rich-render 一致",
+        help="旧紧凑 prompt（仅复现历史）；默认使用完整 prompt",
     )
     ap.add_argument(
         "--no-stage-rules",

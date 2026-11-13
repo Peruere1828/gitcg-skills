@@ -27,7 +27,7 @@
 #   LOADOUT_ROOT  冻结 loadout 根（默认 reports/loadouts/v4，匹配 v2_dynamic run）
 #   CARD_VERSION  卡池版本（默认 v3.3.0，匹配时代基准）
 #   REASONING     AI 决策的 reasoning effort（默认 none；可选 low/medium/high，
-#                 开启后回复预算提高到 8192 token，仅用于调试观察）
+#                 开启后回复预算提高到 12288 token，仅用于调试观察）
 #   LLM_TRACE     模型调用 JSONL 落盘路径（完整 prompt + content +
 #                 reasoning_content；默认 data/web/llm_trace.jsonl，
 #                 设 none 关闭）。对应 Python 变量 GITCG_LLM_TRACE。
@@ -86,7 +86,7 @@ trap cleanup EXIT INT TERM
 AI_DECK_ARG=()
 if [ -n "$AI_DECK" ]; then AI_DECK_ARG=(--ai-deck "$AI_DECK"); fi
 RICH_ARG=()
-if [ -n "$RICH_RENDER" ] && [ "$RICH_RENDER" != "0" ]; then RICH_ARG=(--rich-render); fi
+if [ -z "$RICH_RENDER" ] || [ "$RICH_RENDER" = "0" ]; then RICH_ARG=(--compact-render); fi
 echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION}, reasoning=${REASONING}, rich_render=${RICH_RENDER})"
 setsid conda run --no-capture-output -n "$CONDA_ENV" \
   python web/ai_rpc_server.py \

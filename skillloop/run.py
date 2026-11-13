@@ -112,7 +112,9 @@ class RunSpec:
     #   rich_render: candidate/state effects, auras, reaction hints, hand count
     #   round_plan: structured per-round scratchpad plan (implies scratchpad)
     #   base_guard: keep the scripted expert action unless the LLM cites a non-rule skill
-    rich_render: bool = False
+    # The full prompt is now the default for every LLM group; ``--compact-render``
+    # keeps the old minimal prompt for reproducing historical runs.
+    rich_render: bool = True
     round_plan: bool = False
     base_guard: bool = False
     base_guard_strict: bool = False
@@ -353,9 +355,9 @@ def build_policy(
     max_tokens = 160 if scratchpad else 64
     if reasoning not in ("", "none"):
         # low reasoning alone produced 3-8k chars of hidden reasoning and a
-        # finish_reason=length with empty content at 2048; 8192 leaves room for
+        # finish_reason=length with empty content at 2048; 12288 leaves room for
         # the JSON answer.
-        max_tokens = max(max_tokens, 8192)
+        max_tokens = max(max_tokens, 12288)
     return SkillAgentPolicy(
         resolve_base_policy(deck, seed=spec.base_seed, rule_overrides=profile),
         client,
@@ -780,12 +782,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "with the same seed before comparing)")
     parser.add_argument("--reasoning", default="none",
                         help="provider reasoning effort for in-game decisions "
-                             "(none/low/medium/high; non-none raises max_tokens to 8192)")
+                             "(none/low/medium/high; non-none raises max_tokens to 12288)")
     parser.add_argument("--stage-profiles", default=None,
                         help="JSON {stages: {stage: rule overrides}} for the expert base "
                              "(e.g. configs/stage_profiles.json)")
-    parser.add_argument("--rich-render", action="store_true",
-                        help="richer state/candidate rendering: effects, auras, reactions, hand count")
+    parser.add_argument("--compact-render", action="store_true",
+                        help="use the old minimal prompt (only for reproducing historical runs)")
     parser.add_argument("--out", default=None)
     return parser
 
@@ -819,7 +821,7 @@ def main(argv: list[str] | None = None) -> int:
         stage_rules=args.stage_rules,
         trace=args.trace,
         scratchpad=args.scratchpad,
-        rich_render=args.rich_render,
+        rich_render=not args.compact_render,
         round_plan=args.round_plan,
         base_guard=args.base_guard,
         base_guard_strict=args.base_guard_strict,

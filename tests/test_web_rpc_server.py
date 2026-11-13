@@ -1654,7 +1654,7 @@ def test_llm_policy_matches_runner_build_policy():
     from common.llm import MockLLMClient
     from skillloop.agent import SkillAgentPolicy
     from skillloop.loadout import stage_task
-    from skillloop.render import StateRenderer
+    from skillloop.rich_render import RichStateRenderer
     from npc.spec import get_stage
 
     policy = srv.LLMPolicy(
@@ -1669,8 +1669,8 @@ def test_llm_policy_matches_runner_build_policy():
     agent = policy._ensure_policy()
 
     assert isinstance(agent, SkillAgentPolicy)
-    # 网页专属 renderer 已移除，使用 runner 的纯 StateRenderer。
-    assert type(agent.renderer) is StateRenderer
+    # 默认协议使用完整 prompt（与 runner 的 RichStateRenderer 同源）。
+    assert type(agent.renderer) is RichStateRenderer
     stage = get_stage("blanche")
     expected = stage_task(stage, "keqing_shuanghuo")
     assert agent.task.stage == "blanche"

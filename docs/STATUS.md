@@ -117,7 +117,7 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 
 ### 共享智能体开关（2026-11-13，未采纳）
 
-- 新增默认关的实验开关：`--rich-render`（丰富状态/候选渲染）、`--base-guard`
+- 新增实验开关：`--rich-render`（丰富状态/候选渲染，后已升为默认）、`--base-guard`
   （无 strategy 引用时退回 expert 动作）、`--round-plan`（轮级记录板）、
   `--base-guard-strict`；均写入 fingerprint，详见 `EVAL_PROTOCOL.md §7`。
 - `rich-render + base-guard`：seeds1–5 **51/80 = 63.75%**（基线 41/80），

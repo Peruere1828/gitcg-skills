@@ -113,14 +113,14 @@
 | 开关 | 作用 |
 |---|---|
 | `--round-plan` | 记录板改为轮级计划（隐含 `--scratchpad`）：每轮第一次决策提示「目标/本轮路线/风险/留骰」 |
-| `--rich-render` | system 前缀加入**整局资料**（我方/对方角色全部技能、整套牌效果）；user 局面给角色元素/武器、附着名、手牌费用、支援/召唤物/状态/装备；候选带技能类型/反应提示/卡牌效果 |
+| `--compact-render` | **仅复现历史**：回到旧紧凑 prompt。默认已使用完整 prompt：system 含 3.3 规则/反应表、双方角色全部技能与整套牌效果；user 局面含元素/武器、附着、支援/召唤物/状态/装备、手牌费用；候选带反应效果 |
 | `--base-guard` | 只有模型引用了非 rule 技能时才采纳其选择；否则退回牌组 expert 的脚本动作 |
 | `--base-guard-strict` | 配合 `--base-guard`，只认 `stage_specific` 或以 `_<stage>` 结尾的技能 id |
 | `--override-kinds` | 只允许模型在这些高层动作类型上越权（如 `action_use_skill`），其余交还 expert |
 | `--override-stages` | 只在这些关卡调用模型；其他关卡纯 expert，不产生 API 调用 |
 | `--expert-hint` | 把 expert 的脚本建议写进 user message，作为模型的先验 |
 | `--base-seed` | expert 的 tie-break seed（诊断用；比较时必须用同 seed 重跑 scripted） |
-| `--reasoning` | 模型推理强度（默认 `none` 对局；`low`/`medium`/`high` 会把回复预算提到 8192 token） |
+| `--reasoning` | 模型推理强度（默认 `none` 对局；`low`/`medium`/`high` 会把回复预算提到 12288 token） |
 | `--stage-profiles` | 按关卡覆盖 era expert 规则参数（如 `configs/stage_profiles.json` 的 lan `setup_rounds=0`）；进指纹，treatment/control 可用同一画像比较 |
 
 `--base-guard*` 只是**决策兜底**，不改变模型调用次数与 prompt；它用同一 LLM 选择做门控，
