@@ -137,6 +137,20 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 - 结论：LLM dynamic 逐动作策略**无法超过 scripted**；全部实验约 $1.42。
   报告 [`../reports/dynamic_improvements_20261113.md`](../reports/dynamic_improvements_20261113.md)。
 
+### Prompt 重写（2026-11-13 晚）
+
+- 旧紧凑 prompt 信息不足（无元素/武器、支援/召唤物/状态/装备，附着只有数字，
+  卡牌只有名字）。新 prompt 已设为**默认协议**：system 含 3.3 规则/元素反应效果表、
+  双方角色全部技能、整套牌资料；user 局面给元素/武器/附着/区域/装备/手牌费用与效果。
+- effort=none、16 关 × seeds1–5：**45/80 = 56.25%**（同配对 scripted 57/80）；
+  比旧紧凑 dynamic 41/80 有提升，但 iron/marjorie/shitou 仍低于 expert。
+- effort=low 单局约 $0.045、10–20 分钟；$0.8 门禁后完成 27 局：
+  **20/27 = 74.1%**，同配对 scripted 13/27 = 48.1%（合并 scripted 66.25%、
+  low 74.07%；配对 Δ=+0.233，CI [−0.076,+0.542]）。blanche 0→2、buyun 1→4、
+  chefmao 2→4、iron 4→5，ellin 4→3。完整 prompt + low 是首个正向信号。
+- 报告：[`../reports/prompt_rewrite_20261113.md`](../reports/prompt_rewrite_20261113.md)；
+  艾琳起手 prompt：[`../reports/prompts/ellin_mulligan_20261113.md`](../reports/prompts/ellin_mulligan_20261113.md)。
+
 ## 7. 下一步
 
 1. dynamic 迭代停留在 3 轮/12 seeds（目标未达）；不要继续消耗预算刷同一架构。
