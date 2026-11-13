@@ -128,6 +128,10 @@ class RunSpec:
     # only: changing it means the scripted reference must be rerun with the same
     # base seed before any comparison.
     base_seed: int = 0
+    # Provider reasoning effort for in-game decisions ("none" keeps the cheap
+    # baseline). Anything else raises the reply budget so hidden reasoning cannot
+    # truncate the JSON answer.
+    reasoning: str = "none"
 
     def fingerprint(self) -> dict[str, Any]:
         library_root = resolved_library_root(self)
@@ -160,6 +164,7 @@ class RunSpec:
             "override_stages": list(self.override_stages),
             "expert_hint": self.expert_hint,
             "base_seed": self.base_seed,
+            "reasoning": self.reasoning,
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -317,6 +322,12 @@ def build_policy(
     else:
         renderer = StateRenderer(_assets(), opponent_name=f"NPC({stage.display or stage.name})")
     scratchpad = spec.scratchpad or spec.round_plan
+    reasoning = (spec.reasoning or "none").strip().lower()
+    # Hidden reasoning shares the completion budget; 64/160 would return an empty
+    # content string and silently fall back to the expert.
+    max_tokens = 160 if scratchpad else 64
+    if reasoning not in ("", "none"):
+        max_tokens = max(max_tokens, 2048)
     return SkillAgentPolicy(
         resolve_base_policy(deck, seed=spec.base_seed),
         client,
@@ -332,12 +343,13 @@ def build_policy(
             round_plan=spec.round_plan,
             base_guard=spec.base_guard,
             base_guard_strict=spec.base_guard_strict,
+            reasoning_effort=reasoning or "none",
             override_kinds=tuple(spec.override_kinds),
             override_stages=tuple(spec.override_stages),
             expert_hint=spec.expert_hint,
             # A note plus the usual JSON needs more than the 64-token reply budget;
             # keep the default arm at 64 so its cost/behaviour is unchanged.
-            max_tokens=160 if scratchpad else 64,
+            max_tokens=max_tokens,
         ),
     )
 
@@ -468,6 +480,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "override_stages": list(spec.override_stages),
         "expert_hint": bool(spec.expert_hint),
         "base_seed": int(spec.base_seed),
+        "reasoning": spec.reasoning,
         "model": spec.model,
         "library_root": library_root,
         "library_version": library_version,
@@ -736,6 +749,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-seed", type=int, default=0,
                         help="tie-break seed for the deck expert (diagnostic; rerun scripted "
                              "with the same seed before comparing)")
+    parser.add_argument("--reasoning", default="none",
+                        help="provider reasoning effort for in-game decisions "
+                             "(none/low/medium/high; non-none raises max_tokens to 2048)")
     parser.add_argument("--rich-render", action="store_true",
                         help="richer state/candidate rendering: effects, auras, reactions, hand count")
     parser.add_argument("--out", default=None)
@@ -783,6 +799,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         expert_hint=args.expert_hint,
         base_seed=args.base_seed,
+        reasoning=args.reasoning,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))

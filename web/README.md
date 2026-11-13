@@ -91,6 +91,7 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 | `STAGE_DECKS` | `configs/stage_decks.json` | 关卡 → 牌组映射 |
 | `LOADOUT_ROOT` | `reports/loadouts/v4` | 冻结 loadout 根 |
 | `CARD_VERSION` | `v3.3.0` | 卡池版本 |
+| `REASONING` | `none` | AI 决策的 reasoning effort（`none`/`low`/`medium`/`high`；非 `none` 时回复预算 2048 token，仅调试用） |
 
 ## 6. 代码位置
 

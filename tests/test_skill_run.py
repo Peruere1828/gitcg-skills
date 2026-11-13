@@ -768,6 +768,20 @@ def test_build_policy_sets_scratchpad_and_token_budget():
     assert on.config.note_max_chars == 240 and on.config.scratchpad_max_chars == 600
 
 
+def test_build_policy_reasoning_raises_the_token_budget():
+    client = _FakeLLMClient()
+    base = dict(group="llm_empty", stages=("wagner",), seeds=(0,), deck="superconduct_aggro")
+    none = run_module.build_policy(RunSpec(**base), get_stage("wagner"), client=client)
+    assert none.config.reasoning_effort == "none"
+    assert none.config.max_tokens == 64
+
+    low = run_module.build_policy(
+        RunSpec(**base, reasoning="low"), get_stage("wagner"), client=client
+    )
+    assert low.config.reasoning_effort == "low"
+    assert low.config.max_tokens == 2048
+
+
 def test_play_one_records_scratchpad_flag(monkeypatch):
     monkeypatch.setattr(
         run_module, "run_match",

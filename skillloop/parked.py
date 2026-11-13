@@ -369,6 +369,10 @@ class ParkedRunner:
                         f"loadout for {stage!r} was planned for {self.loadouts[stage].deck!r}, "
                         f"but the fixed stage deck is {expected!r}"
                     )
+        reasoning = (spec.reasoning or "none").strip().lower()
+        max_tokens = 160 if (spec.scratchpad or spec.round_plan) else 64
+        if reasoning not in ("", "none"):
+            max_tokens = max(max_tokens, 2048)
         self.config = AgentConfig(
             model=spec.model,
             max_calls_per_game=spec.max_calls,
@@ -384,7 +388,8 @@ class ParkedRunner:
             override_kinds=tuple(spec.override_kinds),
             override_stages=tuple(spec.override_stages),
             expert_hint=spec.expert_hint,
-            max_tokens=160 if (spec.scratchpad or spec.round_plan) else 64,
+            reasoning_effort=reasoning or "none",
+            max_tokens=max_tokens,
         )
         self._meter: _UsageMeter | None = None
         self._client_ready = client is not _CLIENT_UNSET
@@ -712,6 +717,7 @@ class ParkedRunner:
             "override_stages": list(self.spec.override_stages),
             "expert_hint": bool(self.spec.expert_hint),
             "base_seed": int(self.spec.base_seed),
+            "reasoning": self.spec.reasoning,
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,
