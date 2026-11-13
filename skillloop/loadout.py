@@ -154,6 +154,14 @@ def stage_task(stage: NpcStage, deck: str) -> TaskSpec:
          if objective.type == "win_within_rounds" and objective.n is not None),
         None,
     )
+    try:
+        from skillloop.era import resolve_deck
+
+        deck_spec = resolve_deck(deck)
+        characters = tuple(int(item) for item in deck_spec.characters)
+        cards = tuple(int(item) for item in deck_spec.cards)
+    except Exception:
+        characters, cards = (), ()
     return TaskSpec(
         stage=stage.name,
         display=stage.display or stage.name,
@@ -162,6 +170,9 @@ def stage_task(stage: NpcStage, deck: str) -> TaskSpec:
         objective_types=tuple(objective.type for objective in stage.objectives),
         max_rounds=max_rounds,
         objective_details=details,
+        characters=characters,
+        cards=cards,
+        opponent_characters=tuple(int(item) for item in stage.deck_characters),
     )
 
 

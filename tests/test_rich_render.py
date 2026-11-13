@@ -71,7 +71,7 @@ def test_state_renders_aura_names_and_hand_capacity():
     assert "对方已宣布结束=False" in text
 
 
-def test_state_shows_character_tags_and_hand_card_costs_effects():
+def test_state_shows_character_tags_and_hand_card_costs_only():
     renderer = RichStateRenderer(_assets())
     context = _context()
     context.player_view.players[0].hand_cards = (
@@ -81,8 +81,45 @@ def test_state_shows_character_tags_and_hand_card_costs_effects():
     assert "[冰·弓]" in text                    # 1101 甘雨：冰元素/弓
     assert "运筹帷幄" in text
     assert "［同色］" in text
-    assert "抓2张牌" in text
     assert "我方手牌（1/10）" in text
+    # Card effects live in the knowledge block, not in every turn's state.
+    assert "抓2张牌" not in text
+
+
+def test_knowledge_message_lists_character_skills_and_deck_effects():
+    renderer = RichStateRenderer(_assets())
+    task = TaskSpec(
+        stage="ellin",
+        display="艾琳",
+        objectives=(),
+        deck="keqing_jihua",
+        characters=(1101,),
+        cards=(332004, 332004),
+        opponent_characters=(1101,),
+    )
+    text = renderer.knowledge_message(task)
+    assert "对局资料" in text
+    assert "甘雨[冰·弓] HP上限12" in text
+    assert "普通攻击" in text and "流天射术" in text
+    assert "我方牌组（2张）" in text
+    assert "运筹帷幄［同色］×2" in text
+    assert "抓2张牌" in text
+
+
+def test_knowledge_message_uses_npc_skill_sheet_for_enemies():
+    renderer = RichStateRenderer(_assets())
+    task = TaskSpec(
+        stage="ellin",
+        display="艾琳",
+        objectives=(),
+        deck="keqing_jihua",
+        opponent_characters=(3102,),
+    )
+    text = renderer.knowledge_message(task)
+    assert "对方角色与技能" in text
+    assert "冰箭丘丘人[冰]" in text
+    assert "冰箭" in text and "冰元素伤害" in text
+    assert "几支一起" in text
 
 
 def test_state_renders_supports_summons_statuses_and_attachments():

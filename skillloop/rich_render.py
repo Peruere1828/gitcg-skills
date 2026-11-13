@@ -14,7 +14,10 @@ filtering and no candidate re-ordering. Only presentation is enriched:
   attachments (weapons, artifacts, talents) are listed;
 * the opponent's declared-end flag is shown;
 * skills get their type label, an 80-character description summary and a
-  damage attachment/reaction hint; cards get a description summary.
+  damage attachment/reaction hint; cards get a description summary;
+* ``knowledge_message`` puts the static per-game facts (our/opponent character
+  skill sheets and the whole deck) into the cached system prefix, so the
+  per-turn state only needs names and numbers.
 
 ``system_message`` and ``user_message`` stay inherited from ``StateRenderer``,
 so the role, objective progress block and output contract are unchanged.
@@ -23,6 +26,7 @@ so the role, objective progress block and output contract are unchanged.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 from reps.schema import OptionKind
@@ -78,6 +82,12 @@ _WEAPON_TAGS = {
     "GCG_TAG_WEAPON_SWORD": "单手剑",
     "GCG_TAG_WEAPON_POLEARM": "长柄武器",
 }
+_NPC_ELEMENTS = {
+    "cryo": "冰", "hydro": "水", "pyro": "火", "electro": "雷",
+    "anemo": "风", "geo": "岩", "dendro": "草", "physical": "物理",
+}
+_NPC_SKILL_KINDS = {"A": "普通攻击", "E": "元素战技", "Q": "元素爆发"}
+
 _COST_LABELS = {
     "GCG_COST_DICE_SAME": "同色",
     "GCG_COST_DICE_VOID": "任意",
@@ -174,6 +184,107 @@ class RichStateRenderer(StateRenderer):
         except Exception:
             return None
 
+    # -- static knowledge (cached system prefix) ---------------------------
+    def _skill_lines(self, character_id: int) -> list[str]:
+        try:
+            info = self.assets.character(int(character_id))
+        except Exception:
+            return []
+        lines = []
+        for skill_id in getattr(info, "skill_ids", ()) or ():
+            skill = self._skill_info(int(skill_id))
+            if skill is None:
+                continue
+            label = _SKILL_TYPE_LABELS.get(str(getattr(skill, "skill_type", "")), "")
+            cost = self._cost(skill)
+            description = _one_line(getattr(skill, "description", ""), 90)
+            head = str(getattr(skill, "name", "") or f"技能#{skill_id}")
+            if label or cost:
+                head += f"（{label}{cost}）"
+            lines.append(f"    - {head}" + (f"：{description}" if description else ""))
+        return lines
+
+    def _npc_enemy_map(self) -> dict[int, Any]:
+        try:
+            from npc.spec import load_enemies
+
+            return {
+                int(enemy.engine_id): enemy
+                for enemy in load_enemies().values()
+                if int(enemy.engine_id or 0)
+            }
+        except Exception:
+            return {}
+
+    def _npc_block(self, character_id: int) -> list[str]:
+        """Enemy skill sheet from ``configs/npc`` (not in the official assets)."""
+        enemy = self._npc_enemy_map().get(int(character_id))
+        if enemy is None:
+            return []
+        element = _NPC_ELEMENTS.get(str(enemy.element), str(enemy.element))
+        lines = [
+            f"  - {enemy.name}[{element}] HP上限{enemy.hp}，能量上限{enemy.energy}"
+        ]
+        skills = [
+            enemy.skills.get(kind) for kind in ("A", "E", "Q")
+        ] + list(enemy.extra_skills)
+        for skill in skills:
+            if skill is None:
+                continue
+            label = _NPC_SKILL_KINDS.get(skill.kind, "")
+            cost = f"，{skill.cost}" if skill.cost else ""
+            lines.append(
+                f"    - {skill.name_cn or skill.name}（{label}{cost}）：{skill.effect}"
+            )
+        return lines
+
+    def _character_block(self, character_id: int) -> list[str]:
+        try:
+            info = self.assets.character(int(character_id))
+        except Exception:
+            return []
+        header = (
+            f"  - {self._char(character_id)}{self._char_tags(character_id)}"
+            f" HP上限{getattr(info, 'max_health', '?')}"
+            f"，能量上限{getattr(info, 'max_energy', '?')}"
+        )
+        return [header, *self._skill_lines(character_id)]
+
+    def knowledge_message(self, task: Any) -> str:
+        """Full character skills + entire deck, fixed for the whole game."""
+        ours = tuple(getattr(task, "characters", ()) or ())
+        theirs = tuple(getattr(task, "opponent_characters", ()) or ())
+        cards = tuple(getattr(task, "cards", ()) or ())
+        if not (ours or theirs or cards):
+            return ""
+        lines = ["对局资料（整局固定；当前局面只给名称/数值）："]
+        if ours:
+            lines.append("我方角色与技能：")
+            for character_id in ours:
+                lines.extend(self._character_block(character_id))
+        if theirs:
+            lines.append("对方角色与技能：")
+            for character_id in theirs:
+                block = self._character_block(character_id)
+                lines.extend(block or self._npc_block(character_id))
+        if cards:
+            counts = Counter(cards)
+            lines.append(f"我方牌组（{len(cards)}张）：")
+            for card_id in dict.fromkeys(cards):
+                info = self._card_info(int(card_id))
+                name = self._card(int(card_id))
+                cost = self._cost(info)
+                description = _one_line(
+                    getattr(info, "description", "") if info is not None else "",
+                    _HAND_DESCRIPTION_LIMIT,
+                )
+                copies = f"×{counts[card_id]}" if counts[card_id] > 1 else ""
+                lines.append(
+                    f"  - {name}{cost}{copies}"
+                    + (f"：{description}" if description else "")
+                )
+        return "\n".join(lines)
+
     # -- state -------------------------------------------------------------
     def _entity(self, snapshot: Any) -> str:
         """Name a support/summon/status/attachment (they share the card pool)."""
@@ -214,14 +325,11 @@ class RichStateRenderer(StateRenderer):
             return "空"
         lines = []
         for card in cards:
-            info = self._card_info(int(getattr(card, "definition_id", 0) or 0))
-            name = self._card(int(getattr(card, "definition_id", 0) or 0))
-            description = _one_line(
-                getattr(info, "description", "") if info is not None else "",
-                _HAND_DESCRIPTION_LIMIT,
-            )
-            suffix = f"：{description}" if description else ""
-            lines.append(f"  - {name}{self._cost(info)}{suffix}")
+            definition_id = int(getattr(card, "definition_id", 0) or 0)
+            info = self._card_info(definition_id)
+            # Effects live in the cached knowledge block; the per-turn state only
+            # needs to identify the card and its cost.
+            lines.append(f"  - {self._card(definition_id)}{self._cost(info)}")
         return "\n" + "\n".join(lines)
 
     def _attachments(self, character: Any) -> str:

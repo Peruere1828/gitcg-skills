@@ -68,6 +68,10 @@ class TaskSpec:
     objective_types: tuple[str, ...] = ()  # machine types (retrieval conditions)
     max_rounds: int | None = None          # e.g. the n in win_within_rounds
     objective_details: tuple[ObjectiveDetail, ...] = ()
+    # Static per-game facts for the cached system prefix (empty = not assembled).
+    characters: tuple[int, ...] = ()       # our lineup
+    cards: tuple[int, ...] = ()            # our full deck
+    opponent_characters: tuple[int, ...] = ()
 
     def describe(self) -> str:
         goals = "；".join(self.objectives) if self.objectives else "赢得胜利"
@@ -327,11 +331,23 @@ class StateRenderer:
         return f"[{index}] {body}{self._targets_text(context, spec)}{dice}"
 
     # -- prompt ------------------------------------------------------------
+    def knowledge_message(self, task: TaskSpec) -> str:
+        """Static facts that never change during a game (opt-in renderers override).
+
+        The base renderer intentionally keeps the compact prompt unchanged; rich
+        renderers add full character-skill and deck-card descriptions here so the
+        dynamic state can stay name-only.
+        """
+        return ""
+
     def system_message(self, *, task: TaskSpec, skills: Sequence[Skill], rules_note: str = "") -> dict[str, str]:
         parts = [SYSTEM_ROLE]
         if rules_note:
             parts.append(rules_note)
         parts.append(task.describe())
+        knowledge = self.knowledge_message(task)
+        if knowledge:
+            parts.append(knowledge)
         if skills:
             parts.append("可参考的技能（来自历史经验，优先级低于关卡目标）：")
             parts.extend(skill.prompt_block() for skill in skills)
