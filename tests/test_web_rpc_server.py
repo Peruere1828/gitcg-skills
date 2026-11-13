@@ -1973,3 +1973,11 @@ def test_ai_decisions_rejects_bad_params(query):
         assert status == 400 and "error" in out
     finally:
         server.close()
+
+
+# -- optional scratchpad pass-through ----------------------------------------
+def test_eval_config_carries_scratchpad_flag():
+    assert srv.WebEvalConfig().scratchpad is False
+    assert srv.eval_config_from_args(SimpleNamespace()).scratchpad is False
+    config = srv.eval_config_from_args(SimpleNamespace(scratchpad=True))
+    assert config.scratchpad is True

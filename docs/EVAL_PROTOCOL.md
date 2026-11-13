@@ -93,3 +93,17 @@
 4. **写口径**：把 `completion_tokens/次`、`$/局`、预算上限三项写进该 run 的 meta 与报告。
 
 > 没做标定的配置不得上全量。模型、`max_tokens`、`reasoning_effort`、并发任一变更都算**新配置**，需重新标定。
+
+## 7. 可选：局内记录板（scratchpad）
+
+`skillloop.run --scratchpad`（默认关）给 LLM 组加一块**每局独立**的工作记忆：模型可在
+回复 JSON 里多写一个 `note`（1–3 句整体思路/当前轮计划/下一手意图），下一次决策把最新
+`note` 原样放进 user message 前部。它不写技能库、不跨局，也不参与 `choice/used` 解析。
+
+- **默认关**：prompt、system hash、`max_tokens=64` 与旧 run 完全一致，旧结果可直接比较。
+- **A/B**：只能在**同 stages / 同 seeds** 下与关闭组配对；run 指纹已记录 `scratchpad`
+  （`data/runs/<group>.jsonl.meta.json`），开启与关闭的 run 不能续写进同一个 `--out`。
+- **成本**：每次 prompt 多一段记录板（≈ 记录板长度；上限 `note_max_chars=240`），
+  且 `max_tokens` 从 64 提到 160。按 §6 重新标定 `completion_tokens/次`、`$/局` 后再上量。
+- **缓存**：记录板说明追加在 stable system 末尾（可缓存）；记录板正文只在 user message
+  （动态尾部），不会破坏 system prefix 的缓存键。

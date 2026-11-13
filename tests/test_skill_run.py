@@ -737,3 +737,53 @@ def test_parallel_budget_stops_new_submissions(tmp_path, monkeypatch):
     assert summary["aborted"] == "budget"
     assert summary["budget_usd"] == 0.05
     assert summary["spent_usd"] == 0.12
+
+
+# -- optional in-game scratchpad (A/B arm) -----------------------------------
+def test_fingerprint_tracks_scratchpad():
+    base = dict(group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro")
+    off = RunSpec(**base).fingerprint()
+    on = RunSpec(**base, scratchpad=True).fingerprint()
+    assert off["scratchpad"] is False and on["scratchpad"] is True
+    assert off != on
+
+
+def test_cli_scratchpad_flag():
+    parser = run_module.build_parser()
+    assert parser.parse_args(["--group", "scripted"]).scratchpad is False
+    assert parser.parse_args(["--group", "scripted", "--scratchpad"]).scratchpad is True
+
+
+def test_build_policy_sets_scratchpad_and_token_budget():
+    client = _FakeLLMClient()
+    base = dict(group="llm_empty", stages=("wagner",), seeds=(0,), deck="superconduct_aggro")
+    off = run_module.build_policy(RunSpec(**base), get_stage("wagner"), client=client)
+    assert off.config.scratchpad is False
+    assert off.config.max_tokens == 64
+    on = run_module.build_policy(
+        RunSpec(**base, scratchpad=True), get_stage("wagner"), client=client
+    )
+    assert on.config.scratchpad is True
+    assert on.config.max_tokens == 160
+    assert on.config.note_max_chars == 240 and on.config.scratchpad_max_chars == 600
+
+
+def test_play_one_records_scratchpad_flag(monkeypatch):
+    monkeypatch.setattr(
+        run_module, "run_match",
+        lambda *args, **kwargs: SimpleNamespace(
+            winner=0, rounds=3, error=None, truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    spec = RunSpec(
+        group="scripted", stages=("timmie",), seeds=(0,),
+        deck="superconduct_aggro", scratchpad=True,
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+    )
+    assert row["scratchpad"] is True

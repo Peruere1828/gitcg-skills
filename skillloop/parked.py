@@ -68,7 +68,12 @@ from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage
 from npc.stage_rules import stage_rules_json
-from skillloop.agent import AgentConfig, parse_choice
+from skillloop.agent import (
+    AgentConfig,
+    parse_choice,
+    parse_note,
+    scratchpad_instruction,
+)
 from skillloop.cards import card_kind, skill_kind
 from skillloop.era import resolve_base_policy, resolve_deck
 from skillloop.library import SkillLibrary
@@ -142,6 +147,7 @@ class ParkablePolicy:
         self.system: dict[str, str] | None = None
         self.system_hash = ""
         self.skills: list[Any] = []
+        self.scratchpad = ""
 
     def _system(self, context) -> dict[str, str]:
         if self.system is None:
@@ -167,7 +173,15 @@ class ParkablePolicy:
                 if self.library is not None
                 else ""
             )
-            self.system = self.renderer.system_message(task=self.task, skills=self.skills, rules_note=rules)
+            system = self.renderer.system_message(task=self.task, skills=self.skills, rules_note=rules)
+            if self.config.scratchpad:
+                system = {
+                    **system,
+                    "content": system["content"]
+                    + "\n"
+                    + scratchpad_instruction(self.config.note_max_chars),
+                }
+            self.system = system
             self.system_hash = hashlib.sha1(self.system["content"].encode("utf-8")).hexdigest()[:12]
         return self.system
 
@@ -229,12 +243,16 @@ class ParkablePolicy:
         assert self.snapshot_fn is not None, "snapshot_fn not wired"
         self.calls += 1
         progress = progress_block(self.task, context, self._progress_signals(context))
+        user = self.renderer.user_message(context, candidates, progress=progress)
+        if self.config.scratchpad:
+            previous = self.scratchpad or "（空；请先写本局路线与当前轮计划）"
+            user = {
+                **user,
+                "content": f"本局记录板（上一决策）：\n{previous}\n\n" + user["content"],
+            }
         self.pending = PendingDecision(
             key=key,
-            prompt=[
-                self._system(context),
-                self.renderer.user_message(context, candidates, progress=progress),
-            ],
+            prompt=[self._system(context), user],
             codes=list(codes),
             step=int(context.step_index),
             request=context.request_type.value,
@@ -280,6 +298,8 @@ class ParkedGame:
     # survive the resume, otherwise the provider cache key changes mid-game.
     system: dict[str, str] | None = None
     skills: list[Any] = field(default_factory=list)
+    # Per-game scratchpad, carried across resumes like ``system``/``skills``.
+    scratchpad: str = ""
     # Per-game action codebook. ``reps.action_adapter`` keeps a process-global codebook
     # that ``run_match`` resets per game; parked games are interleaved, so they each
     # carry their own and ``advance`` installs it around the engine call. Without
@@ -331,6 +351,8 @@ class ParkedRunner:
             # by the expert, so advertising it would only desynchronise the budget
             # from the synchronous agent.
             request_types=PARKABLE_REQUESTS,
+            scratchpad=spec.scratchpad,
+            max_tokens=160 if spec.scratchpad else 64,
         )
         self._meter: _UsageMeter | None = None
         self._client_ready = client is not _CLIENT_UNSET
@@ -375,6 +397,7 @@ class ParkedRunner:
         )
         policy.system = task.system           # carry the cached prefix across resumes
         policy.skills = list(task.skills)
+        policy.scratchpad = task.scratchpad   # carry the notebook across resumes
         return policy
 
     def _make_game(self, task: ParkedGame, policy: ParkablePolicy) -> Game:
@@ -534,6 +557,11 @@ class ParkedRunner:
                     task.llm_seconds += float(usage.get("seconds", 0.0))
                     index, used, error = parse_choice(raw, len(pending.codes))
                     task.used.update(sid for sid in used if sid in pending.retrieved)
+                    if self.spec.scratchpad:
+                        note = parse_note(raw)
+                        if note:
+                            note = note[: self.config.note_max_chars]
+                            task.scratchpad = note[: self.config.scratchpad_max_chars]
                     if index is None:
                         task.errors += 1
                         code = pending.fallback_code      # model failed -> expert
@@ -616,6 +644,7 @@ class ParkedRunner:
             "card_version": self.spec.card_version,
             "group": self.spec.group,
             "stage_rules": bool(self.spec.stage_rules),
+            "scratchpad": bool(self.spec.scratchpad),
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,

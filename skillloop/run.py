@@ -104,6 +104,10 @@ class RunSpec:
     # Store a compact single-game trace per row (``skillloop.replay``), so skill
     # extraction can show *where* a game went wrong instead of only statistics.
     trace: bool = False
+    # Optional in-game notebook (A/B arm): the model may write a short ``note`` that
+    # is echoed into the next decision's user message. Off by default; recorded in
+    # the fingerprint so scratchpad and baseline runs cannot be mixed on resume.
+    scratchpad: bool = False
 
     def fingerprint(self) -> dict[str, Any]:
         library_root = resolved_library_root(self)
@@ -127,6 +131,7 @@ class RunSpec:
             "rotation": self.rotation,
             "stage_rules": self.stage_rules,
             "trace": self.trace,
+            "scratchpad": self.scratchpad,
             "special_rules": (
                 _sha1(Path("configs/npc/special_rules.json"))
                 if self.stage_rules
@@ -287,6 +292,10 @@ def build_policy(
             max_calls_per_game=spec.max_calls,
             top_k=spec.top_k,
             pinned_skills=tuple(pinned_skills),
+            scratchpad=spec.scratchpad,
+            # A note plus the usual JSON needs more than the 64-token reply budget;
+            # keep the default arm at 64 so its cost/behaviour is unchanged.
+            max_tokens=160 if spec.scratchpad else 64,
         ),
     )
 
@@ -322,6 +331,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
             "stage": stage.name, "seed": seed, "group": spec.group,
             "card_version": spec.card_version,
             "stage_rules": bool(spec.stage_rules),
+            "scratchpad": bool(spec.scratchpad),
             "error": f"loadout_stage_mismatch:{loadout.stage}",
         }
 
@@ -338,6 +348,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
                 "stage": stage.name, "seed": seed, "group": spec.group,
                 "card_version": spec.card_version,
                 "stage_rules": bool(spec.stage_rules),
+                "scratchpad": bool(spec.scratchpad),
                 "error": "no_llm_config",
             }
 
@@ -380,6 +391,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
             "card_version": spec.card_version,
             "group": spec.group,
             "stage_rules": bool(spec.stage_rules),
+            "scratchpad": bool(spec.scratchpad),
             "error": f"{type(exc).__name__}{detail} (card_version={spec.card_version})",
             "seconds": round(time.perf_counter() - started, 2),
         }
@@ -405,6 +417,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "card_version": spec.card_version,
         "group": spec.group,
         "stage_rules": bool(spec.stage_rules),
+        "scratchpad": bool(spec.scratchpad),
         "model": spec.model,
         "library_root": library_root,
         "library_version": library_version,
@@ -653,6 +666,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="send each stage's special rules (configs/npc/special_rules.json)")
     parser.add_argument("--trace", action="store_true",
                         help="store a compact single-game trace per row (for skill extraction)")
+    parser.add_argument("--scratchpad", action="store_true",
+                        help="in-game notebook (局内记录板), default off; for A/B only "
+                             "(adds the previous note to every prompt and raises max_tokens to 160)")
     parser.add_argument("--out", default=None)
     return parser
 
@@ -685,6 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         card_version=args.card_version,
         stage_rules=args.stage_rules,
         trace=args.trace,
+        scratchpad=args.scratchpad,
     )
     summary = run(spec)
     print(json.dumps(summary, ensure_ascii=False, indent=2))

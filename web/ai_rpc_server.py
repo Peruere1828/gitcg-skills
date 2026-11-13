@@ -178,6 +178,9 @@ class WebEvalConfig:
     card_version: str | None = None
     rotation: str | None = None
     stage_rules: bool = True
+    # Optional in-game notebook, off by default. The web bridge only forwards it so
+    # a debug session can match a `skillloop.run --scratchpad` A/B arm.
+    scratchpad: bool = False
 
 
 def _abs_path(value: str | os.PathLike[str]) -> Path:
@@ -573,6 +576,7 @@ def build_web_llm_policy(
         stage_decks_root=config.stage_decks_root,
         loadout_root=config.loadout_root,
         card_version=config.card_version,
+        scratchpad=config.scratchpad,
     )
     pinned = tuple(loadout.skills) if loadout is not None else ()
     policy = build_policy(
@@ -1877,6 +1881,7 @@ class State:
             "library_root": library_root,
             "library_resolved": library.get("resolved") if library else None,
             "card_version": card_version,
+            "scratchpad": bool(self.eval_config.scratchpad),
             "eval_deck": target.get("deck"),
             "loadout": target.get("loadout"),
         }
@@ -2488,6 +2493,7 @@ def eval_config_from_args(args: argparse.Namespace) -> WebEvalConfig:
         card_version=getattr(args, "card_version", None),
         rotation=getattr(args, "rotation", None),
         stage_rules=bool(getattr(args, "stage_rules", True)),
+        scratchpad=bool(getattr(args, "scratchpad", False)),
     )
 
 
@@ -2654,6 +2660,11 @@ def main() -> None:
         "--rotation",
         default=None,
         help="自对弈 NPC 座位的 rotation（与 skillloop.run --rotation 一致）",
+    )
+    ap.add_argument(
+        "--scratchpad",
+        action="store_true",
+        help="局内记录板（与 skillloop.run --scratchpad 一致），默认关；仅用于 A/B",
     )
     ap.add_argument(
         "--no-stage-rules",

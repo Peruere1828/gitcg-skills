@@ -6,7 +6,7 @@ from typing import Any
 from envs.decks import deck_spec
 from reps.action_adapter import BuiltDecisionContext
 from reps.schema import DecisionContext, DecisionType, LowLevelActionSpec, OptionKind
-from skillloop.agent import AgentConfig, SkillAgentPolicy, parse_choice
+from skillloop.agent import AgentConfig, SkillAgentPolicy, parse_choice, parse_note
 from skillloop.cards import card_kind
 from skillloop.library import SkillLibrary
 from skillloop.render import ObjectiveDetail, StateRenderer, TaskSpec
@@ -31,7 +31,7 @@ class _FakeAssets:
 
 
 class _FakeClient:
-    def __init__(self, reply: str | None = '{"choice": 1}') -> None:
+    def __init__(self, reply: str | None | list[str | None] = '{"choice": 1}') -> None:
         self.reply = reply
         self.calls: list[list[dict[str, str]]] = []
         self.kwargs: list[dict[str, Any]] = []
@@ -39,6 +39,8 @@ class _FakeClient:
     def chat(self, messages, **kwargs) -> str | None:
         self.calls.append(messages)
         self.kwargs.append(kwargs)
+        if isinstance(self.reply, list):
+            return self.reply[min(len(self.calls) - 1, len(self.reply) - 1)]
         return self.reply
 
 
@@ -355,3 +357,108 @@ def test_progress_block_is_in_user_message_and_counts_our_card_plays():
     assert "打出2张武器牌（我方已打1/2）" in second
     # system prefix is still byte-identical; only the user message moved
     assert client.calls[0][0]["content"] == client.calls[1][0]["content"]
+
+
+# -- optional in-game scratchpad --------------------------------------------
+def test_parse_note_flattens_and_ignores_bad_values():
+    assert parse_note('{"choice": 0, "note": "先打武器\\n  再抢血"}') == "先打武器 再抢血"
+    assert parse_note('{"choice": 0}') == ""
+    assert parse_note('{"choice": 0, "note": 7}') == ""
+    assert parse_note("garbage") == ""
+    assert parse_note(None) == ""
+
+
+def test_scratchpad_off_keeps_prompt_and_system_hash_unchanged():
+    """Default arm must be byte-identical to a run without the flag at all."""
+    task = TaskSpec(stage="wagner", display="瓦格纳", objectives=("5回合内胜利",), deck="x")
+    client = _FakeClient('{"choice": 0}')
+
+    def build(**config):
+        return SkillAgentPolicy(
+            _Base(), client,
+            renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+            task=task, config=AgentConfig(**config),
+        )
+
+    implicit = build()
+    explicit = build(scratchpad=False)
+    expected_system = StateRenderer(_FakeAssets(), opponent_name="NPC").system_message(
+        task=task, skills=(), rules_note=""
+    )["content"]
+    for agent in (implicit, explicit):
+        agent.choose(_built(3))
+        assert client.calls[-1][0]["content"] == expected_system
+        assert "记录板" not in client.calls[-1][0]["content"]
+        assert "记录板" not in client.calls[-1][1]["content"]
+    assert implicit.decisions[0].system_hash == explicit.decisions[0].system_hash
+
+
+def test_scratchpad_note_is_replayed_and_overwrites_previous_note():
+    client = _FakeClient([
+        '{"choice": 0, "note": "第一版：先铺场\\n再看爆发"}',
+        '{"choice": 1, "note": "第二版：转抢血"}',
+        '{"choice": 2}',                       # no note -> keep the latest one
+    ])
+    agent = _agent(client, scratchpad=True)
+
+    agent.choose(_built(3))
+    first_user = client.calls[0][1]["content"]
+    assert first_user.startswith("本局记录板（上一决策）：\n（空；请先写本局路线与当前轮计划）\n\n")
+    assert "记录板" in client.calls[0][0]["content"]       # widened output contract
+    assert agent.decisions[0].note == "第一版：先铺场 再看爆发"
+    assert agent.decisions[0].scratchpad_chars == len("第一版：先铺场 再看爆发")
+
+    agent.choose(_built(3))
+    second_user = client.calls[1][1]["content"]
+    assert second_user.startswith("本局记录板（上一决策）：\n第一版：先铺场 再看爆发\n\n")
+    assert agent.decisions[1].note == "第二版：转抢血"
+
+    agent.choose(_built(3))
+    third_user = client.calls[2][1]["content"]
+    assert third_user.startswith("本局记录板（上一决策）：\n第二版：转抢血\n\n")
+    assert "第一版" not in third_user
+    assert agent.decisions[2].note == ""                    # no note in this reply
+    assert agent._scratchpad == "第二版：转抢血"            # previous note retained
+    # The system prefix is still stable across decisions when the scratchpad moves.
+    assert client.calls[0][0]["content"] == client.calls[2][0]["content"]
+
+
+def test_scratchpad_note_is_truncated_and_does_not_change_choice():
+    long_note = "计" * 40
+    client = _FakeClient(f'{{"choice": 2, "note": "{long_note}"}}')
+    agent = _agent(client, scratchpad=True, note_max_chars=10, scratchpad_max_chars=10)
+    code = agent.choose(_built(3))
+    assert code == 102                                      # choice parsing unaffected
+    assert agent.decisions[0].note == "计" * 10
+    assert agent._scratchpad == "计" * 10
+    assert agent.decisions[0].scratchpad_chars == 10
+
+
+def test_scratchpad_bad_note_does_not_affect_choice():
+    client = _FakeClient('{"choice": 1, "note": 42}')       # non-string note
+    agent = _agent(client, scratchpad=True)
+    assert agent.choose(_built(3)) == 101
+    assert agent.decisions[0].choice == 1
+    assert agent.decisions[0].note == ""
+    assert agent._scratchpad == ""
+
+
+def test_decision_as_dict_includes_note_and_scratchpad_chars():
+    client = _FakeClient('{"choice": 0, "note": "计划"}')
+    agent = _agent(client, scratchpad=True)
+    agent.choose(_built(3))
+    payload = agent.decisions[0].as_dict()
+    assert payload["note"] == "计划"
+    assert payload["scratchpad_chars"] == len("计划")
+
+
+def test_scratchpad_is_per_policy_instance():
+    client = _FakeClient(['{"choice": 0, "note": "我这一局的路线"}', '{"choice": 0}'])
+    first = _agent(client, scratchpad=True)
+    first.choose(_built(3))
+    second = _agent(client, scratchpad=True)
+    second.choose(_built(3))
+    assert second._scratchpad == ""
+    assert client.calls[1][1]["content"].startswith(
+        "本局记录板（上一决策）：\n（空；请先写本局路线与当前轮计划）"
+    )

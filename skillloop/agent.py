@@ -54,6 +54,13 @@ class AgentConfig:
     # Frozen stage loadout (see ``skillloop.loadout``). When non-empty, these exact
     # skills replace BM25 retrieval for the whole game; order is prompt order.
     pinned_skills: tuple[str, ...] = ()
+    # Optional in-game notebook (A/B arm). Off by default so the prompt, system hash
+    # and response contract stay byte-identical to earlier runs. When on, the model
+    # may add a ``note`` to its JSON; the latest note is echoed in the *user* message
+    # of the next decision (never in the cached system prefix).
+    scratchpad: bool = False
+    scratchpad_max_chars: int = 600
+    note_max_chars: int = 240
 
 
 @dataclass
@@ -67,6 +74,8 @@ class Decision:
     latency: float = 0.0
     system_hash: str = ""
     http_calls: int = 0
+    note: str = ""
+    scratchpad_chars: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +88,8 @@ class Decision:
             "latency": round(self.latency, 3),
             "system_hash": self.system_hash,
             "http_calls": self.http_calls,
+            "note": self.note,
+            "scratchpad_chars": self.scratchpad_chars,
         }
 
 
@@ -100,6 +111,33 @@ def parse_choice(raw: str | None, n_candidates: int) -> tuple[int | None, tuple[
         used = [used]
     used_ids = tuple(str(item) for item in used if isinstance(item, (str, int)))[:2]
     return index, used_ids, None
+
+
+def parse_note(raw: str | None) -> str:
+    """Extract the optional scratchpad ``note``; never raises and never gates choice.
+
+    The note is flattened to one line so a multi-line reply cannot restructure the
+    next prompt. Missing/non-string notes simply return ``""`` (keep the old note).
+    """
+    parsed = extract_json_object(raw)
+    if parsed is None:
+        return ""
+    note = parsed.get("note")
+    if not isinstance(note, str):
+        return ""
+    return " ".join(note.split())
+
+
+def scratchpad_instruction(note_max_chars: int) -> str:
+    """Stable system suffix that widens the output contract when scratchpad is on.
+
+    Kept as a module function so the parked runner (``skillloop.parked``) builds the
+    byte-identical prefix when it mirrors ``SkillAgentPolicy``.
+    """
+    return (
+        '记录板：可在 JSON 的 "note" 字段写 1–3 句本局整体思路/当前轮计划/下一手意图'
+        f"（≤{note_max_chars}字）；下次决策会原样回看；可省略。"
+    )
 
 
 class SkillAgentPolicy:
@@ -132,8 +170,15 @@ class SkillAgentPolicy:
         self._system_hash = ""
         self._skills: list[Skill] = []
         self._signals = ProgressSignals()
+        # Per-game working memory (``scratchpad`` arm only). Never persisted to the
+        # skill library and never shared across ``SkillAgentPolicy`` instances.
+        self._scratchpad: str = ""
 
     # -- prompt ---------------------------------------------------------------
+    def _scratchpad_instruction(self) -> str:
+        """Stable suffix appended after ``render.OUTPUT_CONTRACT`` (contract untouched)."""
+        return scratchpad_instruction(self.config.note_max_chars)
+
     def _system_message(self, context: Any) -> dict[str, str]:
         """Build the stable prefix once per game (or when the library changes)."""
         if self._system is None:
@@ -157,9 +202,15 @@ class SkillAgentPolicy:
                     skill.skill_id for skill in self._skills if skill.layer == "rule"
                 }
                 self.rules_note = self.library.rules_text(exclude_ids=pinned_rule_ids)
-            self._system = self.renderer.system_message(
+            system = self.renderer.system_message(
                 task=self.task, skills=self._skills, rules_note=self.rules_note
             )
+            if self.config.scratchpad:
+                system = {
+                    **system,
+                    "content": system["content"] + "\n" + self._scratchpad_instruction(),
+                }
+            self._system = system
             self._system_hash = hashlib.sha1(self._system["content"].encode("utf-8")).hexdigest()[:12]
         return self._system
 
@@ -231,6 +282,13 @@ class SkillAgentPolicy:
         system = self._system_message(context)
         progress = progress_block(self.task, context, self._signals)
         user = self.renderer.user_message(context, candidates, progress=progress)
+        if self.config.scratchpad:
+            # Dynamic tail (user message), so the cached system prefix is untouched.
+            previous = self._scratchpad or "（空；请先写本局路线与当前轮计划）"
+            user = {
+                **user,
+                "content": f"本局记录板（上一决策）：\n{previous}\n\n" + user["content"],
+            }
         started = time.perf_counter()
         raw = self.client.chat(
             [system, user],
@@ -250,6 +308,14 @@ class SkillAgentPolicy:
             final_code = int(candidates[index][0])
         retrieved = [skill.skill_id for skill in self._skills]
         used = tuple(skill_id for skill_id in used if skill_id in retrieved)
+        note = ""
+        if self.config.scratchpad:
+            note = parse_note(raw)
+            if note:
+                # Overwrite with the model's latest plan; a missing note keeps the
+                # previous one. Note parsing never changes ``index``/``used``.
+                note = note[: self.config.note_max_chars]
+                self._scratchpad = note[: self.config.scratchpad_max_chars]
         decision = Decision(
             step=int(context.step_index),
             request=context.request_type.value,
@@ -260,6 +326,8 @@ class SkillAgentPolicy:
             latency=latency,
             system_hash=self._system_hash,
             http_calls=1,
+            note=note,
+            scratchpad_chars=len(self._scratchpad),
         )
         self.decisions.append(decision)
         if self.on_decision is not None:

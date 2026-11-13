@@ -33,6 +33,9 @@ DYNAMIC_LIB="${DYNAMIC_LIB:-data/skills/dyn_v4}"
 STATIC_LOADOUT="${STATIC_LOADOUT:-reports/loadouts/v1}"
 DYNAMIC_LOADOUT="${DYNAMIC_LOADOUT:-reports/loadouts/v4}"
 DECK="${DECK:-superconduct_aggro}"
+# Optional in-game notebook for the LLM groups (default off). This is an A/B knob:
+# the fingerprint records it, so do not point it at an existing baseline --out.
+SCRATCHPAD="${SCRATCHPAD:-0}"
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 
 # Same evaluation protocol for every group (era decks + stage special rules).
@@ -67,6 +70,11 @@ for group in $EVAL_GROUPS; do
       ;;
     llm_empty)
       # Fixed to data/skills/rules_v1 by the runner; never pass --library/--loadout.
+      ;;
+  esac
+  case "$group" in
+    llm_empty|static|dynamic)
+      [ "$SCRATCHPAD" = 1 ] && extra+=(--scratchpad)
       ;;
   esac
   echo "=== $(date -Is) group=$group ${extra[*]:-}"

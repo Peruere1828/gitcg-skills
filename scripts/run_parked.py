@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         "--stage-rules", action="store_true",
         help="send each stage's special rules (configs/npc/special_rules.json)",
     )
+    ap.add_argument("--scratchpad", action="store_true",
+                    help="in-game notebook (局内记录板), default off; for A/B only")
     ap.add_argument("--concurrency", type=int, default=96)
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
@@ -80,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         model=args.model, max_calls=args.max_calls, out=args.out,
         stage_decks_root=args.stage_decks, loadout_root=args.loadout,
         card_version=args.card_version, stage_rules=args.stage_rules,
+        scratchpad=args.scratchpad,
     )
     tasks = [
         ParkedGame(stage=get_stage(stage), seed=seed, spec=spec, task_index=index)

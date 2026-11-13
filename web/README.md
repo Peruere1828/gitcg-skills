@@ -112,3 +112,7 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 
 主流程不暴露库选择；`GET /ai` 的 `library` 会报告实际解析到的库（`llm_empty`
 报告 `rules_v1`，17 条规则）。
+
+桥的 `--scratchpad` 开启**局内记录板**（默认关，仅用于和 `skillloop.run --scratchpad`
+对齐的 A/B 调试）；`GET /ai` 的 `scratchpad` 字段报告该状态。详见
+`docs/EVAL_PROTOCOL.md` §7。
