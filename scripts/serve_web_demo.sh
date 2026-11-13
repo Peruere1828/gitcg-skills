@@ -27,7 +27,9 @@
 #   LOADOUT_ROOT  冻结 loadout 根（默认 reports/loadouts/v4，匹配 v2_dynamic run）
 #   CARD_VERSION  卡池版本（默认 v3.3.0，匹配时代基准）
 #   REASONING     AI 决策的 reasoning effort（默认 none；可选 low/medium/high，
-#                 开启后回复预算提高到 2048 token，仅用于调试观察）
+#                 开启后回复预算提高到 8192 token，仅用于调试观察）
+#   LLM_TRACE     可选：模型调用 JSONL 落盘路径（完整 prompt + content +
+#                 reasoning_content；默认关）
 #
 # 网页是调试接口：**人类执 NPC 座位，AI 执参赛者**，按关卡评测协议跑。
 #   1. 「NPC 阵容」选一个关卡（这是人类要扮演的 NPC）；
@@ -56,6 +58,10 @@ STAGE_DECKS="${STAGE_DECKS:-configs/stage_decks.json}"
 LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v4}"
 CARD_VERSION="${CARD_VERSION:-v3.3.0}"
 REASONING="${REASONING:-none}"
+# 可选：把每次模型调用的完整 prompt / content / reasoning_content 落成 JSONL
+# （默认关；文件在 gitignore 的 data/ 或 /tmp 下，不含 key）。
+LLM_TRACE="${LLM_TRACE:-}"
+if [ -n "$LLM_TRACE" ]; then export GITCG_LLM_TRACE="$LLM_TRACE"; fi
 
 BRIDGE_PID=""
 VITE_PID=""

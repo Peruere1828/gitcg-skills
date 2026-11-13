@@ -61,6 +61,8 @@ class AgentConfig:
     scratchpad: bool = False
     scratchpad_max_chars: int = 600
     note_max_chars: int = 240
+    # Debug/UI excerpt of the provider's hidden reasoning (never parsed).
+    reasoning_max_chars: int = 2000
     # Round-level planning (requires ``scratchpad``). The first decision of each
     # round must refresh the notebook with goal/route/risk/dice, and the user
     # message carries a one-line per-round reminder. Off by default.
@@ -100,6 +102,9 @@ class Decision:
     scratchpad_chars: int = 0
     guarded: bool = False
     final_code: int | None = None
+    # Provider hidden reasoning excerpt + finish reason (debug/UI only).
+    reasoning: str = ""
+    finish_reason: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +121,8 @@ class Decision:
             "scratchpad_chars": self.scratchpad_chars,
             "guarded": self.guarded,
             "final_code": self.final_code,
+            "reasoning": self.reasoning,
+            "finish_reason": self.finish_reason,
         }
 
 
@@ -375,6 +382,8 @@ class SkillAgentPolicy:
         )
         latency = time.perf_counter() - started
         self.calls += 1
+        reasoning = str(getattr(self.client, "last_reasoning", "") or "")
+        finish_reason = getattr(self.client, "last_finish_reason", None)
 
         index, used, error = parse_choice(raw, len(candidates))
         retrieved = [skill.skill_id for skill in self._skills]
@@ -419,6 +428,8 @@ class SkillAgentPolicy:
             scratchpad_chars=len(self._scratchpad),
             guarded=guarded,
             final_code=final_code,
+            reasoning=reasoning[: self.config.reasoning_max_chars],
+            finish_reason=finish_reason,
         )
         self.decisions.append(decision)
         if self.on_decision is not None:

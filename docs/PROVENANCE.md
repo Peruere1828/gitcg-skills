@@ -32,6 +32,8 @@
 | 删除 | `train/`、`kaggle/`、`scripts/` 训练相关脚本、搜索/分叉模块 | 交付物只保留课程项目需要的部分 |
 | 删除 | 26 个上游遗留测试模块 + `tests/test_belief_root.py` 中 7 个 fork-search 用例 | 这些测试只覆盖已删除的 `train/`、`envs/fork_*`、`envs/cfr_search`、`scripts/*`；留着会让 `pytest -m "not slow"` 收集失败 |
 | `envs/match.py`、`npc/stage_rules.py`、`npc/eval.py` | 新增 `CreateParam` 字符串属性 `ATTR_CREATEPARAM_STAGE_RULES=2002`，按 `configs/npc/special_rules.json` 注入关卡初始支援 / 开局效果 | 让冒险挑战特殊规则真正进入引擎，而不只停留在配置/文档 |
+| `common/llm.py` | 可选 `GITCG_LLM_TRACE`：每次调用追加 JSONL（messages/content/reasoning_content/finish_reason/usage）；实例暴露 `last_reasoning` / `last_finish_reason` | 调试 prompt 与思考输出；不参与决策，密钥不落盘 |
+| `web/ai_rpc_server.py`、`engine-overlay/.../AiDecisionPanel.tsx` | 决策行增加 `llm_called`/`llm_error`/`reasoning`/`finish_reason` | 区分 expert 步、解析失败、max_tokens 截断，并展示思考摘录 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 

@@ -779,7 +779,7 @@ def test_build_policy_reasoning_raises_the_token_budget():
         RunSpec(**base, reasoning="low"), get_stage("wagner"), client=client
     )
     assert low.config.reasoning_effort == "low"
-    assert low.config.max_tokens == 2048
+    assert low.config.max_tokens == 8192
 
 
 def test_stage_profiles_apply_to_the_era_base(tmp_path):

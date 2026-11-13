@@ -643,6 +643,19 @@ def test_override_stages_calls_the_model_inside_the_allowlist():
     assert len(client.calls) == 1
 
 
+# -- provider reasoning (debug only) -----------------------------------------
+def test_decision_records_reasoning_excerpt_and_finish_reason():
+    client = _FakeClient('{"choice": 1}')
+    client.last_reasoning = "先铺场再抢血"
+    client.last_finish_reason = "stop"
+    agent = _agent(client)
+    agent.choose(_built(3))
+    decision = agent.decisions[-1]
+    assert decision.reasoning == "先铺场再抢血"
+    assert decision.finish_reason == "stop"
+    assert decision.as_dict()["reasoning"] == "先铺场再抢血"
+
+
 # -- optional expert hint ----------------------------------------------------
 def test_expert_hint_puts_the_base_recommendation_first():
     client = _FakeClient('{"choice": 0}')

@@ -957,6 +957,11 @@ class LLMPolicy:
                     "n_candidates": getattr(decision, "n_candidates", None),
                     # 模型选中的**候选下标**（不是引擎 chosenActionIndex），可空。
                     "model_choice": getattr(decision, "choice", None),
+                    # 本次模型调用的解析错误（empty_response / unparseable / ...）。
+                    "error": getattr(decision, "error", None),
+                    "llm_called": True,
+                    "reasoning": getattr(decision, "reasoning", "") or "",
+                    "finish_reason": getattr(decision, "finish_reason", None),
                 }
             else:
                 self.last_decision = {
@@ -966,6 +971,11 @@ class LLMPolicy:
                     "request": method,
                     "n_candidates": None,
                     "model_choice": None,
+                    "error": None,
+                    # 这一步由 expert/占位策略直接回答，没有调用模型。
+                    "llm_called": False,
+                    "reasoning": "",
+                    "finish_reason": None,
                 }
             return resp
         except Exception as exc:  # noqa: BLE001
@@ -1293,6 +1303,10 @@ def _read_ai_decisions(
                         "used_skill_names": _used_skill_names(record),
                         "library": record.get("library"),
                         "fallback": bool(record.get("fallback", False)),
+                        "llm_called": record.get("llm_called"),
+                        "llm_error": record.get("llm_error"),
+                        "reasoning": record.get("reasoning") or "",
+                        "finish_reason": record.get("finish_reason"),
                         "error": record.get("error"),
                         "latency_ms": record.get("latency_ms"),
                         "system_hash": record.get("system_hash") or "",
@@ -1994,6 +2008,10 @@ def make_handler(state: State, quiet: bool, cors_origin: str | None = None):
                 llm_extra["request"] = decision_info.get("request") or method
                 llm_extra["n_candidates"] = decision_info.get("n_candidates")
                 llm_extra["model_choice"] = decision_info.get("model_choice")
+                llm_extra["llm_called"] = bool(decision_info.get("llm_called"))
+                llm_extra["llm_error"] = decision_info.get("error")
+                llm_extra["reasoning"] = str(decision_info.get("reasoning") or "")
+                llm_extra["finish_reason"] = decision_info.get("finish_reason")
                 llm_extra["library"] = getattr(seat.policy, "library_info", None)
             self._log_decision(
                 session=session,
@@ -2674,7 +2692,7 @@ def main() -> None:
     ap.add_argument(
         "--reasoning",
         default="none",
-        help="AI 决策的 reasoning effort（none/low/medium/high；非 none 时 max_tokens=2048）",
+        help="AI 决策的 reasoning effort（none/low/medium/high；非 none 时 max_tokens=8192）",
     )
     ap.add_argument(
         "--no-stage-rules",

@@ -352,7 +352,10 @@ def build_policy(
     # content string and silently fall back to the expert.
     max_tokens = 160 if scratchpad else 64
     if reasoning not in ("", "none"):
-        max_tokens = max(max_tokens, 2048)
+        # low reasoning alone produced 3-8k chars of hidden reasoning and a
+        # finish_reason=length with empty content at 2048; 8192 leaves room for
+        # the JSON answer.
+        max_tokens = max(max_tokens, 8192)
     return SkillAgentPolicy(
         resolve_base_policy(deck, seed=spec.base_seed, rule_overrides=profile),
         client,
@@ -777,7 +780,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "with the same seed before comparing)")
     parser.add_argument("--reasoning", default="none",
                         help="provider reasoning effort for in-game decisions "
-                             "(none/low/medium/high; non-none raises max_tokens to 2048)")
+                             "(none/low/medium/high; non-none raises max_tokens to 8192)")
     parser.add_argument("--stage-profiles", default=None,
                         help="JSON {stages: {stage: rule overrides}} for the expert base "
                              "(e.g. configs/stage_profiles.json)")

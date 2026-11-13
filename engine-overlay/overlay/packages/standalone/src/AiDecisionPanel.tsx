@@ -39,6 +39,13 @@ interface DecisionRow {
   usedSkills: string[];
   libraryResolved: string | null;
   fallback: boolean;
+  /** null = 旧日志没有该字段 */
+  llmCalled: boolean | null;
+  /** 本次模型调用的解析错误（与桥级 fallback 分开） */
+  llmError: string | null;
+  /** 供应商隐藏思考的摘录（协议无关，仅供观察） */
+  reasoning: string;
+  finishReason: string | null;
   error: string | null;
   latencyMs: number | null;
 }
@@ -138,6 +145,10 @@ function parseRow(raw: unknown): DecisionRow | null {
     usedSkills,
     libraryResolved: readLibraryResolved(raw),
     fallback: readBoolean(raw.fallback),
+    llmCalled: readBoolean(raw.llm_called),
+    llmError: readString(raw.llm_error),
+    reasoning: readString(raw.reasoning) ?? "",
+    finishReason: readString(raw.finish_reason),
     error: readString(raw.error),
     latencyMs: readNumber(raw.latency_ms) ?? readNumber(raw.latency),
   };
@@ -278,7 +289,11 @@ export function AiDecisionPanel(props: AiDecisionPanelProps) {
                       第 {row.step ?? "?"} 步 · {row.method}
                     </td>
                     <td style={cellStyle}>
-                      {row.modelChoice ?? "?"} / {row.nCandidates ?? "?"}
+                      {row.llmCalled === false
+                        ? "expert"
+                        : row.llmError
+                          ? "解析失败"
+                          : `${row.modelChoice ?? "?"} / ${row.nCandidates ?? "?"}`}
                     </td>
                     <td style={skillsCellStyle}>
                       {row.usedSkills.length > 0
@@ -287,17 +302,44 @@ export function AiDecisionPanel(props: AiDecisionPanelProps) {
                     </td>
                     <td style={cellStyle}>{row.libraryResolved ?? "?"}</td>
                     <td style={skillsCellStyle}>
-                      <Show when={row.fallback}>
+                      <Show when={row.llmError}>
+                        <span style={{ color: "#b00020" }}>解析失败：{row.llmError}</span>
+                        <span style={{ opacity: 0.7 }}>（已回退 expert）</span>
+                      </Show>
+                      <Show when={!row.llmError && row.fallback}>
                         <span style={{ color: "#b00020" }}>fallback</span>
                         <Show when={row.error}>
                           <span>：{row.error}</span>
                         </Show>
                       </Show>
-                      <Show when={!row.fallback && row.error}>
+                      <Show when={!row.llmError && !row.fallback && row.error}>
                         <span style={{ color: "#b00020" }}>{row.error}</span>
                       </Show>
-                      <Show when={!row.fallback && !row.error}>
-                        <span style={{ opacity: 0.7 }}>ok</span>
+                      <Show when={!row.llmError && !row.fallback && !row.error}>
+                        <span style={{ opacity: 0.7 }}>
+                          {row.llmCalled === false ? "expert" : "ok"}
+                        </span>
+                      </Show>
+                      <Show when={row.finishReason === "length"}>
+                        <div style={{ color: "#b00020" }}>回复被 max_tokens 截断</div>
+                      </Show>
+                      <Show when={row.reasoning}>
+                        <details style={{ "margin-top": "0.2rem", "max-width": "34rem" }}>
+                          <summary style={{ cursor: "pointer", opacity: 0.75 }}>
+                            思考（{row.reasoning.length} 字）
+                          </summary>
+                          <pre
+                            style={{
+                              "white-space": "pre-wrap",
+                              "max-height": "12rem",
+                              "overflow-y": "auto",
+                              "font-size": "0.7rem",
+                              margin: "0.2rem 0 0",
+                            }}
+                          >
+                            {row.reasoning}
+                          </pre>
+                        </details>
                       </Show>
                     </td>
                     <td style={cellStyle}>

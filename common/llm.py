@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -28,6 +29,23 @@ from common.paths import REPO_ROOT
 
 _ENV_FILE = REPO_ROOT / ".env"
 _REDACT_PREFIXES = ("sk-", "oc_sk_")
+_TRACE_LOCK = threading.Lock()
+
+
+def _trace_call(record: dict[str, Any]) -> None:
+    """Append one request/response pair to ``$GITCG_LLM_TRACE`` (debug only).
+
+    Prompts and raw replies can be large; the file lives under ``data/`` or
+    ``/tmp`` and is never committed. API keys are not part of the record.
+    """
+    path = os.environ.get("GITCG_LLM_TRACE")
+    if not path:
+        return
+    try:
+        with _TRACE_LOCK, open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 @dataclass
@@ -165,6 +183,9 @@ class LLMClient:
         if self.config is None:
             raise RuntimeError("no LLM config available; use build_llm_client()")
         self.usage = LLMUsage()
+        # Last raw response pieces (debug/UI only; never used for decisions).
+        self.last_reasoning: str = ""
+        self.last_finish_reason: str | None = None
 
     def chat(
         self,
@@ -237,10 +258,40 @@ class LLMClient:
             self.usage.errors += 1
             return None
         try:
-            message = body["choices"][0]["message"]["content"]
+            choice = body["choices"][0]
+            payload_message = choice["message"]
+            message = payload_message["content"]
         except (KeyError, IndexError, TypeError):
+            _trace_call({
+                "ts": time.time(),
+                "model": payload["model"],
+                "reasoning_effort": payload.get("reasoning_effort"),
+                "max_tokens": payload["max_tokens"],
+                "messages": payload["messages"],
+                "error": "malformed_response",
+                "raw_body": body,
+            })
             self.usage.errors += 1
             return None
+        reasoning = (
+            payload_message.get("reasoning_content")
+            or payload_message.get("reasoning")
+            or ""
+        )
+        self.last_reasoning = str(reasoning)
+        self.last_finish_reason = choice.get("finish_reason")
+        _trace_call({
+            "ts": time.time(),
+            "model": payload["model"],
+            "reasoning_effort": payload.get("reasoning_effort"),
+            "max_tokens": payload["max_tokens"],
+            "messages": payload["messages"],
+            "content": message,
+            "reasoning_content": reasoning,
+            "finish_reason": self.last_finish_reason,
+            "usage": body.get("usage"),
+            "seconds": time.perf_counter() - started,
+        })
         if not str(message or "").strip():
             # truncated by max_tokens (reasoning ate the budget) -> fall back
             self.usage.errors += 1
