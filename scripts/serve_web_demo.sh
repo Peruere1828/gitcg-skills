@@ -31,6 +31,8 @@
 #   LLM_TRACE     模型调用 JSONL 落盘路径（完整 prompt + content +
 #                 reasoning_content；默认 data/web/llm_trace.jsonl，
 #                 设 none 关闭）。对应 Python 变量 GITCG_LLM_TRACE。
+#   RICH_RENDER   1（默认）启用完整状态渲染：附着元素名、支援/召唤物/状态/
+#                 装备、手牌 N/10；设 0 回到紧凑渲染。
 #
 # 网页是调试接口：**人类执 NPC 座位，AI 执参赛者**，按关卡评测协议跑。
 #   1. 「NPC 阵容」选一个关卡（这是人类要扮演的 NPC）；
@@ -59,6 +61,7 @@ STAGE_DECKS="${STAGE_DECKS:-configs/stage_decks.json}"
 LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v4}"
 CARD_VERSION="${CARD_VERSION:-v3.3.0}"
 REASONING="${REASONING:-none}"
+RICH_RENDER="${RICH_RENDER:-1}"
 # 可选：把每次模型调用的完整 prompt / content / reasoning_content 落成 JSONL
 # （默认关；文件在 gitignore 的 data/ 或 /tmp 下，不含 key）。
 LLM_TRACE="${LLM_TRACE:-data/web/llm_trace.jsonl}"
@@ -82,13 +85,15 @@ trap cleanup EXIT INT TERM
 
 AI_DECK_ARG=()
 if [ -n "$AI_DECK" ]; then AI_DECK_ARG=(--ai-deck "$AI_DECK"); fi
-echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION}, reasoning=${REASONING})"
+RICH_ARG=()
+if [ -n "$RICH_RENDER" ] && [ "$RICH_RENDER" != "0" ]; then RICH_ARG=(--rich-render); fi
+echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION}, reasoning=${REASONING}, rich_render=${RICH_RENDER})"
 setsid conda run --no-capture-output -n "$CONDA_ENV" \
   python web/ai_rpc_server.py \
   --host 127.0.0.1 --port "$BRIDGE_PORT" \
   --policy "$POLICY" "${AI_DECK_ARG[@]}" --seed "$SEED" \
   --stage-decks "$STAGE_DECKS" --loadout-root "$LOADOUT_ROOT" \
-  --card-version "$CARD_VERSION" --reasoning "$REASONING" &
+  --card-version "$CARD_VERSION" --reasoning "$REASONING" "${RICH_ARG[@]}" &
 BRIDGE_PID=$!
 
 echo "[web-demo] standalone frontend → 0.0.0.0:${PORT} (反代 /bridge → 127.0.0.1:${BRIDGE_PORT})"

@@ -254,7 +254,7 @@ export function AiDecisionPanel(props: AiDecisionPanelProps) {
       </summary>
       <div style={{ margin: "0.3rem 0", "font-size": "0.8rem" }}>
         <a
-          href={`${baseUrl}/ai-prompt-log?session=${encodeURIComponent(sessionId)}&who=${who}&format=md`}
+          href={`${props.baseUrl}/ai-prompt-log?session=${encodeURIComponent(props.sessionId)}&who=${props.who}&format=md`}
           download
         >
           导出本局 prompt / 思考日志（Markdown）

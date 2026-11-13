@@ -10,6 +10,8 @@ filtering and no candidate re-ordering. Only presentation is enriched:
 
 * auras are rendered as element names (``附着:火`` / ``无附着``);
 * the hand line carries the ``N/10`` capacity;
+* both sides' supports / summons / combat statuses and each character's
+  attachments (weapons, artifacts, talents) are listed;
 * the opponent's declared-end flag is shown;
 * skills get their type label, an 80-character description summary and a
   damage attachment/reaction hint; cards get a description summary.
@@ -142,8 +144,24 @@ class RichStateRenderer(StateRenderer):
             return None
 
     # -- state -------------------------------------------------------------
+    def _entity(self, snapshot: Any) -> str:
+        """Name a support/summon/status/attachment (they share the card pool)."""
+        definition_id = int(getattr(snapshot, "definition_id", 0) or 0)
+        name = self._card(definition_id)
+        variables = getattr(snapshot, "variables", None) or {}
+        usage = variables.get("usage") or variables.get("usages")
+        return f"{name}({usage})" if usage not in (None, "", 0) else name
+
+    def _entities(self, items: Any) -> str:
+        names = [self._entity(item) for item in (items or ())]
+        return "、".join(names) if names else "无"
+
+    def _attachments(self, character: Any) -> str:
+        names = [self._entity(item) for item in (getattr(character, "entities", ()) or ())]
+        return f"（装备:{'、'.join(names)}）" if names else ""
+
     def describe_state(self, context: Any) -> str:
-        """Parent formatting, except auras are element names and hand has N/10."""
+        """Parent formatting, plus auras as elements and every public zone."""
         state = context.player_view
         if state is None:
             return "（无状态）"
@@ -155,6 +173,7 @@ class RichStateRenderer(StateRenderer):
                 f"{self._char(c.definition_id)} {c.health}/{c.max_health}"
                 + (f" 能量{c.energy}/{c.max_energy}" if getattr(c, "max_energy", 0) else "")
                 + f" {_aura_label(c)}"
+                + self._attachments(c)
                 + ("★出战" if c.is_active else "")
                 + ("✖" if c.defeated else "")
                 for c in player.characters
@@ -167,7 +186,13 @@ class RichStateRenderer(StateRenderer):
             f"我方：{side(me)}",
             f"我方骰子：{dice}（{len(me.dice)}个）",
             f"我方手牌：{hand}（{len(me.hand_cards)}/10）",
+            f"我方支援：{self._entities(getattr(me, 'supports', ()))}",
+            f"我方召唤物：{self._entities(getattr(me, 'summons', ()))}",
+            f"我方状态：{self._entities(getattr(me, 'combat_statuses', ()))}",
             f"{self.opponent_name}：{side(opp)}；手牌{len(opp.hand_cards)}张，骰子{len(opp.dice)}个",
+            f"{self.opponent_name}支援：{self._entities(getattr(opp, 'supports', ()))}",
+            f"{self.opponent_name}召唤物：{self._entities(getattr(opp, 'summons', ()))}",
+            f"{self.opponent_name}状态：{self._entities(getattr(opp, 'combat_statuses', ()))}",
             f"我方已宣布结束={bool(me.declared_end)}",
             f"对方已宣布结束={bool(opp.declared_end)}",
         ])

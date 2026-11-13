@@ -71,6 +71,22 @@ def test_state_renders_aura_names_and_hand_capacity():
     assert "对方已宣布结束=False" in text
 
 
+def test_state_renders_supports_summons_statuses_and_attachments():
+    renderer = RichStateRenderer(_assets())
+    context = _context()
+    me = context.player_view.players[0]
+    me.supports = (SimpleNamespace(definition_id=322005, variables={"usage": 2}),)
+    me.summons = (SimpleNamespace(definition_id=115, variables={}),)
+    me.combat_statuses = (SimpleNamespace(definition_id=100, variables={}),)
+    me.characters[0].entities = (SimpleNamespace(definition_id=322005, variables={}),)
+    text = renderer.describe_state(context)
+    assert "我方支援：卯师傅(2)" in text
+    assert "我方召唤物：燃烧烈焰" in text
+    assert "我方状态：抵抗之躯" in text
+    assert "装备:卯师傅" in text
+    assert "对方已宣布结束=False" in text
+
+
 def test_skill_candidate_adds_type_description_and_reaction():
     renderer = RichStateRenderer(_assets())
     # 23012 is an elemental skill dealing 1 pyro damage; hydro aura -> 蒸发.

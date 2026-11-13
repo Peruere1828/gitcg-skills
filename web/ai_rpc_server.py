@@ -183,6 +183,8 @@ class WebEvalConfig:
     scratchpad: bool = False
     # Provider reasoning effort for AI decisions ("none" = current baseline).
     reasoning: str = "none"
+    # Richer state/candidate rendering (matches `skillloop.run --rich-render`).
+    rich_render: bool = False
 
 
 def _abs_path(value: str | os.PathLike[str]) -> Path:
@@ -580,6 +582,7 @@ def build_web_llm_policy(
         card_version=config.card_version,
         scratchpad=config.scratchpad,
         reasoning=config.reasoning,
+        rich_render=config.rich_render,
     )
     pinned = tuple(loadout.skills) if loadout is not None else ()
     policy = build_policy(
@@ -1911,6 +1914,7 @@ class State:
             "card_version": card_version,
             "scratchpad": bool(self.eval_config.scratchpad),
             "reasoning": self.eval_config.reasoning,
+            "rich_render": bool(self.eval_config.rich_render),
             "eval_deck": target.get("deck"),
             "loadout": target.get("loadout"),
         }
@@ -2576,6 +2580,7 @@ def eval_config_from_args(args: argparse.Namespace) -> WebEvalConfig:
         stage_rules=bool(getattr(args, "stage_rules", True)),
         scratchpad=bool(getattr(args, "scratchpad", False)),
         reasoning=str(getattr(args, "reasoning", None) or "none"),
+        rich_render=bool(getattr(args, "rich_render", False)),
     )
 
 
@@ -2753,6 +2758,12 @@ def main() -> None:
         "--reasoning",
         default="none",
         help="AI 决策的 reasoning effort（none/low/medium/high；非 none 时 max_tokens=8192）",
+    )
+    ap.add_argument(
+        "--rich-render",
+        action="store_true",
+        help="丰富状态渲染（附着元素名、支援/召唤物/状态/装备、手牌 N/10），"
+             "与 skillloop.run --rich-render 一致",
     )
     ap.add_argument(
         "--no-stage-rules",
