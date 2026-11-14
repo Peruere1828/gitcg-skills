@@ -7,9 +7,12 @@
 - 已重写并**设为所有 LLM 组的默认协议**；`--compact-render` 仅保留用于复现历史 run。
 - 规则与元素反应效果取自七圣召唤 wiki（3.3；忽略 3.4 后的改动及特技/密传）：
   <https://wiki.biligame.com/ys/七圣召唤>。
-- effort=none：45/80 = 56.25%（同配对 scripted 57/80 = 71.25%）；比旧紧凑协议
-  dynamic 41/80 有提升，但仍未超过 scripted。
-- effort=low：见 §5（运行中，受预算门禁）。
+- effort=none（最终 prompt，16 关 × seeds1–5）：
+  scripted 57/80 = 71.25%；llm_empty **51/80 = 63.75%**（旧紧凑 42/80）；
+  static 44/80 = 55.00%（旧紧凑 46/80）。llm_empty 已接近 scripted（Δ −0.075，
+  CI 跨 0），static 反而显著下降。
+- effort=low（中间版 prompt）：39 局实测 low 32/39 vs scripted 24/39；
+  见 §6。
 
 ## 2. 新 prompt 结构
 
@@ -31,6 +34,16 @@
 费用统一为中文：`［1雷+2任意］`、`［3草］`、`［1同色］`；NPC 的
 `Cryo1+Unaligned2` 归一为 `1冰+2任意`。
 
+### 被动技能与规则修正（2026-11-14）
+
+- 被动技能原先完全缺失。现从引擎 GTS（`build/engine/.../characters/**/*.gts`）
+  解析 `skillType passive`，按角色的 `skills` 列表挂到整局资料；NPC 变体也覆盖
+  （例如冰箭丘丘人的“躲起来：出招后自动切换”）。
+- 修正“装备牌算一次行动”的错误：装备/支援/事件都是**打出手牌**，默认是
+  **快速行动，不结束行动权**（卡面标“战斗行动”的除外）；规则技能
+  `rule_equipment` 与 `rule_draw` 同步修正。
+- 候选里的打牌动作标注“快速行动，不结束行动权”。
+
 ### User（每步变化）
 
 - 当前局面：角色名、`[元素·武器]`、HP/能量、附着（元素名）、装备；
@@ -43,7 +56,47 @@
 艾琳关起手（`reports/prompts/ellin_mulligan_20261113.md`）：
 system 4870 字符 / 3659 prompt tokens；user 564 字符。
 
-## 3. effort=none 结果（完整 5 seeds）
+## 3. effort=none：scripted / llm_empty / static（最终 prompt，完整 5 seeds）
+
+口径：16 关 × seeds1–5，80 局/组，`reasoning=none`，完整 prompt（含被动、装备快速行动）。
+
+| 组 | 三星 | 三星率 | 旧紧凑 prompt | 配对 Δ vs scripted |
+|---|---:|---:|---:|---:|
+| scripted | 57/80 | **71.25%** | 71.25% | — |
+| llm_empty（rules_v1） | 51/80 | **63.75%** | 52.50%（42/80） | −0.075，CI [−0.184,+0.034] |
+| static（static_v1+loadouts/v1） | 44/80 | **55.00%** | 57.50%（46/80） | −0.163，CI [−0.267,−0.058] |
+
+- 完整 prompt 让 `llm_empty` 从 42/80 提升到 **51/80（+9 局）**，已接近 scripted
+  （配对差 −0.075，CI 跨 0）；说明“只给规则”的组确实在用完整资料。
+- `static` 反而降到 44/80（配对差显著为负）：`static_v1` 的 10 条策略与
+  loadouts/v1 在当前 prompt 下拖累节奏（marjorie 1/5、shitou 2/5、liusu 3/5）。
+- 旧版 dynamic none（45/80）是补被动/改装备规则之前的 prompt，不再作为最终口径。
+
+逐关（三星数 / 5）：
+
+| 关卡 | scripted | llm_empty | static |
+|---|---:|---:|---:|
+| blanche | 0 | 0 | 0 |
+| buyun | 1 | 1 | 0 |
+| chefmao | 2 | **4** | 3 |
+| ellin | 4 | 4 | 3 |
+| irontonguetian | 4 | 2 | 3 |
+| jifang | 5 | 5 | 5 |
+| lan | 4 | 4 | 3 |
+| liusu | 5 | 4 | 3 |
+| marjorie | 3 | 1 | 1 |
+| patton | 5 | 5 | 5 |
+| shitou | 5 | 4 | 2 |
+| swan | 5 | 5 | 4 |
+| timaeus | 0 | 0 | 0 |
+| timmie | 5 | 5 | 4 |
+| uncletian | 5 | 3 | 4 |
+| wagner | 4 | 4 | 4 |
+
+llm_empty 的剩余亏损集中在 iron/marjorie/uncletian/liusu/shitou——与 low 的
+增益关卡正好互补；说明仅靠 prompt 还不够，需要显式思考或更强的节奏规则。
+
+## 4. 旧版 dynamic none（补被动/改装备规则之前）
 
 口径：16 关 × seeds 1–5，80 局，`dyn_v4` + `loadouts/v4` + `v3.3.0`，4 workers，
 新 prompt 默认，`reasoning=none`。
@@ -58,7 +111,7 @@ system 4870 字符 / 3659 prompt tokens；user 564 字符。
 marjorie −3、shitou −3、uncletian −2、timmie −1，其余为 0。
 新 prompt 修复了部分关卡（chefmao），但 iron/marjorie/shitou 仍显著低于 expert。
 
-## 4. 复现
+## 5. 复现
 
 ```sh
 PY=/home/ubuntuaaa/miniconda3/envs/gitcg-skill/bin/python
@@ -69,7 +122,7 @@ GITCG_LLM_BUDGET_USD=0.8 $PY -m skillloop.run --group dynamic \
   --reasoning none --out data/runs/v7_dynamic_full_none_s1_5.jsonl
 ```
 
-## 5. effort=low
+## 6. effort=low（中间 prompt）
 
 低思考单局约 $0.045、10–20 分钟，$0.8 门禁触发后停止启动新局；已完成 27 局
 （覆盖 blanche/buyun/chefmao/ellin/iron/jifang），成本 $1.111。
