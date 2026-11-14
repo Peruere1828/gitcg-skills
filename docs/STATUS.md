@@ -142,12 +142,14 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group dynamic \
 - 旧紧凑 prompt 信息不足（无元素/武器、支援/召唤物/状态/装备，附着只有数字，
   卡牌只有名字）。新 prompt 已设为**默认协议**：system 含 3.3 规则/元素反应效果表、
   双方角色全部技能、整套牌资料；user 局面给元素/武器/附着/区域/装备/手牌费用与效果。
-- 最终 prompt 补齐**角色被动技能**（GTS `skillType passive`）并修正“装备牌是快速行动、
-  不结束行动权”（规则技能文本同步）。
-- effort=none、16 关 × seeds1–5（最终 prompt）：scripted 57/80 = 71.25%；
-  **llm_empty 51/80 = 63.75%**（旧紧凑 42/80；Δ −0.075，CI [−0.184,+0.034]）；
-  **static 44/80 = 55.00%**（旧紧凑 46/80；Δ −0.163，CI 不含 0，显著更差）。
-  旧版 dynamic none 45/80 是补被动前的 prompt，仅作参考。
+- 最终 prompt 补齐**角色被动技能**（GTS `skillType passive`），并按 wiki 审计修复装备
+  战斗行动例外、充能来源、换牌/料理/超载/扩散、冰草共存附着、装备/状态分类等
+  （报告 [`../reports/prompt_audit_20261114.md`](../reports/prompt_audit_20261114.md)）。
+- effort=none、16 关 × seeds1–5（审计后最终 prompt）：scripted 57/80 = 71.25%；
+  **llm_empty 48/80 = 60.00%**（Δ −0.113，CI [−0.263,+0.038]）；
+  **static 47/80 = 58.75%**（Δ −0.125，CI 不含 0）。两组仍低于 scripted。
+- 三组（llm_empty/static/dynamic）prompt 模板骨架实测 IDENTICAL，差异只来自技能库、
+  loadout 固定技能与关卡牌组。旧版 dynamic none 45/80 是更早 prompt，仅作参考。
 - effort=low 单局约 $0.045、10–20 分钟；分两批共 39 局、覆盖 10 关：
   **32/39 = 82.05%**，同配对 scripted **24/39 = 61.54%**（+8 局；配对 Δ=+0.173，
   CI [−0.007,+0.353]，贴近显著）。增益在 blanche 0→2、buyun 1→4、chefmao 2→4、

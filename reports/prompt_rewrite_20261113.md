@@ -7,10 +7,9 @@
 - 已重写并**设为所有 LLM 组的默认协议**；`--compact-render` 仅保留用于复现历史 run。
 - 规则与元素反应效果取自七圣召唤 wiki（3.3；忽略 3.4 后的改动及特技/密传）：
   <https://wiki.biligame.com/ys/七圣召唤>。
-- effort=none（最终 prompt，16 关 × seeds1–5）：
-  scripted 57/80 = 71.25%；llm_empty **51/80 = 63.75%**（旧紧凑 42/80）；
-  static 44/80 = 55.00%（旧紧凑 46/80）。llm_empty 已接近 scripted（Δ −0.075，
-  CI 跨 0），static 反而显著下降。
+- effort=none（审计修复后的最终 prompt，16 关 × seeds1–5）：
+  scripted 57/80 = 71.25%；llm_empty **48/80 = 60.00%**（Δ −0.113，CI 跨 0）；
+  static 47/80 = 58.75%（Δ −0.125，CI 不含 0）。两组仍低于 scripted。
 - effort=low（中间版 prompt）：39 局实测 low 32/39 vs scripted 24/39；
   见 §6。
 
@@ -56,45 +55,44 @@
 艾琳关起手（`reports/prompts/ellin_mulligan_20261113.md`）：
 system 4870 字符 / 3659 prompt tokens；user 564 字符。
 
-## 3. effort=none：scripted / llm_empty / static（最终 prompt，完整 5 seeds）
+## 3. effort=none：scripted / llm_empty / static（审计修复后的最终 prompt）
 
-口径：16 关 × seeds1–5，80 局/组，`reasoning=none`，完整 prompt（含被动、装备快速行动）。
+口径：16 关 × seeds1–5，80 局/组，`reasoning=none`，完整 prompt（含被动、装备快速行动例外、审计修复）。
 
-| 组 | 三星 | 三星率 | 旧紧凑 prompt | 配对 Δ vs scripted |
-|---|---:|---:|---:|---:|
-| scripted | 57/80 | **71.25%** | 71.25% | — |
-| llm_empty（rules_v1） | 51/80 | **63.75%** | 52.50%（42/80） | −0.075，CI [−0.184,+0.034] |
-| static（static_v1+loadouts/v1） | 44/80 | **55.00%** | 57.50%（46/80） | −0.163，CI [−0.267,−0.058] |
+| 组 | 三星 | 三星率 | 配对 Δ vs scripted |
+|---|---:|---:|---:|
+| scripted | 57/80 | **71.25%** | — |
+| llm_empty（rules_v1） | 48/80 | **60.00%** | −0.113，CI [−0.263,+0.038] |
+| static（static_v1+loadouts/v1） | 47/80 | **58.75%** | −0.125，CI [−0.202,−0.048] |
 
-- 完整 prompt 让 `llm_empty` 从 42/80 提升到 **51/80（+9 局）**，已接近 scripted
-  （配对差 −0.075，CI 跨 0）；说明“只给规则”的组确实在用完整资料。
-- `static` 反而降到 44/80（配对差显著为负）：`static_v1` 的 10 条策略与
-  loadouts/v1 在当前 prompt 下拖累节奏（marjorie 1/5、shitou 2/5、liusu 3/5）。
-- 旧版 dynamic none（45/80）是补被动/改装备规则之前的 prompt，不再作为最终口径。
+- llm_empty 仍低于 scripted（CI 跨 0），static 显著更低；两组都主要输在
+  iron/marjorie/shitou/uncletian 这类节奏关。
+- 审计前（v8，规则有误）的 llm_empty 63.75%、static 55.00% 已被本表取代；
+  旧紧凑 prompt 的 52.50%/57.50% 只作历史参照。
+- 旧版 dynamic none（45/80）是更早的 prompt，不再作为最终口径。
 
 逐关（三星数 / 5）：
 
 | 关卡 | scripted | llm_empty | static |
 |---|---:|---:|---:|
 | blanche | 0 | 0 | 0 |
-| buyun | 1 | 1 | 0 |
-| chefmao | 2 | **4** | 3 |
+| buyun | 1 | 2 | 1 |
+| chefmao | 2 | **5** | 3 |
 | ellin | 4 | 4 | 3 |
 | irontonguetian | 4 | 2 | 3 |
-| jifang | 5 | 5 | 5 |
-| lan | 4 | 4 | 3 |
-| liusu | 5 | 4 | 3 |
+| jifang | 5 | 5 | 4 |
+| lan | 4 | 4 | 4 |
+| liusu | 5 | 4 | 4 |
 | marjorie | 3 | 1 | 1 |
-| patton | 5 | 5 | 5 |
-| shitou | 5 | 4 | 2 |
-| swan | 5 | 5 | 4 |
+| patton | 5 | 5 | 4 |
+| shitou | 5 | 2 | 4 |
+| swan | 5 | 4 | 4 |
 | timaeus | 0 | 0 | 0 |
-| timmie | 5 | 5 | 4 |
+| timmie | 5 | 4 | 4 |
 | uncletian | 5 | 3 | 4 |
-| wagner | 4 | 4 | 4 |
+| wagner | 4 | 3 | 4 |
 
-llm_empty 的剩余亏损集中在 iron/marjorie/uncletian/liusu/shitou——与 low 的
-增益关卡正好互补；说明仅靠 prompt 还不够，需要显式思考或更强的节奏规则。
+llm_empty 的剩余亏损与 low 的增益关卡正好互补；仅靠 prompt 仍不够。
 
 ## 4. 旧版 dynamic none（补被动/改装备规则之前）
 
