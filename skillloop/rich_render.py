@@ -40,7 +40,7 @@ _SKILL_TYPE_LABELS = {
 }
 
 # Aura ids used by the masked state snapshot (0 = no aura).
-_AURA_ELEMENTS = {1: "冰", 2: "水", 3: "火", 4: "雷", 5: "风", 6: "岩", 7: "草"}
+_AURA_ELEMENTS = {1: "冰", 2: "水", 3: "火", 4: "雷", 5: "风", 6: "岩", 7: "草", 113: "冰草"}
 
 # Symmetric reaction table. Anemo/geo react with the four "attachable" elements
 # but never attach an aura themselves.
@@ -58,40 +58,41 @@ _REACTIONS = {
 _REACTION_EFFECTS = {
     "融化": "本次伤害+2",
     "蒸发": "本次伤害+2",
-    "超载": "本次伤害+2，并强制目标切换到下一角色",
+    "超载": "本次伤害+2；若目标是出战角色，强制切换到下一角色",
     "超导": "本次伤害+1，并对目标以外的敌方角色各1点穿透伤害",
     "感电": "本次伤害+1，并对目标以外的敌方角色各1点穿透伤害",
     "冻结": "本次伤害+1，目标冻结（本回合不能使用技能；受火/物理伤害+2并解除）",
-    "扩散": "对目标以外的敌方角色各1点被扩散元素伤害",
+    "扩散": "对目标以外的敌方角色各1点目标原附着元素伤害",
     "结晶": "本次伤害+1，获得1点护盾（最多2）",
     "燃烧": "本次伤害+1，生成燃烧烈焰（结束阶段1点火伤，可用1，最多叠到2）",
     "绽放": "本次伤害+1，生成草原核（我方对敌出战角色造成火/雷伤害+2，可用1）",
     "原激化": "本次伤害+1，生成激化领域（我方对敌出战角色造成雷/草伤害+1，可用3）",
 }
 _RULES_33 = """规则要点（3.3）：
-- 回合流程：投掷8个元素骰（可重投1次）→ 双方轮流行动 → 都宣布结束后进入结束阶段（双方各抓2张牌）。
-- 行动类型：战斗行动（使用技能/切换角色/宣布结束）后换对方行动；快速行动（打出手牌/元素调和）后可继续行动。
-- 打出手牌（装备/支援/事件）默认是快速行动，**不结束行动权**，只需支付费用；卡面写「战斗行动」的行动牌除外。装备牌不是一次“结束回合的行动”。
-- 角色附属：每个角色最多装备1张武器、1张圣遗物、1张特技，其他类型装备不限；出战状态会随出战角色转移。
-- 费用记法：N火/N水/N冰/N雷/N风/N岩/N草 = N个该元素骰；N任意 = N个任意元素骰；N同色 = N个相同元素的骰；N能量 = N点充能。万能元素可当任意元素。
-- 切换角色花1任意骰；角色被击倒后免费选择新的出战角色。打出元素爆发需支付其充能。
-- 充能：使用普通攻击或元素战技后+1；充能达到上限才能用元素爆发。
-- 区域上限：支援区最多4张支援牌；召唤物区最多4个召唤物；手牌上限10张，回合结束各抓2张。
+- 回合流程：双方各抓5张起始手牌 → 投掷8个元素骰（可任选数量重投1次）→ 双方轮流行动 → 都宣布结束后进入结束阶段（先结算结束阶段效果，再各抓2张；牌堆空则不抓）。
+- 行动类型：战斗行动（使用技能/切换角色/宣布结束）后换对方行动；快速行动（打出手牌/元素调和）后可继续行动。若一方已宣布结束，另一方使用技能/切换角色不会换对方行动，可继续行动直到宣布结束。
+- 打出手牌（装备/支援/事件）默认是快速行动，**不结束行动权**，只需支付费用；卡面写「战斗行动」的行动牌（如天赋装备）除外。装备牌不是一次“结束回合的行动”。
+- 角色附属：每个角色最多装备1张武器、1张圣遗物、1张特技，其他类型装备不限；出战状态会随出战角色转移。角色身上的非装备效果是“状态”，不要当成装备。
+- 费用记法：N火/N水/N冰/N雷/N风/N岩/N草 = N个该元素骰；N任意 = N个任意元素骰；N同色 = N个相同元素的骰；N能量 = N点充能。万能元素可当任意元素。元素骰上限16个。
+- 切换角色花1任意骰；角色被击倒后免费“选择”新的出战角色。打出元素爆发需支付其全部充能（清空）。
+- 充能：使用普通攻击或元素战技后+1（受到伤害不会充能）；充能达到上限才能用元素爆发。
+- 区域上限：支援区最多4张支援牌（满时打出新支援要先弃1张）；召唤物区最多4个召唤物（满时无法生成新召唤物）；手牌上限10张。
 - 击倒：HP降到0并在结算后击倒，装备/状态弃置、充能清空；有“免于击倒”效果时不视为被击倒。
-- 伤害：穿透伤害不受伤害加成，也不被护盾抵消；护盾先抵消伤害。
-- 元素附着：冰/水/火/雷/草元素伤害会附着对应元素；风/岩元素伤害不附着。
+- 伤害：普通伤害先被护盾抵消；穿透伤害不受伤害加成，也不被护盾抵消。
+- 元素附着：冰/水/火/雷/草元素伤害会附着对应元素；风/岩元素伤害不附着。非伤害的元素附着也会触发反应（只结算反应效果，不结算伤害）。
 - 元素反应（对已附着目标）：
   融化/蒸发：本次伤害+2。
-  超载：本次伤害+2，并强制目标切换到下一角色。
+  超载：本次伤害+2；若目标是出战角色，强制切换到下一角色；若因此击倒，则直接选择下一个角色。
   超导/感电：本次伤害+1，并对目标以外的敌方角色各1点穿透伤害。
   冻结：本次伤害+1，目标冻结（本回合不能使用技能；受到火或物理伤害+2并解除）。
-  扩散：对目标以外的敌方角色各1点被扩散元素伤害。
-  结晶：本次伤害+1，获得1点护盾（最多叠到2）。
+  扩散：对目标以外的敌方角色各1点“目标原附着元素”（冰/水/火/雷）伤害。
+  结晶：本次伤害+1，给我方出战角色1点护盾（最多叠到2）。
   燃烧：本次伤害+1，生成燃烧烈焰（结束阶段造成1点火伤，可用1，最多叠到2）。
   绽放：本次伤害+1，生成草原核（我方对敌方出战角色造成火/雷伤害+2，可用1）。
   原激化：本次伤害+1，生成激化领域（我方对敌方出战角色造成雷/草伤害+1，可用3）。
+- 冰草共存附着（附着:冰草）：同时视为冰与草附着；按攻击元素分别按冰/草反应处理。
 - 胜负：击倒对方全部角色即胜利；第15回合开始仍未分胜负则双方判负。
-- 资料使用：当前局面里的角色/装备/支援/召唤物/状态/手牌，其效果见本资料或局面行内说明。"""
+- 资料使用：当前局面给角色/装备/支援/召唤物/状态/手牌的名称、数值与行动所需效果。"""
 _REACTING_AURAS = frozenset(("火", "水", "冰", "雷"))
 _ANEMO_GEO = frozenset(("风", "岩"))
 
@@ -432,8 +433,20 @@ class RichStateRenderer(StateRenderer):
         return "\n" + "\n".join(lines)
 
     def _attachments(self, character: Any) -> str:
-        names = [self._entity(item) for item in (getattr(character, "entities", ()) or ())]
-        return f"（装备:{'、'.join(names)}）" if names else ""
+        equipment: list[str] = []
+        statuses: list[str] = []
+        equipment_tags = {"GCG_TAG_WEAPON", "GCG_TAG_ARTIFACT", "GCG_TAG_TALENT"}
+        for item in (getattr(character, "entities", ()) or ()):
+            info = self._card_info(int(getattr(item, "definition_id", 0) or 0))
+            tags = set(getattr(info, "tags", ()) or ())
+            label = self._entity(item)
+            (equipment if tags & equipment_tags else statuses).append(label)
+        parts = []
+        if equipment:
+            parts.append(f"装备:{'、'.join(equipment)}")
+        if statuses:
+            parts.append(f"状态:{'、'.join(statuses)}")
+        return f"（{'；'.join(parts)}）" if parts else ""
 
     def describe_state(self, context: Any) -> str:
         """Parent formatting, plus auras as elements and every public zone."""
@@ -482,6 +495,11 @@ class RichStateRenderer(StateRenderer):
             return "物理伤害（不附着元素）"
         active = _opponent_active_character(context)
         aura = _aura_element(active)
+        if aura == "冰草":
+            return (
+                f"目标附着冰+草：{element}元素将按冰或草相关反应结算（"
+                "冰系触发融化/冻结/超导/扩散/结晶，草系触发绽放/燃烧/原激化）"
+            )
         if element in _ANEMO_GEO:
             reaction = _reaction_name(element, aura)
             if reaction:
@@ -534,8 +552,15 @@ class RichStateRenderer(StateRenderer):
             summary = _one_line(raw)
             if summary:
                 extras.append(summary)
-            if "战斗行动" not in raw:
-                extras.append("快速行动，不结束行动权")
+            tags = set(getattr(info, "tags", ()) or ()) if info is not None else set()
+            # The engine marks combat-action cards with GCG_TAG_SLOWLY; the
+            # description string is not authoritative (many fast cards mention
+            # “战斗行动” only to say they are *not* one).
+            extras.append(
+                "战斗行动（会换对方行动）"
+                if "GCG_TAG_SLOWLY" in tags
+                else "快速行动，不结束行动权"
+            )
         elif kind == OptionKind.ACTION_SWITCH_ACTIVE:
             # No damage is invented here; switching is just an action.
             extras.append("切换出战角色")

@@ -145,12 +145,16 @@ def test_state_renders_supports_summons_statuses_and_attachments():
     me.supports = (SimpleNamespace(definition_id=322005, variables={"usage": 2}),)
     me.summons = (SimpleNamespace(definition_id=115, variables={}),)
     me.combat_statuses = (SimpleNamespace(definition_id=100, variables={}),)
-    me.characters[0].entities = (SimpleNamespace(definition_id=322005, variables={}),)
+    me.characters[0].entities = (
+        SimpleNamespace(definition_id=311101, variables={}),  # 武器
+        SimpleNamespace(definition_id=106, variables={}),     # 冻结状态
+    )
     text = renderer.describe_state(context)
     assert "我方支援：卯师傅(2)" in text
     assert "我方召唤物：燃烧烈焰" in text
     assert "我方状态：抵抗之躯" in text
-    assert "装备:卯师傅" in text
+    assert "装备:魔导绪论" in text
+    assert "状态:冻结" in text
     assert "对方已宣布结束=False" in text
 
 
@@ -244,3 +248,28 @@ def test_plain_renderer_is_unchanged_and_system_message_is_inherited():
     assert rich.system_message(task=task, skills=()) == plain.system_message(
         task=task, skills=()
     )
+
+
+def test_cryo_dendro_co_aura_is_rendered_and_hinted():
+    renderer = RichStateRenderer(_assets())
+    context = _context(opponent_aura=113)
+    text = renderer.describe_state(context)
+    assert "附着:冰草" in text
+    line = renderer.describe_candidate(
+        _context(opponent_aura=113),
+        _spec(OptionKind.ACTION_USE_SKILL, 23012),  # 火伤
+        0,
+    )
+    assert "附着冰+草" in line
+
+
+def test_play_card_action_type_uses_card_tags_not_description():
+    renderer = RichStateRenderer(_assets())
+    fast = renderer.describe_candidate(
+        _context(), _spec(OptionKind.ACTION_PLAY_CARD, 332006), 0
+    )
+    assert "快速行动，不结束行动权" in fast
+    slow = renderer.describe_candidate(
+        _context(), _spec(OptionKind.ACTION_PLAY_CARD, 217011), 0
+    )
+    assert "战斗行动（会换对方行动）" in slow

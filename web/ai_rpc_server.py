@@ -45,7 +45,7 @@
 #       `heuristic`、`legal_random`、`expert:<slug>`、`random`，以及 LLM 技能
 #       智能体 `llm:<library>`（library ∈ none | llm_empty | static | dynamic）。
 #       LLM 策略**严格对齐 `skillloop.run.build_policy`**：关卡 TaskSpec、
-#       plain StateRenderer、era/expert base、未过滤技能库、candidate_cap=16、
+#       RichStateRenderer（默认完整 prompt）、era/expert base、未过滤技能库、candidate_cap=16、
 #       引擎原候选顺序。`none` / `llm_empty` 都映射到 runner 的 `llm_empty`
 #       （LLM + **仅游戏规则** `data/skills/rules_v1`，17 条 rule；不含策略/关卡特化）；
 #       `static` 用 `data/skills/static_v1`（17 rule + 10 strategy）；`dynamic`
@@ -794,7 +794,7 @@ class LLMPolicy:
     """LLM 技能智能体（`skillloop.agent.SkillAgentPolicy`）的延迟构造包装。
 
     与 `RepoPolicy` 一样，重型依赖与模型客户端都在**首次决策**时才构造。策略本体
-    由 `skillloop.run.build_policy` 构造（关卡 TaskSpec、plain StateRenderer、
+    由 `skillloop.run.build_policy` 构造（关卡 TaskSpec、RichStateRenderer、
     era/expert base、未过滤库、候选 cap 16、原顺序），网页桥只负责把 meta.stage
     与 runner 配置传进去。构造失败时回退到该牌组的 `resolve_base_policy`（era /
     expert；未知牌组才用 heuristic），而不是每步都掉到占位策略。
