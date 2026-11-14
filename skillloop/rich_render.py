@@ -29,6 +29,7 @@ from collections import Counter
 from typing import Any
 
 from reps.schema import OptionKind
+from skillloop.passive_skills import passives_for
 from skillloop.render import StateRenderer, _dice_symbol, _phase_label
 
 _SKILL_TYPE_LABELS = {
@@ -70,6 +71,8 @@ _REACTION_EFFECTS = {
 _RULES_33 = """规则要点（3.3）：
 - 回合流程：投掷8个元素骰（可重投1次）→ 双方轮流行动 → 都宣布结束后进入结束阶段（双方各抓2张牌）。
 - 行动类型：战斗行动（使用技能/切换角色/宣布结束）后换对方行动；快速行动（打出手牌/元素调和）后可继续行动。
+- 打出手牌（装备/支援/事件）默认是快速行动，**不结束行动权**，只需支付费用；卡面写「战斗行动」的行动牌除外。装备牌不是一次“结束回合的行动”。
+- 角色附属：每个角色最多装备1张武器、1张圣遗物、1张特技，其他类型装备不限；出战状态会随出战角色转移。
 - 费用记法：N火/N水/N冰/N雷/N风/N岩/N草 = N个该元素骰；N任意 = N个任意元素骰；N同色 = N个相同元素的骰；N能量 = N点充能。万能元素可当任意元素。
 - 切换角色花1任意骰；角色被击倒后免费选择新的出战角色。打出元素爆发需支付其充能。
 - 充能：使用普通攻击或元素战技后+1；充能达到上限才能用元素爆发。
@@ -235,6 +238,8 @@ class RichStateRenderer(StateRenderer):
             skill = self._skill_info(int(skill_id))
             if skill is None:
                 continue
+            if str(getattr(skill, "skill_type", "")) == "GCG_SKILL_TAG_PASSIVE":
+                continue  # rendered from the GTS passive sheet below
             label = _SKILL_TYPE_LABELS.get(str(getattr(skill, "skill_type", "")), "")
             cost = self._cost(skill)
             description = _one_line(getattr(skill, "description", ""), 90)
@@ -268,17 +273,37 @@ class RichStateRenderer(StateRenderer):
         skills = [
             enemy.skills.get(kind) for kind in ("A", "E", "Q")
         ] + list(enemy.extra_skills)
+        names = set()
         for skill in skills:
             if skill is None:
                 continue
             label = _NPC_SKILL_KINDS.get(skill.kind, "")
             cost = self._npc_cost(skill.cost)
             detail = f"{label}{cost}"
+            name = skill.name_cn or skill.name
+            names.add(str(name))
             lines.append(
-                f"    - {skill.name_cn or skill.name}"
+                f"    - {name}"
                 + (f"（{detail}）" if detail else "")
                 + f"：{skill.effect}"
             )
+        for line in self._passive_lines(character_id):
+            name = line.strip().split("（被动）", 1)[0].lstrip("- ")
+            if name not in names:
+                lines.append(line)
+        return lines
+
+    def _passive_lines(self, character_id: int) -> list[str]:
+        lines = []
+        seen = set()
+        for passive in passives_for(character_id):
+            description = str(passive.get("description") or "").replace("【被动】", "")
+            key = description.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            name = str(passive.get("name") or "被动")
+            lines.append(f"    - {name}（被动）：{description}")
         return lines
 
     def _character_block(self, character_id: int) -> list[str]:
@@ -291,7 +316,7 @@ class RichStateRenderer(StateRenderer):
             f" HP上限{getattr(info, 'max_health', '?')}"
             f"，能量上限{getattr(info, 'max_energy', '?')}"
         )
-        return [header, *self._skill_lines(character_id)]
+        return [header, *self._skill_lines(character_id), *self._passive_lines(character_id)]
 
     def knowledge_message(self, task: Any) -> str:
         """Full character skills + entire deck, fixed for the whole game."""
@@ -505,9 +530,12 @@ class RichStateRenderer(StateRenderer):
                     extras.append(hint)
         elif kind == OptionKind.ACTION_PLAY_CARD:
             info = self._card_info(int(spec.subject_definition_id or 0))
-            summary = _one_line(getattr(info, "description", "") if info else "")
+            raw = str(getattr(info, "description", "") if info is not None else "")
+            summary = _one_line(raw)
             if summary:
                 extras.append(summary)
+            if "战斗行动" not in raw:
+                extras.append("快速行动，不结束行动权")
         elif kind == OptionKind.ACTION_SWITCH_ACTIVE:
             # No damage is invented here; switching is just an action.
             extras.append("切换出战角色")

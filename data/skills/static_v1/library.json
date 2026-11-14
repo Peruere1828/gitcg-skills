@@ -48,7 +48,7 @@
     {
       "skill_id": "rule_draw",
       "skill_name": "抽牌与手牌上限",
-      "description": "每轮开始抽 2 张牌；手牌上限为 10 张，超出会弃牌。手牌少时优先考虑过牌手段。",
+      "description": "结束阶段双方各抓 2 张牌；手牌上限为 10 张，超出会弃牌。手牌少时优先考虑过牌手段。",
       "conditions": {},
       "layer": "rule",
       "evidence": {
@@ -76,7 +76,7 @@
     {
       "skill_id": "rule_equipment",
       "skill_name": "装备牌",
-      "description": "武器/圣遗物装备后永久增益对应角色；装备需要花费骰子与一次行动，收益在后续回合体现。",
+      "description": "装备牌属于行动牌；打出手牌（包括装备）是快速行动，不结束行动权，但仍需支付费用。装备后永久增益对应角色；每个角色最多装备1张武器、1张圣遗物、1张特技。",
       "conditions": {},
       "layer": "rule",
       "evidence": {

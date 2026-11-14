@@ -108,6 +108,20 @@ def test_knowledge_message_lists_character_skills_and_deck_effects():
     assert "抓2张牌" in text
 
 
+def test_knowledge_message_includes_passive_skills():
+    renderer = RichStateRenderer(_assets())
+    task = TaskSpec(
+        stage="ellin",
+        display="艾琳",
+        objectives=(),
+        deck="keqing_jihua",
+        characters=(1105,),  # 神里绫华：GTS 里带 skillType passive
+    )
+    text = renderer.knowledge_message(task)
+    assert "神里流·霰步（被动）" in text
+    assert "附属冰元素附魔" in text
+
+
 def test_knowledge_message_uses_npc_skill_sheet_for_enemies():
     renderer = RichStateRenderer(_assets())
     task = TaskSpec(
