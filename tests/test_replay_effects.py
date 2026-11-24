@@ -97,6 +97,7 @@ def _decision(
     view: dict[str, Any] | None = None,
     subject: int = 0,
     card_kind: str | None = None,
+    preview: tuple[dict[str, Any], ...] = (),
 ) -> DecisionRecord:
     return DecisionRecord(
         player=player,
@@ -111,6 +112,7 @@ def _decision(
         player_view=view,
         subject_definition_id=subject,
         card_kind=card_kind,
+        preview=preview,
     )
 
 
@@ -727,3 +729,58 @@ def test_entity_counter_units_follow_the_variable_key():
     both = {"usage": 2, "duration": 5}
     assert _entity_key(dict(entity, variables=both))[1] == "2次"
     assert _entity_key(dict(entity, variables={}))[1] is None
+
+
+# --------------------------------------------------------------------------- #
+# (e) preview hand/attach effects (星斗归位 弃雷楔 -> 雷元素附魔)
+# --------------------------------------------------------------------------- #
+def test_preview_hand_remove_and_attach_are_stated():
+    decision = _decision(
+        0, 1, label="use_skill:0:4,4", kind="action_use_skill", subject=14032,
+        preview=(
+            {"kind": "hand_remove", "definition_id": 114031, "reason": 3},  # 雷楔
+            {"kind": "attach", "definition_id": 114032},                    # 雷元素附魔
+        ),
+    )
+    line = compact_trace(_row(), [decision], [])[0]
+    assert "手牌：弃置「雷楔」" in line
+    assert "附属「雷元素附魔」" in line
+    # Distinct from the ``→ 此后场上`` state delta: one leading ``；``, then ``、``.
+    assert "；手牌：弃置「雷楔」、附属「雷元素附魔」" in line
+
+
+def test_preview_hand_add_is_stated():
+    decision = _decision(
+        0, 1, label="use_skill:0:none", kind="action_use_skill", subject=14032,
+        preview=({"kind": "hand_add", "definition_id": 114031},),  # 雷楔
+    )
+    line = compact_trace(_row(), [decision], [])[0]
+    assert "；手牌：获得「雷楔」" in line
+
+
+def test_preview_absent_leaves_the_line_unchanged():
+    decision = _decision(
+        0, 1, label="use_skill:0:none", kind="action_use_skill", subject=14032
+    )
+    line = compact_trace(_row(), [decision], [])[0]
+    assert "手牌：" not in line and "附属" not in line
+
+
+def test_preview_omits_unresolvable_names_and_never_emits_ids():
+    decision = _decision(
+        0, 1, label="use_skill:0:none", kind="action_use_skill", subject=14032,
+        preview=({"kind": "hand_add", "definition_id": 999999},),
+    )
+    line = compact_trace(_row(), [decision], [])[0]
+    assert "#" not in line and "手牌：" not in line
+
+
+def test_preview_lists_at_most_four_entries():
+    decision = _decision(
+        0, 1, label="use_skill:0:none", kind="action_use_skill", subject=14032,
+        preview=tuple(
+            {"kind": "hand_add", "definition_id": 114031} for _ in range(6)
+        ),
+    )
+    line = compact_trace(_row(), [decision], [])[0]
+    assert line.count("手牌：获得「雷楔」") == 4

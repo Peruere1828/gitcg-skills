@@ -68,6 +68,10 @@ class DecisionRecord:
     # resolved for played cards ("weapon"/"artifact"/"event"/"support"/...).
     subject_definition_id: int = 0
     card_kind: str | None = None
+    # The chosen action's engine ``Action.preview`` projection (damage/aura plus
+    # hand-card create/remove and character attachments). The replay uses it to
+    # state "弃置「雷楔」" instead of leaving a hand-count delta unexplained.
+    preview: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass
@@ -489,6 +493,13 @@ class PolicyPlayer(Player):
             card_kind = None
             if getattr(spec, "kind", None) == OptionKind.ACTION_PLAY_CARD:
                 card_kind = self._resolve_card_kind(subject_definition_id)
+            # ``spec`` is the chosen action's spec, so its metadata preview is the
+            # forecast for exactly the action being recorded. Older recordings
+            # simply have no key -> empty tuple.
+            preview = tuple(
+                dict(entry)
+                for entry in (getattr(spec, "metadata", None) or {}).get("preview", ())
+            )
             self.recorder.append(
                 DecisionRecord(
                     player=self.who,
@@ -507,6 +518,7 @@ class PolicyPlayer(Player):
                     else None,
                     subject_definition_id=subject_definition_id,
                     card_kind=card_kind,
+                    preview=preview,
                 )
             )
         return built, code

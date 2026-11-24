@@ -81,6 +81,8 @@ _CARD_KIND_TEXT = {
 _MAX_EFFECT = 120
 #: At most this many public changes per line; the rest collapse into ``等N项``.
 _MAX_EFFECT_ITEMS = 6
+#: At most this many preview entries (hand create/remove/attach) per action line.
+_MAX_PREVIEW_ITEMS = 4
 _EFFECT_LEAD = "→ 此后场上："
 _SIDE_TEXT = {0: "我方", 1: "对方"}
 #: H9: cap for the one-line ``最终：...`` HP board.
@@ -386,6 +388,61 @@ def _action_line(round_number: int, player: Any, decision: Any) -> str:
         detail = f" #{subject}"
 
     return f"R{round_number} {_side(player)} {kind_text}{detail}{_dice_text(decision)}"
+
+
+def _preview_name(definition_id: int) -> str | None:
+    """Name for a preview entity, or ``None`` when only ``#id`` is resolvable.
+
+    NPC/overlay entities are namespaced at ``official_id + 70000`` (same rule as
+    ``_entity_name``), so the offset is tried before giving up. Returning
+    ``None`` (instead of ``#id``) lets the caller omit an unresolvable entry.
+    """
+    name = _card_name(int(definition_id))
+    if not name.startswith("#"):
+        return name
+    if int(definition_id) > 70000:
+        variant = _card_name(int(definition_id) - 70000)
+        if not variant.startswith("#"):
+            return variant
+    return None
+
+
+def _preview_effect(decision: Any) -> str:
+    """``；手牌：弃置「雷楔」、附属「雷元素附魔」`` from the action's own preview.
+
+    ``DecisionRecord.preview`` is the engine's forecast for the chosen action
+    (projected by ``reps.action_adapter._action_preview``). It explains a hand
+    change the state delta cannot: e.g. 星斗归位 replaces an existing 雷楔 with
+    雷元素附魔, so the hand drops from 7 to 6 with no visible cause otherwise.
+
+    Only ``hand_remove`` / ``hand_add`` / ``attach`` entries are stated; a name
+    that cannot be resolved is dropped rather than emitting a raw ``#id``. At
+    most :data:`_MAX_PREVIEW_ITEMS` entries are listed. The leading ``；`` keeps
+    this segment distinct from the ``→ 此后场上`` state delta.
+    """
+    raw = _field(decision, "preview", ()) or ()
+    parts: list[str] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("kind") or "")
+        definition_id = _as_int(entry.get("definition_id"))
+        if not definition_id or kind not in ("hand_remove", "hand_add", "attach"):
+            continue
+        name = _preview_name(definition_id)
+        if name is None:
+            continue
+        if kind == "hand_remove":
+            parts.append(f"手牌：弃置「{name}」")
+        elif kind == "hand_add":
+            parts.append(f"手牌：获得「{name}」")
+        else:
+            parts.append(f"附属「{name}」")
+        if len(parts) >= _MAX_PREVIEW_ITEMS:
+            break
+    if not parts:
+        return ""
+    return "；" + "、".join(parts)
 
 
 def _reroll_tail(tail: str) -> str:
@@ -1012,6 +1069,7 @@ def compact_trace(
 
         if request == "action" or kind.startswith("action_"):
             line = _action_line(round_number, player, decision)
+            line += _preview_effect(decision)
             before_index = previous_view[index]
             after_index = following_view[index]
             if before_index is not None and after_index is not None:

@@ -105,3 +105,110 @@ def test_abstract_actions_cover_every_legal_concrete_action(captured_game):
         # Round-trip: every legal code is recoverable from its semantic key.
         for code in context.legal_low_level_codes:
             assert match_low_level_code_index(context, int(code)) is not None
+
+
+# --------------------------------------------------------------------------- #
+# preview projection: hand create/remove + character attachment (fake proto)
+# --------------------------------------------------------------------------- #
+class _FakeField:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _FakeEntity:
+    def __init__(self, definition_id: int) -> None:
+        self.definition_id = int(definition_id)
+
+
+class _FakeCreateEntity:
+    def __init__(self, *, where: int, definition_id: int) -> None:
+        self.where = int(where)
+        self.entity = _FakeEntity(definition_id)
+        self.master_character_id = 0
+
+
+class _FakeRemoveEntity:
+    def __init__(self, *, where: int, definition_id: int, reason: int) -> None:
+        self.where = int(where)
+        self.entity = _FakeEntity(definition_id)
+        self.reason = int(reason)
+
+
+class _FakeDamage:
+    def __init__(self) -> None:
+        self.damage_type = 0
+        self.value = 3
+        self.target_id = 1
+        self.target_definition_id = 2
+        self.reaction_type = 0
+        self.cause_defeated = False
+        self.old_health = 10
+        self.new_health = 7
+        self.heal_kind = 0
+
+
+class _FakeMutation:
+    """One-field ``ExposedMutation`` stand-in (``ListFields`` + ``HasField``)."""
+
+    def __init__(self, field_name: str, value: object) -> None:
+        self._field_name = field_name
+        self._value = value
+
+    def HasField(self, name: str) -> bool:
+        return name == self._field_name
+
+    def ListFields(self):
+        return [(_FakeField(self._field_name), self._value)]
+
+    def __getattr__(self, name: str):
+        if name == self._field_name:
+            return self._value
+        raise AttributeError(name)
+
+
+def _fake_action(preview: list[_FakeMutation]):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(preview=list(preview))
+
+
+def test_action_preview_captures_hand_remove_with_reason():
+    from reps.action_adapter import _action_preview
+
+    item = _FakeMutation(
+        "remove_entity",
+        _FakeRemoveEntity(where=5, definition_id=114031, reason=3),
+    )
+    entries = _action_preview(_fake_action([item]))
+    assert entries == [{"kind": "hand_remove", "definition_id": 114031, "reason": 3}]
+
+
+def test_action_preview_captures_create_entity_by_area():
+    from reps.action_adapter import _action_preview
+
+    hand = _FakeMutation(
+        "create_entity", _FakeCreateEntity(where=5, definition_id=114031)
+    )
+    attach = _FakeMutation(
+        "create_entity", _FakeCreateEntity(where=1, definition_id=114032)
+    )
+    entries = _action_preview(_fake_action([hand, attach]))
+    assert {"kind": "hand_add", "definition_id": 114031} in entries
+    assert {"kind": "attach", "definition_id": 114032} in entries
+
+
+def test_action_preview_keeps_damage_and_caps_at_24():
+    from reps.action_adapter import _action_preview
+
+    damage = _FakeMutation("damage", _FakeDamage())
+    removes = [
+        _FakeMutation(
+            "remove_entity",
+            _FakeRemoveEntity(where=5, definition_id=114031, reason=3),
+        )
+        for _ in range(30)
+    ]
+    entries = _action_preview(_fake_action([damage, *removes]))
+    assert entries[0]["kind"] == "damage"
+    assert len(entries) == 24
+    assert all(entry["kind"] != "damage" for entry in entries[1:])

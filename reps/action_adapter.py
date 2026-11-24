@@ -35,9 +35,11 @@ REQ_ALIGNED = 8
 REQ_ENERGY = 9
 REQ_LEGEND = 10
 # ``Action.preview`` is the engine's own post-settlement forecast. Only the entries
-# the prompt can state faithfully are kept (damage / aura attachment), and the list
-# is capped so one burst that hits every character cannot flood a candidate line.
-PREVIEW_MAX_ENTRIES = 12
+# the prompt can state faithfully are kept (damage / aura attachment / hand-card
+# create-remove), and the list is capped so one burst that hits every character
+# cannot flood a candidate line. The cap is 24 rather than 12 so a hand operation
+# (e.g. 星斗归位 discarding an existing 雷楔) is not truncated away.
+PREVIEW_MAX_ENTRIES = 24
 _RESULT_RELABEL_CACHE_LIMIT = 2048
 _RESULT_RELABEL_CACHE_LOCK = RLock()
 _RESULT_RELABEL_CACHE: dict[tuple[Any, ...], dict[int, int]] = {}
@@ -441,14 +443,20 @@ def _action_preview(action: Any, *, limit: int = PREVIEW_MAX_ENTRIES) -> list[di
 
     The engine pre-settles every legal action and writes the resulting mutations to
     ``Action.preview``; a card's own description cannot know about shields, buffs or
-    the current aura, so the prompt reads the *forecast* instead. Only ``damage`` and
-    ``apply_aura`` entries are kept (they are the two the candidate line states);
-    every other mutation (entity var, create/remove entity, switch active, ...) is
-    dropped because it would need its own vocabulary. The list is capped at
-    ``limit`` entries.
+    the current aura, so the prompt reads the *forecast* instead. The entries kept
+    are the ones the candidate line states faithfully:
+
+    * ``damage`` / ``apply_aura`` (settled damage and aura attachment);
+    * ``create_entity`` in HAND (``hand_add``) or on a CHARACTER (``attach``);
+    * ``remove_entity`` in HAND (``hand_remove``, with the engine ``reason``).
+
+    Everything else (entity var, switch active, ...) is dropped because it would
+    need its own vocabulary. The list is capped at ``limit`` entries.
 
     Field names mirror ``build/engine/proto/mutation_pb2.pyi`` (``DamageEM`` /
-    ``ApplyAuraEM``) so a reader can check one against the other.
+    ``ApplyAuraEM`` / ``CreateEntityEM`` / ``RemoveEntityEM``) so a reader can
+    check one against the other, and ``where`` uses the engine's ``EntityArea``
+    (5 = HAND, 1 = CHARACTER).
     """
     entries: list[dict[str, Any]] = []
     for item in getattr(action, "preview", ()) or ():
@@ -481,6 +489,35 @@ def _action_preview(action: Any, *, limit: int = PREVIEW_MAX_ENTRIES) -> list[di
                     "target_id": int(aura.target_id),
                     "target_definition_id": int(aura.target_definition_id),
                     "reaction_type": int(aura.reaction_type),
+                }
+            )
+        elif "create_entity" in fields:
+            create = item.create_entity
+            # ``where`` is the engine ``EntityArea``: 5 = HAND (a card added to
+            # hand), 1 = CHARACTER (a status/equipment attached to a character).
+            where = int(create.where)
+            definition_id = int(create.entity.definition_id)
+            if where == 5:
+                entries.append(
+                    {"kind": "hand_add", "definition_id": definition_id}
+                )
+            elif where == 1:
+                entries.append(
+                    {"kind": "attach", "definition_id": definition_id}
+                )
+            else:
+                continue
+        elif "remove_entity" in fields:
+            remove = item.remove_entity
+            # Only a hand discard is user-legible here; other areas already show
+            # up as HP/aura or entity deltas in the prompt's own vocabulary.
+            if int(remove.where) != 5:
+                continue
+            entries.append(
+                {
+                    "kind": "hand_remove",
+                    "definition_id": int(remove.entity.definition_id),
+                    "reason": int(remove.reason),
                 }
             )
         else:

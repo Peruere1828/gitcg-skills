@@ -36,6 +36,8 @@
 | `common/llm.py` | 收到响应即累计 `usage`（含空 content、`finish_reason=length` 截断、malformed body；无 `usage` 字段则跳过）；`chat` 返回 `LLMReply`（`str` 子类，带 `finish_reason` 属性，字符串行为不变） | 原先「HTTP 成功但 content 为空」的调用不记账，成本审计低估（实测一次 $0.0063 记为 0 calls/$0.0000，只有 trace 的 `list_cost` 能对账）；技能抽取需要从返回值判断截断后重试。2026-11-24 |
 | `web/ai_rpc_server.py`、`engine-overlay/.../AiDecisionPanel.tsx` | 决策行增加 `llm_called`/`llm_error`/`reasoning`/`finish_reason` | 区分 expert 步、解析失败、max_tokens 截断，并展示思考摘录 |
 | `reps/action_adapter.py` | `_action_specs` 把引擎 `Action.preview` 的 damage/apply_aura 投影写入 `spec.metadata["preview"]`，供渲染层显示结算后伤害 | 卡面基础值会误导斩杀判断；preview 是引擎自己的预测，避免复刻规则。2026-11-24 |
+| `reps/action_adapter.py` | `_action_preview` 增抓 `create_entity`（HAND→`hand_add`，CHARACTER→`attach`）与 `remove_entity`（HAND→`hand_remove`，带 `reason`），上限 12→24 | 手牌操作（星斗归位弃雷楔换附魔）此前被截掉，回放无法解释手牌 7→6。2026-11-24 |
+| `envs/match.py` | `DecisionRecord` 增 `preview` 字段，recorder 从所选动作 `spec.metadata["preview"]` 写入，`asdict_decision` 一并输出 | 回放需要逐动作的引擎预测来解释手牌/附属变化。2026-11-24 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 

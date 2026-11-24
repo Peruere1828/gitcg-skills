@@ -1376,13 +1376,26 @@ def test_preview_entries_are_extracted_from_the_engine_message():
     aura.element_type = 3
     aura.target_id = -500033
     aura.target_definition_id = 3302
+    # Hand/attachment mutations are projected too (see the replay annotations).
+    hand = action.preview.add()
+    hand.remove_entity.where = 5  # ENTITY_AREA_HAND
+    hand.remove_entity.entity.definition_id = 114031
+    hand.remove_entity.reason = 4
+    attach = action.preview.add()
+    attach.create_entity.where = 1  # ENTITY_AREA_CHARACTER
+    attach.create_entity.entity.definition_id = 114032
     # Other mutations are ignored.
     action.preview.add().modify_entity_var.variable_name = "energy"
-    for _ in range(20):
+    for _ in range(30):
         action.preview.add().damage.value = 1
 
     entries = _action_preview(action)
+    # damage + aura + hand_remove + attach, then damage entries up to the cap.
     assert len(entries) == PREVIEW_MAX_ENTRIES
+    assert entries[2]["kind"] == "hand_remove"
+    assert entries[2]["definition_id"] == 114031
+    assert entries[3]["kind"] == "attach"
+    assert entries[3]["definition_id"] == 114032
     assert entries[0] == {
         "kind": "damage",
         "damage_type": 3,
