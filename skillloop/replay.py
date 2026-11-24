@@ -9,12 +9,32 @@ already records -- never from a full ``GameState``.
 
 The output is stable for a given match: ranking/tie-breaking happens upstream in
 ``skillloop.extract``, and this module preserves recorder order.
+
+Two optional enrichments read only recorded player views (never a full game
+state):
+
+* dice are rendered as element symbols. On an action line they are the dice the
+  engine *paid* for the action (``自动支付[雷,雷,万]``), which is not the same thing
+  as the dice a player chose to reroll (``重掷 [水,水]``); the two labels are kept
+  distinct so a reader cannot mistake an auto-selected cost for a live pool, and
+  every mechanical row says it came from the script policy, not the LLM (H10);
+* when the recorder captured ``DecisionRecord.player_view`` (``record_views=True``),
+  every action line gets a bounded ``→ 此后场上：...`` suffix describing the
+  public-state delta up to the *next* recorded decision. Games recorded without
+  views keep exactly the old line set (no suffix, no error).
+
+A recorded final state (``final_state=``) adds the closing ``最终：...`` board and
+completes the last action's delta, which the next-view pairing cannot see (H9); a
+trace cut by ``max_actions`` says so on its second line.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from functools import lru_cache
 from typing import Any, Iterable, Sequence
+
+from skillloop.render import _DICE_SYMBOL
 
 # Action kinds shown as one short Chinese label. Unknown kinds fall back to the
 # ``chosen_label`` prefix (e.g. ``use_skill``) so a new engine kind cannot crash
@@ -28,16 +48,47 @@ _KIND_TEXT = {
 }
 
 # Mechanical requests: keep only the first occurrence per (player, type), so the
-# reader sees the opening mulligan/reroll without drowning in UI noise.
-_FIRST_ONLY = {
+# reader sees the opening mulligan/choose-active without drowning in UI noise.
+# ``reroll_dice`` is the exception: one line is kept per player *per round*
+# (see ``compact_trace``) because "what did each side reroll this round" stays
+# useful in later rounds.
+_MECHANICAL_TEXT = {
     "reroll_dice": "重掷",
     "switch_hands": "换牌",
     "choose_active": "选人",
 }
+#: H10: reroll/mulligan/choose-active rows are executed by the *script policy*,
+#: not chosen by the LLM. The row is kept (the user wants dice + board context in
+#: the replay) but labelled, so a reader cannot mistake it for a model decision.
+_MECHANICAL_NOTE = "（脚本策略，非 LLM 决策）"
 _IGNORED_REQUESTS = frozenset({"select_card", "terminal"})
 
 _MAX_LABEL = 28
 _MAX_DICE = 8
+#: Upper bound for one skill description appended to an action line.
+_MAX_DESCRIPTION = 40
+#: Asset names for "statuses" sometimes carry a transient phase marker; the
+#: marker is engine bookkeeping, not part of the status identity.
+_STATUS_NAME_SUFFIXES = ("（已创建）", "（生效中）")
+_CARD_KIND_TEXT = {
+    "weapon": "武器",
+    "artifact": "圣遗物",
+    "talent": "天赋",
+    "event": "事件",
+    "support": "支援",
+}
+#: Upper bound for one ``→ 此后场上：...`` effect suffix (including the arrow).
+_MAX_EFFECT = 120
+#: At most this many public changes per line; the rest collapse into ``等N项``.
+_MAX_EFFECT_ITEMS = 6
+_EFFECT_LEAD = "→ 此后场上："
+_SIDE_TEXT = {0: "我方", 1: "对方"}
+#: H9: cap for the one-line ``最终：...`` HP board.
+_MAX_FINAL = 160
+#: Entity variables that count as "remaining uses / stacks / duration" for the
+#: suffix. ``duration`` is included because NPC-only statuses (e.g. 水光破镜)
+#: expose their remaining rounds there instead of ``usage``.
+_STATUS_VALUE_KEYS = ("usage", "level", "stack", "layer", "count", "shield", "duration")
 
 
 @lru_cache(maxsize=1)
@@ -73,6 +124,45 @@ def _skill_owner_map() -> dict[int, str]:
     return owners
 
 
+@lru_cache(maxsize=1)
+def _npc_skill_table() -> dict[int, tuple[str, str]]:
+    """NPC skill definition id -> ``(owner·skill name, official effect text)``.
+
+    Overlay enemies are absent from the official asset catalog. ``configs/npc``
+    maps an enemy's engine id to its A/E/Q skill entries; the engine skill id is
+    ``engine_id * 10 + slot`` (see ``NpcEnemy.skill_definition_ids``). Failure to
+    load the config just yields an empty table, so traces fall back to ``#id``.
+    """
+    try:
+        from npc.spec import load_enemies
+    except Exception:
+        return {}
+    table: dict[int, tuple[str, str]] = {}
+    try:
+        for enemy in load_enemies().values():
+            owner = str(enemy.name)
+            for kind, definition_id in enemy.skill_definition_ids().items():
+                skill = enemy.skills.get(kind)
+                if skill is None:
+                    continue
+                name = str(skill.name_cn or skill.name or "").strip()
+                table[int(definition_id)] = (
+                    f"{owner}·{name}".strip("·"),
+                    str(skill.effect or ""),
+                )
+            for definition_id, skill in zip(
+                enemy.extra_skill_definition_ids(), enemy.extra_skills
+            ):
+                name = str(skill.name_cn or skill.name or "").strip()
+                table[int(definition_id)] = (
+                    f"{owner}·{name}".strip("·"),
+                    str(skill.effect or ""),
+                )
+    except Exception:
+        return {}
+    return table
+
+
 @lru_cache(maxsize=None)
 def _skill_name(definition_id: int) -> str:
     catalog = _catalog()
@@ -88,7 +178,39 @@ def _skill_name(definition_id: int) -> str:
             name = f"{owner}·{skill.name}".strip("·")
             if name:
                 return name
+    npc_skill = _npc_skill_table().get(int(definition_id))
+    if npc_skill is not None and npc_skill[0]:
+        return npc_skill[0]
     return f"#{int(definition_id)}"
+
+
+def _short_description(text: Any) -> str:
+    """One-line, trailing-period-free skill effect capped at 40 characters."""
+    cleaned = " ".join(str(text or "").split()).rstrip("。.")
+    if not cleaned:
+        return ""
+    if len(cleaned) > _MAX_DESCRIPTION:
+        return cleaned[: _MAX_DESCRIPTION - 1] + "…"
+    return cleaned
+
+
+@lru_cache(maxsize=None)
+def _skill_description(definition_id: int) -> str:
+    """Official effect text for a skill (catalog first, then ``configs/npc``)."""
+    catalog = _catalog()
+    if catalog is not None:
+        try:
+            skill = catalog.skill(int(definition_id))
+        except (KeyError, TypeError, ValueError):
+            skill = None
+        if skill is not None:
+            description = _short_description(getattr(skill, "description", ""))
+            if description:
+                return description
+    npc_skill = _npc_skill_table().get(int(definition_id))
+    if npc_skill is not None:
+        return _short_description(npc_skill[1])
+    return ""
 
 
 @lru_cache(maxsize=None)
@@ -115,6 +237,33 @@ def _character_name(definition_id: int) -> str:
         if character is not None and character.name:
             return str(character.name)
     return f"#{int(definition_id)}"
+
+
+@lru_cache(maxsize=1)
+def _npc_character_names() -> dict[int, str]:
+    """Display names for overlay enemies, whose ids are absent from the catalog.
+
+    ``configs/npc`` maps ``NpcEnemy.engine_id`` to a name; the lookup is lazy and
+    failure-tolerant so replay works in an environment without config data.
+    """
+    try:
+        from npc.spec import load_enemies
+
+        return {
+            int(enemy.engine_id): str(enemy.name)
+            for enemy in load_enemies().values()
+            if int(enemy.engine_id or 0)
+        }
+    except Exception:
+        return {}
+
+
+def _effect_character_name(definition_id: int) -> str:
+    """Catalog name, falling back to the NPC config, then a neutral placeholder."""
+    name = _character_name(definition_id)
+    if name.startswith("#"):
+        name = _npc_character_names().get(int(definition_id), name)
+    return "未知角色" if name.startswith("#") else name
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
@@ -152,6 +301,19 @@ def _side(player: Any) -> str:
 
 
 def _dice_text(decision: Any) -> str:
+    """Dice the engine *paid* for this action, as `` 自动支付[雷,雷,万]``.
+
+    A reroll label also carries dice ids, but those are the dice a player chose
+    to discard (rendered separately as ``重掷 [...]``). Calling this suffix
+    ``自动支付`` states what it is: ``used_dice`` is the engine's auto-selected
+    cost for the chosen action (the model picked the action, not the dice), at
+    most :data:`_MAX_DICE` values in recorder order.
+
+    Values map through the renderer's ``_DICE_SYMBOL`` (1 冰, 2 水, 3 火, 4 雷,
+    5 风, 6 岩, 7 草, 8 万; 0 is the engine's "unspecified" and renders as ``?``).
+    A value outside that table keeps its decimal number, so a future element or a
+    malformed record cannot crash the trace. No paid dice -> empty string.
+    """
     dice = _field(decision, "used_dice", ()) or ()
     try:
         values = [_as_int(value) for value in dice][:_MAX_DICE]
@@ -159,7 +321,11 @@ def _dice_text(decision: Any) -> str:
         return ""
     if not values:
         return ""
-    return " 骰" + ",".join(str(value) for value in values)
+    return " 自动支付[" + ",".join(_dice_symbol(value) for value in values) + "]"
+
+
+def _dice_symbol(value: Any) -> str:
+    return _DICE_SYMBOL.get(_as_int(value), str(value))
 
 
 def _label_head(label: str) -> str:
@@ -186,12 +352,15 @@ def _action_line(round_number: int, player: Any, decision: Any) -> str:
     detail = ""
     if kind == "action_use_skill" and subject:
         detail = f" {_skill_name(subject)}"
+        description = _skill_description(subject)
+        if description:
+            detail += f"（{description}）"
     elif kind == "action_play_card":
         name = _card_name(subject) if subject else ""
         if name:
             detail = f" {name}"
         if card_kind:
-            detail += f" ({card_kind})"
+            detail += f" ({_CARD_KIND_TEXT.get(card_kind, card_kind)})"
     elif kind == "action_switch_active" and subject:
         detail = f" {_character_name(subject)}"
     elif kind == "action_elemental_tuning" and subject:
@@ -202,8 +371,29 @@ def _action_line(round_number: int, player: Any, decision: Any) -> str:
     return f"R{round_number} {_side(player)} {kind_text}{detail}{_dice_text(decision)}"
 
 
+def _reroll_tail(tail: str) -> str:
+    """``2,2,7`` -> ``[水,水,草]``; ``none``/empty stays empty.
+
+    The reroll label carries the dice values the player chose to reroll. They are
+    the same element ids as ``used_dice``, so render them with the shared symbol
+    table and the same 8-die cap as action lines.
+    """
+    parts = [part.strip() for part in str(tail).split(",") if part.strip()]
+    if not parts:
+        return ""
+    symbols: list[str] = []
+    for part in parts[:_MAX_DICE]:
+        try:
+            value = int(part)
+        except ValueError:
+            symbols.append(part[:_MAX_LABEL])
+        else:
+            symbols.append(_dice_symbol(value))
+    return "[" + ",".join(symbols) + "]"
+
+
 def _mechanical_line(round_number: int, player: Any, request: str, decision: Any) -> str:
-    kind_text = _FIRST_ONLY[request]
+    kind_text = _MECHANICAL_TEXT[request]
     label = str(_field(decision, "chosen_label") or "")
     tail = label.split(":", 1)[1].strip() if ":" in label else ""
     if tail.lower() == "none":
@@ -215,7 +405,393 @@ def _mechanical_line(round_number: int, player: Any, request: str, decision: Any
     # means nothing to the reader; keep just "选人".
     if request == "choose_active":
         tail = ""
-    return f"R{round_number} {_side(player)} {kind_text}{(' ' + tail[:_MAX_LABEL]) if tail else ''}"
+    if request == "reroll_dice":
+        tail = _reroll_tail(tail)
+    body = f"R{round_number} {_side(player)} {kind_text}{(' ' + tail[:_MAX_LABEL]) if tail else ''}"
+    return body + _MECHANICAL_NOTE
+
+
+def _view_players(view: Any) -> list[dict[str, Any]]:
+    """The two player dicts of a ``dataclasses.asdict(StateSnapshot)`` view."""
+    if not isinstance(view, dict):
+        return []
+    players = view.get("players")
+    if not isinstance(players, (list, tuple)):
+        return []
+    return [player for player in players if isinstance(player, dict)]
+
+
+def _characters(player: dict[str, Any]) -> list[dict[str, Any]]:
+    characters = player.get("characters")
+    if not isinstance(characters, (list, tuple)):
+        return []
+    return [character for character in characters if isinstance(character, dict)]
+
+
+def _entity_name(entity: Any) -> str:
+    """Resolve a public entity name without ever exposing an instance id.
+
+    ``definition_id`` is authoritative; some older/newer projections carry
+    ``card_definition_id`` instead, so that is the second choice. NPC/overlay
+    entities are not in the official catalog under their own id, but the engine
+    namespaces their variant definitions at ``official_id + 70000`` (verified:
+    ``193011 -> 123011 潜行``, ``192021 -> 122021 水光破镜``,
+    ``192011 -> 122011 纯水幻形·花鼠``). That offset is tried only after the
+    direct lookup misses, and the numeric instance ``id`` is never a name. If no
+    path resolves, return ``未知状态``.
+    """
+    if not isinstance(entity, dict):
+        return "未知状态"
+    for field in ("definition_id", "card_definition_id"):
+        definition_id = _as_int(entity.get(field))
+        if not definition_id:
+            continue
+        name = _card_name(definition_id)
+        if not name.startswith("#"):
+            return _clean_status_name(name)
+        if definition_id > 70000:
+            variant = _card_name(definition_id - 70000)
+            if not variant.startswith("#"):
+                return _clean_status_name(variant)
+    return "未知状态"
+
+
+def _clean_status_name(name: str) -> str:
+    """Drop transient ``（已创建）`` / ``（生效中）`` markers from a status name."""
+    cleaned = str(name).strip()
+    changed = True
+    while changed:
+        changed = False
+        for suffix in _STATUS_NAME_SUFFIXES:
+            if cleaned.endswith(suffix):
+                cleaned = cleaned[: -len(suffix)].strip()
+                changed = True
+    return cleaned or str(name)
+
+
+def _entity_key(entity: Any) -> tuple[str, int | None]:
+    """``(display name, uses/layers)`` for one support/summon/status/entity."""
+    if not isinstance(entity, dict):
+        return ("未知状态", None)
+    name = _entity_name(entity)
+    value: int | None = None
+    variables = entity.get("variables")
+    if isinstance(variables, dict):
+        for key in _STATUS_VALUE_KEYS:
+            if key in variables:
+                value = _as_int(variables.get(key))
+                break
+    return (name, value)
+
+
+def _side_entity_counter(
+    players: Sequence[dict[str, Any]],
+) -> Counter[tuple[int, str, int | None]]:
+    """Multiset of public supports/summons/statuses/attachments, both sides.
+
+    Counting by ``(side, name, value)`` implements the requested "same name with
+    different numbers are different stacks, identical ones are counted together".
+    Only names and use/layer numbers are kept -- never hand-card identities.
+    """
+    counter: Counter[tuple[int, str, int | None]] = Counter()
+    for side, player in enumerate(players):
+        if side not in _SIDE_TEXT:
+            continue
+        entities: list[Any] = []
+        for character in _characters(player):
+            attached = character.get("entities")
+            if isinstance(attached, (list, tuple)):
+                entities.extend(attached)
+        for group in ("combat_statuses", "summons", "supports"):
+            group_entities = player.get(group)
+            if isinstance(group_entities, (list, tuple)):
+                entities.extend(group_entities)
+        for entity in entities:
+            name, value = _entity_key(entity)
+            counter[(side, name, value)] += 1
+    return counter
+
+
+def _character_changes(
+    before_players: Sequence[dict[str, Any]],
+    after_players: Sequence[dict[str, Any]],
+) -> list[str]:
+    """Health/energy/aura/defeated deltas per character slot, both sides."""
+    items: list[str] = []
+    for side in (0, 1):
+        if side >= len(before_players) or side >= len(after_players):
+            continue
+        before_chars = _characters(before_players[side])
+        after_chars = _characters(after_players[side])
+        for slot in range(min(len(before_chars), len(after_chars))):
+            before = before_chars[slot]
+            after = after_chars[slot]
+            definition_id = _as_int(
+                after.get("definition_id") or before.get("definition_id")
+            )
+            label = (
+                f"{_SIDE_TEXT[side]}·"
+                f"{_effect_character_name(definition_id)}"
+            )
+            before_hp = _as_int(before.get("health"))
+            after_hp = _as_int(after.get("health"))
+            newly_defeated = not bool(before.get("defeated")) and bool(
+                after.get("defeated")
+            )
+            if before_hp != after_hp:
+                item = f"{label} {before_hp}→{after_hp}"
+                if newly_defeated:
+                    item += " 击倒"
+                items.append(item)
+            elif newly_defeated:
+                items.append(f"{label} 击倒")
+            # A defeat resets energy/aura in the engine; the HP+击倒 item already
+            # says what happened, so do not repeat the cleanup numbers.
+            if newly_defeated:
+                continue
+            before_energy = _as_int(before.get("energy"))
+            after_energy = _as_int(after.get("energy"))
+            if before_energy != after_energy:
+                items.append(f"{label} 能量 {before_energy}→{after_energy}")
+            before_aura = _as_int(before.get("aura"))
+            after_aura = _as_int(after.get("aura"))
+            if before_aura != after_aura:
+                items.append(
+                    f"{label} 附着 {_aura_symbol(before_aura)}→{_aura_symbol(after_aura)}"
+                )
+    return items
+
+
+def _value_multiset(values: Counter[int | None]) -> str:
+    """``{2: 1}`` -> ``2``; ``{1: 2}`` -> ``1×2``; empty -> ``无``."""
+    if not values:
+        return "无"
+    parts: list[str] = []
+    for value, count in sorted(
+        values.items(), key=lambda item: (-1 if item[0] is None else item[0])
+    ):
+        text = "无" if value is None else str(value)
+        if count > 1:
+            text += f"×{count}"
+        parts.append(text)
+    return ",".join(parts)
+
+
+def _status_changes(
+    before_players: Sequence[dict[str, Any]],
+    after_players: Sequence[dict[str, Any]],
+) -> list[str]:
+    """Added/removed/changed public supports/summons/statuses/attachments, per side.
+
+    Same-name entities are compared as a multiset of ``uses/layers`` values: a new
+    name reads ``获得「X」(2)``, a vanished one ``消失「X」(2)``, and a value change
+    (e.g. a summon ticking 2 -> 1) reads ``「X」2→1`` instead of a misleading
+    simultaneous gain+loss.
+    """
+    before = _side_entity_counter(before_players)
+    after = _side_entity_counter(after_players)
+    before_grouped: dict[tuple[int, str], Counter[int | None]] = {}
+    after_grouped: dict[tuple[int, str], Counter[int | None]] = {}
+    for (side, name, value), count in before.items():
+        before_grouped.setdefault((side, name), Counter())[value] += count
+    for (side, name, value), count in after.items():
+        after_grouped.setdefault((side, name), Counter())[value] += count
+
+    items: list[str] = []
+    for key in sorted(set(before_grouped) | set(after_grouped)):
+        side, name = key
+        old_values = before_grouped.get(key, Counter())
+        new_values = after_grouped.get(key, Counter())
+        if old_values == new_values:
+            continue
+        if not old_values:
+            for value, count in sorted(
+                new_values.items(), key=lambda item: (-1 if item[0] is None else item[0])
+            ):
+                suffix = "" if value is None else f"({value})"
+                item = f"{_SIDE_TEXT[side]} 获得「{name}」{suffix}"
+                if count > 1:
+                    item += f"×{count}"
+                items.append(item)
+        elif not new_values:
+            for value, count in sorted(
+                old_values.items(), key=lambda item: (-1 if item[0] is None else item[0])
+            ):
+                suffix = "" if value is None else f"({value})"
+                item = f"{_SIDE_TEXT[side]} 消失「{name}」{suffix}"
+                if count > 1:
+                    item += f"×{count}"
+                items.append(item)
+        else:
+            items.append(
+                f"{_SIDE_TEXT[side]}「{name}」"
+                f"{_value_multiset(old_values)}→{_value_multiset(new_values)}"
+            )
+    return items
+
+
+def _global_changes(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    before_players: Sequence[dict[str, Any]],
+    after_players: Sequence[dict[str, Any]],
+    *,
+    before_actor: int | None,
+    after_actor: int | None,
+) -> list[str]:
+    """Dice counts, hand count, end declaration and round number.
+
+    Private fields are only compared when both views belong to the same player
+    *and* that player is the contestant (side 0, ``我方``): a masked view zeroes
+    the opponent's dice and zeroes hand-card definition ids, so a cross-seat
+    comparison is not trustworthy, and the NPC's private hand/dice should not be
+    surfaced in a contestant-facing trace. Public fields (declared end, round
+    number) are compared from either seat.
+    """
+    items: list[str] = []
+    before_round = _as_int(before.get("round_number"))
+    after_round = _as_int(after.get("round_number"))
+    same_viewer = before_actor == 0 and after_actor == 0
+    if same_viewer:
+        side = 0
+        if side < min(len(before_players), len(after_players)):
+            before_dice = before_players[side].get("dice")
+            after_dice = after_players[side].get("dice")
+            before_count = (
+                len(before_dice) if isinstance(before_dice, (list, tuple)) else 0
+            )
+            after_count = (
+                len(after_dice) if isinstance(after_dice, (list, tuple)) else 0
+            )
+            if before_count != after_count:
+                items.append(
+                    f"{_SIDE_TEXT[side]}骰 {before_count}→{after_count}"
+                )
+            before_hand = before_players[side].get("hand_cards")
+            after_hand = after_players[side].get("hand_cards")
+            before_hand_count = (
+                len(before_hand) if isinstance(before_hand, (list, tuple)) else 0
+            )
+            after_hand_count = (
+                len(after_hand) if isinstance(after_hand, (list, tuple)) else 0
+            )
+            if before_hand_count != after_hand_count:
+                items.append(
+                    f"{_SIDE_TEXT[side]}手牌 {before_hand_count}→{after_hand_count}张"
+                )
+    # A new round resets ``declared_end`` automatically; reporting "撤回结束"
+    # there would be an engine artifact, not a decision.
+    if before_round == after_round:
+        for side in (0, 1):
+            if side >= len(before_players) or side >= len(after_players):
+                continue
+            before_end = bool(before_players[side].get("declared_end"))
+            after_end = bool(after_players[side].get("declared_end"))
+            if before_end != after_end:
+                items.append(
+                    f"{_SIDE_TEXT[side]} {'宣布结束' if after_end else '撤回结束'}"
+                )
+    if before_round != after_round:
+        items.append(f"回合 {before_round}→{after_round}")
+    return items
+
+
+def _aura_symbol(value: Any) -> str:
+    """Elemental aura id as ``冰``/``雷``/...; ``0`` means no aura."""
+    number = _as_int(value)
+    if number == 0:
+        return "无"
+    return _DICE_SYMBOL.get(number, str(number))
+
+
+def _cap_effect(text: str) -> str:
+    """Hard cap one suffix at :data:`_MAX_EFFECT` characters (``…`` on overflow)."""
+    text = str(text)
+    if len(text) <= _MAX_EFFECT:
+        return text
+    return text[: _MAX_EFFECT - 1] + "…"
+
+
+def _effect_suffix(
+    before: Any,
+    after: Any,
+    *,
+    before_actor: int | None = None,
+    after_actor: int | None = None,
+) -> str:
+    """Bounded public-state delta between two recorded player views.
+
+    ``before`` is the view attached to the action's own decision (the state the
+    actor saw); ``after`` is the next decision's view. The delta is labelled
+    ``→ 此后场上：`` on purpose: between the two decisions the engine may have
+    resolved the opponent's action, end-phase summons or a turn boundary, so the
+    changes are *observed after this action*, not necessarily caused by it.
+
+    Only public facts are compared: character HP/energy/aura/defeated flags,
+    support/summon/status/attachment names with remaining uses or layers, and the
+    round number. Hand counts and dice are private: they are compared only when
+    both views come from the same player and that player is the contestant
+    (``我方``), because the NPC's private hand/dice are neither needed nor safe to
+    surface. A cross-seat window (the usual case after a combat action, where the
+    next decision belongs to the opponent) therefore never reports hand or dice
+    numbers -- the masked view zeroes the opponent's dice and zeroes hand-card
+    definition ids, so a number inferred across seats would be a guess. Same-name
+    entities are merged by name+value; additions and removals read ``获得`` /
+    ``消失``, while a value change reads ``「X」2→1``. At most
+    :data:`_MAX_EFFECT_ITEMS` changes are listed (the rest collapse into ``等N项``)
+    and the whole suffix is capped at :data:`_MAX_EFFECT` characters. Nothing is
+    emitted when the views are missing or no public fact changed.
+    """
+    before_players = _view_players(before)
+    after_players = _view_players(after)
+    if len(before_players) < 2 or len(after_players) < 2:
+        return ""
+
+    items: list[str] = []
+    items.extend(_character_changes(before_players, after_players))
+    items.extend(_status_changes(before_players, after_players))
+    items.extend(
+        _global_changes(
+            before,
+            after,
+            before_players,
+            after_players,
+            before_actor=before_actor,
+            after_actor=after_actor,
+        )
+    )
+    if not items:
+        return ""
+    extra = len(items) - _MAX_EFFECT_ITEMS
+    if extra > 0:
+        items = items[:_MAX_EFFECT_ITEMS] + [f"等{extra}项"]
+    return " " + _cap_effect(_EFFECT_LEAD + "；".join(items))
+
+
+def _nearest_view_indices(
+    views: Sequence[Any],
+) -> tuple[list[int | None], list[int | None]]:
+    """For each decision: its own/last previous view, and the next later view.
+
+    ``previous[i]`` is ``i`` when decision ``i`` has a view, else the index of the
+    closest earlier decision with one (``None`` if none). ``following[i]`` is the
+    closest index ``j > i`` with a view (``None`` after the last one).
+    """
+    count = len(views)
+    present = [isinstance(view, dict) for view in views]
+    previous: list[int | None] = [None] * count
+    last: int | None = None
+    for index in range(count):
+        if present[index]:
+            last = index
+        previous[index] = last
+    following: list[int | None] = [None] * count
+    nxt: int | None = None
+    for index in range(count - 1, -1, -1):
+        following[index] = nxt
+        if present[index]:
+            nxt = index
+    return previous, following
 
 
 def _reaction_lines(events: Iterable[Any]) -> list[str]:
@@ -266,6 +842,75 @@ def _final_line(row: dict[str, Any]) -> str:
     return f"结局 {outcome}，{rounds_text} 回合；目标 {marks}"
 
 
+def _as_view(state: Any) -> dict[str, Any] | None:
+    """Normalize a recorded final state to a view dict.
+
+    The recorder stores ``MatchRecord.final_state_json``, which callers decode
+    into either a plain dict (``json.loads``) or a ``StateSnapshot`` dataclass
+    (``reps.snapshot.snapshot_state``). Both are accepted; anything else is
+    ignored so a trace never fails on an odd payload.
+    """
+    if isinstance(state, dict):
+        return state
+    if state is None:
+        return None
+    if isinstance(state, str):
+        # ``MatchRecord.final_state_json``: decode with the same snapshot helper the
+        # objective judge uses, so one argument works at the call site.
+        try:
+            from reps.snapshot import snapshot_state
+
+            return _as_view(snapshot_state(None, state))
+        except Exception:
+            return None
+    try:
+        from dataclasses import asdict, is_dataclass
+
+        if is_dataclass(state) and not isinstance(state, type):
+            return asdict(state)
+    except Exception:
+        return None
+    return None
+
+
+def _hp_board(players: Sequence[dict[str, Any]], side: int) -> str:
+    """``刻晴 0/10、柯莱 2/11`` for one side, in slot order."""
+    if side >= len(players):
+        return ""
+    parts: list[str] = []
+    for character in _characters(players[side]):
+        definition_id = _as_int(character.get("definition_id"))
+        name = (
+            _effect_character_name(definition_id) if definition_id else "未知角色"
+        )
+        health = _as_int(character.get("health"))
+        max_health = _as_int(character.get("max_health")) or health
+        parts.append(f"{name} {health}/{max_health}")
+    return "、".join(parts)
+
+
+def _final_state_line(state: Any) -> str:
+    """H9: ``最终：我方 <name hp/max>…；对方 …`` from the final snapshot.
+
+    Skipped when the snapshot is missing or lacks the per-character HP the line
+    needs, so old/partial records keep the pre-existing trace.
+    """
+    players = _view_players(_as_view(state))
+    if len(players) < 2:
+        return ""
+    ours = _hp_board(players, 0)
+    theirs = _hp_board(players, 1)
+    if not ours or not theirs:
+        return ""
+    text = f"最终：我方 {ours}；对方 {theirs}"
+    return text if len(text) <= _MAX_FINAL else text[:_MAX_FINAL - 1] + "…"
+
+
+def _truncation_note(n_decisions: int, shown: int) -> str:
+    """H9: one line saying the replay was cut (and how much of it is missing)."""
+    return f"（回放已截断：共 {n_decisions} 个决策，仅显示前 {shown} 行）"
+
+
 def compact_trace(
     row: dict[str, Any],
     decisions: Sequence[Any] | None,
@@ -273,46 +918,92 @@ def compact_trace(
     *,
     max_actions: int = 40,
     meta: dict[str, Any] | None = None,
+    final_state: Any = None,
 ) -> list[str]:
     """Render one match as at most ``max_actions`` short lines.
 
     * one line per ``action`` decision for both sides (``P0`` = contestant,
       ``P1(NPC)`` = the stage enemy), in recorder order;
-    * the first ``reroll_dice`` / ``switch_hands`` / ``choose_active`` per player;
+    * the first ``switch_hands`` / ``choose_active`` per player, and one
+      ``reroll_dice`` line per player *per round* (the dice they rerolled);
+      these rows are executed by the script policy, so each carries
+      ``（脚本策略，非 LLM 决策）`` (H10);
     * reaction events, coalesced when consecutive;
     * one closing line with winner, rounds and objective marks (always kept).
 
+    Action lines carry an ``→ 此后场上：...`` suffix only when the recorder stored
+    ``player_view`` (``record_views=True``); see :func:`_effect_suffix` for what is
+    compared and why the wording does not claim causality. Paid dice read
+    ``自动支付[...]``: the engine auto-selected them for the chosen action, they are
+    not a model decision. Without views the line set is exactly the
+    pre-enrichment trace (no suffix, no new exceptions).
+
+    ``final_state`` (optional, H9) is the recorded final snapshot (a view dict or
+    a ``StateSnapshot``). When given, it supplies a one-line ``最终：...`` HP board
+    before the scoreboard and completes the last action's delta when that line has
+    no ``→ 此后场上`` (it is the usual case: the last decision has no successor
+    view). Without it, the HP board falls back to the last recorded view.
+
     ``meta`` (optional out-parameter) receives ``n_action_lines`` and
-    ``truncated`` so the runner can record why a trace was cut. Missing labels,
-    round numbers, dice, or a malformed row never raise.
+    ``truncated`` so the runner can record why a trace was cut. When the body
+    exceeds the cap, the oldest mechanical rows (``重掷``/``换牌``/``选人``) are
+    dropped first so decision lines survive; if that is still not enough, the
+    trace keeps its earliest rows (the pre-existing behaviour). A cut trace says
+    so on its second line. Missing labels, round numbers, dice, or a malformed
+    row never raise.
     """
     decisions = list(decisions or ())
     events = list(events or ())
+    views = [_field(decision, "player_view") for decision in decisions]
+    previous_view, following_view = _nearest_view_indices(views)
 
-    action_lines: list[str] = []
-    seen_mechanical: set[tuple[int, str]] = set()
+    action_entries: list[tuple[str, bool, int | None]] = []
+    seen_mechanical: set[tuple[Any, ...]] = set()
     ended: set[int] = set()
     round_number = 1
 
-    for decision in decisions:
+    for index, decision in enumerate(decisions):
         player = _as_int(_field(decision, "player", 0))
         round_number = max(1, _round_of(decision, round_number))
         request = str(_field(decision, "request_type", "") or "")
         kind = str(_field(decision, "chosen_kind", "") or "")
 
         if request == "action" or kind.startswith("action_"):
-            action_lines.append(_action_line(round_number, player, decision))
-        elif request in _FIRST_ONLY:
-            key = (player, request)
+            line = _action_line(round_number, player, decision)
+            before_index = previous_view[index]
+            after_index = following_view[index]
+            if before_index is not None and after_index is not None:
+                line += _effect_suffix(
+                    views[before_index],
+                    views[after_index],
+                    before_actor=_as_int(
+                        _field(decisions[before_index], "player", 0)
+                    ),
+                    after_actor=_as_int(
+                        _field(decisions[after_index], "player", 0)
+                    ),
+                )
+            action_entries.append((line, False, index))
+        elif request in _MECHANICAL_TEXT:
+            key: tuple[Any, ...] = (player, request)
+            if request == "reroll_dice":
+                # One reroll row per player per round: later rounds stay legible.
+                key = (player, request, round_number)
             if key in seen_mechanical:
                 continue
             seen_mechanical.add(key)
-            action_lines.append(_mechanical_line(round_number, player, request, decision))
+            action_entries.append(
+                (
+                    _mechanical_line(round_number, player, request, decision),
+                    True,
+                    None,
+                )
+            )
         elif request in _IGNORED_REQUESTS:
             continue
         elif not request and not kind:
             # Unknown/empty record: keep it visible instead of silently dropping it.
-            action_lines.append(f"R{round_number} {_side(player)} ?")
+            action_entries.append((f"R{round_number} {_side(player)} ?", False, None))
         else:
             continue
 
@@ -323,15 +1014,75 @@ def compact_trace(
                 round_number += 1
                 ended.clear()
 
+    n_action_lines = len(action_entries)
     reaction_lines = _reaction_lines(events)
-    body = action_lines + reaction_lines
+    body: list[tuple[str, bool, int | None]] = action_entries + [
+        (line, False, None) for line in reaction_lines
+    ]
     cap = max(1, _as_int(max_actions, 40))
-    truncated = len(body) > cap - 1
-    body = body[: cap - 1]
+    limit = cap - 1
+    truncated = len(body) > limit
+    if truncated:
+        # Drop the oldest mechanical rows first (rerolls/mulligans are context,
+        # not evidence); if that still is not enough, keep the earliest rows so
+        # the trace remains a coherent opening-to-close narrative.
+        while len(body) > limit:
+            index = next(
+                (i for i, (_, mechanical, _src) in enumerate(body) if mechanical), None
+            )
+            if index is None:
+                break
+            body.pop(index)
+        if len(body) > limit:
+            body = body[:limit]
+
+    # H9: the final snapshot may only be knowable *after* the last decision, so the
+    # last surviving action line gets its delta filled in from it.
+    final_view = _as_view(final_state)
+    last_action: int | None = None
+    for position in range(len(body) - 1, -1, -1):
+        _line, _mechanical, _source = body[position]
+        if not _mechanical and _source is not None:
+            last_action = position
+            break
+    if final_view is not None and last_action is not None:
+        line, mechanical, source = body[last_action]
+        if _EFFECT_LEAD not in line:
+            before_index = following_view[source]
+            if before_index is None:
+                before_index = previous_view[source]
+            if before_index is not None:
+                suffix = _effect_suffix(
+                    views[before_index],
+                    final_view,
+                    before_actor=_as_int(
+                        _field(decisions[before_index], "player", 0)
+                    ),
+                    # The final snapshot is the full state, so its private fields
+                    # are comparable only for the contestant's own hand/dice.
+                    after_actor=0,
+                )
+                if suffix:
+                    body[last_action] = (line + suffix, mechanical, source)
+
+    lines = [line for line, _mechanical, _source in body]
+    n_shown = len(lines)
+    if truncated and lines:
+        lines.insert(1, _truncation_note(len(decisions), n_shown))
+    hp_view = final_view
+    if hp_view is None:
+        for index in range(len(views) - 1, -1, -1):
+            if isinstance(views[index], dict):
+                hp_view = views[index]
+                break
+    hp_line = _final_state_line(hp_view)
+    if hp_line:
+        lines.append(hp_line)
+    lines.append(_final_line(row))
 
     if meta is not None:
-        meta["n_action_lines"] = len(action_lines)
-        meta["n_lines"] = len(body) + 1
+        meta["n_action_lines"] = n_action_lines
+        meta["n_lines"] = len(lines)
         meta["truncated"] = truncated
 
-    return body + [_final_line(row)]
+    return lines

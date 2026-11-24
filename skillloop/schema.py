@@ -99,6 +99,11 @@ class Skill:
     source_games: tuple[str, ...] = ()
     created_at: str = ""
     updated_at: str = ""
+    #: When the extraction model declares that this candidate *replaces* an
+    #: existing skill, this holds that skill's id (validated against the current
+    #: library; empty otherwise). Writing a candidate then updates the existing
+    #: skill in place (id/name/layer kept) instead of adding a contradictory one.
+    replaces: str = ""
 
     def __post_init__(self) -> None:
         if self.layer not in LAYERS:
@@ -122,6 +127,8 @@ class Skill:
         }
         if self.source_games:
             payload["source_games"] = list(self.source_games)
+        if self.replaces:
+            payload["replaces"] = self.replaces
         if self.created_at:
             payload["created_at"] = self.created_at
         if self.updated_at:
@@ -142,6 +149,7 @@ class Skill:
             source_games=tuple(payload.get("source_games") or ()),
             created_at=str(payload.get("created_at") or ""),
             updated_at=str(payload.get("updated_at") or ""),
+            replaces=str(payload.get("replaces") or ""),
         )
 
     def prompt_block(self) -> str:

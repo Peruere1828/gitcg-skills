@@ -348,10 +348,11 @@ def test_progress_block_is_in_user_message_and_counts_our_card_plays():
     )
     agent.choose(_built_cards(tuple(weapons)))
     first = client.calls[0][1]["content"]
-    assert first.startswith("回合 ")
+    assert first.startswith("第")
+    assert "三星要求≤5轮；对局上限15轮" in first
     assert "未完成目标：" in first
     assert "打出2张武器牌（我方已打0/2）" in first
-    assert "赢得胜利（未知）" in first
+    assert "赢得胜利（尚未达成）" in first
 
     agent.choose(_built_cards(tuple(weapons)))
     second = client.calls[1][1]["content"]

@@ -34,6 +34,10 @@ REQ_VOID = 0
 REQ_ALIGNED = 8
 REQ_ENERGY = 9
 REQ_LEGEND = 10
+# ``Action.preview`` is the engine's own post-settlement forecast. Only the entries
+# the prompt can state faithfully are kept (damage / aura attachment), and the list
+# is capped so one burst that hits every character cannot flood a candidate line.
+PREVIEW_MAX_ENTRIES = 12
 _RESULT_RELABEL_CACHE_LIMIT = 2048
 _RESULT_RELABEL_CACHE_LOCK = RLock()
 _RESULT_RELABEL_CACHE: dict[tuple[Any, ...], dict[int, int]] = {}
@@ -432,6 +436,60 @@ def _switch_hands_specs(**kwargs):
     }
 
 
+def _action_preview(action: Any, *, limit: int = PREVIEW_MAX_ENTRIES) -> list[dict[str, Any]]:
+    """JSON-safe summary of ``action.preview`` (the engine's forecast).
+
+    The engine pre-settles every legal action and writes the resulting mutations to
+    ``Action.preview``; a card's own description cannot know about shields, buffs or
+    the current aura, so the prompt reads the *forecast* instead. Only ``damage`` and
+    ``apply_aura`` entries are kept (they are the two the candidate line states);
+    every other mutation (entity var, create/remove entity, switch active, ...) is
+    dropped because it would need its own vocabulary. The list is capped at
+    ``limit`` entries.
+
+    Field names mirror ``build/engine/proto/mutation_pb2.pyi`` (``DamageEM`` /
+    ``ApplyAuraEM``) so a reader can check one against the other.
+    """
+    entries: list[dict[str, Any]] = []
+    for item in getattr(action, "preview", ()) or ():
+        try:
+            fields = {field.name for field, _value in item.ListFields()}
+        except Exception:
+            continue
+        if "damage" in fields:
+            damage = item.damage
+            entries.append(
+                {
+                    "kind": "damage",
+                    "damage_type": int(damage.damage_type),
+                    "value": int(damage.value),
+                    "target_id": int(damage.target_id),
+                    "target_definition_id": int(damage.target_definition_id),
+                    "reaction_type": int(damage.reaction_type),
+                    "cause_defeated": bool(damage.cause_defeated),
+                    "old_health": int(damage.old_health),
+                    "new_health": int(damage.new_health),
+                    "heal_kind": int(damage.heal_kind),
+                }
+            )
+        elif "apply_aura" in fields:
+            aura = item.apply_aura
+            entries.append(
+                {
+                    "kind": "aura",
+                    "element_type": int(aura.element_type),
+                    "target_id": int(aura.target_id),
+                    "target_definition_id": int(aura.target_definition_id),
+                    "reaction_type": int(aura.reaction_type),
+                }
+            )
+        else:
+            continue
+        if len(entries) >= int(limit):
+            break
+    return entries
+
+
 def _action_specs(**kwargs):
     request = kwargs["request"]
     acting_player = kwargs["acting_player"]
@@ -454,6 +512,20 @@ def _action_specs(**kwargs):
             hand_card_definitions=hand_card_definitions,
         )
         auto_selected = tuple(int(d) for d in getattr(action, "auto_selected_dice", ()))
+        preview = _action_preview(action)
+        metadata: dict[str, Any] = {
+            "action_index": int(action_index),
+            "required_cost": tuple(
+                (int(req.type), int(req.count))
+                for req in action.required_cost
+            ),
+            "is_fast": bool(getattr(action, "is_fast", False)),
+        }
+        if preview:
+            # Older recordings have no ``preview`` at all; keeping the key absent
+            # lets the renderer fall back to the static card text instead of
+            # claiming "nothing will happen".
+            metadata["preview"] = preview
         payments = (
             [auto_selected]
             if auto_selected
@@ -478,14 +550,7 @@ def _action_specs(**kwargs):
                         discarded_hand_slot=int(semantic.get("discarded_hand_slot", -1)),
                         discarded_card_definition_id=int(semantic.get("discarded_card_definition_id", 0)),
                         target_dice=int(semantic.get("target_dice", 0)),
-                        metadata={
-                            "action_index": int(action_index),
-                            "required_cost": tuple(
-                                (int(req.type), int(req.count))
-                                for req in action.required_cost
-                            ),
-                            "is_fast": bool(getattr(action, "is_fast", False)),
-                        },
+                        metadata=dict(metadata),
                     ),
                     payload={
                         "chosen_action_index": action_index,

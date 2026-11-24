@@ -1,0 +1,16 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "rule_equipment",
+    "strat_equipment_timing",
+    "strat_mulligan",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "三星需5回合内胜利并打出武器牌：装备规则与时机帮助尽早打武器，起手保留装备牌，回合上限提醒速攻节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "ae48cd329733",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

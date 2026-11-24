@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_burst_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "草雷双元素需先附着再补元素触发反应；集火残血快速减员；爆发留斩杀；5回合上限强调节奏优先。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "fedcd1814065",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

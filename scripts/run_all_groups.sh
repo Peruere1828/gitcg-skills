@@ -15,7 +15,7 @@
 #   llm_empty   LLM + game rules only (data/skills/rules_v1, 17 rule;
 #               no strategy/stage_specific, no loadout)             -- no --library
 #   static      LLM + rules + hand-written static strategies
-#               (data/skills/static_v1, 17+10) + reports/loadouts/v1
+#               (data/skills/static_v1, 17+10) + reports/loadouts/v2
 #   dynamic     LLM + rules + evolved strategies
 #               (data/skills/dyn_v4, 17+23) + reports/loadouts/v4
 #
@@ -30,7 +30,7 @@ WORKERS="${2:-6}"
 EVAL_GROUPS="${EVAL_GROUPS:-scripted contestant llm_empty static dynamic}"
 STATIC_LIB="${STATIC_LIB:-data/skills/static_v1}"
 DYNAMIC_LIB="${DYNAMIC_LIB:-data/skills/dyn_v4}"
-STATIC_LOADOUT="${STATIC_LOADOUT:-reports/loadouts/v1}"
+STATIC_LOADOUT="${STATIC_LOADOUT:-reports/loadouts/v2}"
 DYNAMIC_LOADOUT="${DYNAMIC_LOADOUT:-reports/loadouts/v4}"
 DECK="${DECK:-superconduct_aggro}"
 # Optional in-game notebook for the LLM groups (default off). This is an A/B knob:
@@ -42,7 +42,6 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 common=(
   --stages all --seeds "$SEEDS" --workers "$WORKERS" --deck "$DECK"
   --stage-decks configs/stage_decks.json
-  --card-version v3.3.0
   --stage-rules
 )
 

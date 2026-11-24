@@ -506,7 +506,11 @@ def _eval_target(
             info["deck"] = deck
             info["characters"] = [int(c) for c in spec.characters]
             info["cards"] = [int(c) for c in spec.cards]
-            info["card_version"] = _era_version() if is_era(deck) else None
+            # Do not implicitly pin era decks to ERA_VERSION: the era list only
+            # describes where a deck came from. Playing it in the engine's
+            # built-in pool (configs/engine.lock) keeps card text/costs in sync
+            # with the assets; an explicit --card-version still wins.
+            info["card_version"] = None
     if config.stage_rules:
         try:
             from npc.stage_rules import stage_rules_json
@@ -2742,7 +2746,10 @@ def main() -> None:
     ap.add_argument(
         "--card-version",
         default=None,
-        help="固定引擎卡池（如 v3.3.0）；默认用 eval.card_version/引擎默认",
+        help=(
+            "可选卡池 pin；默认跟随 eval.card_version / 引擎内置池 "
+            "(configs/engine.lock)。不要传 v3.3.0（资产 API 已下线，会错配卡面/费用）"
+        ),
     )
     ap.add_argument(
         "--rotation",

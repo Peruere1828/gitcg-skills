@@ -12,14 +12,23 @@ filtering and no candidate re-ordering. Only presentation is enriched:
 * both sides' supports / summons / combat statuses and each character's
   attachments (weapons, artifacts, talents) are listed;
 * the opponent's declared-end flag is shown;
-* skills get their type label, an 80-character description summary and a
+* skills get their type label, a 120-character description summary and a
   damage attachment/reaction hint; cards get a description summary;
+* a candidate whose ``metadata["preview"]`` carries the engine's own settlement can
+  end with ``；预计：…`` (target, settled damage, reaction, defeat, heal), which
+  outranks the static card text and replaces the static reaction hint;
 * ``knowledge_message`` puts the static per-game facts (our/opponent character
   skill sheets and the whole deck) into the cached system prefix, so the
-  per-turn state only needs names and numbers.
+  per-turn state only needs names and numbers. That reference copy prints the
+  **full** description (only a 400-character safety cap), because a card's cost
+  and effect must be reproducible from the prompt alone; the per-decision user
+  message keeps a 120-character cap as a cost guard.
 
-``system_message`` and ``user_message`` stay inherited from ``StateRenderer``,
-so the role, objective progress block and output contract are unchanged.
+``system_message`` is overridden here (2026-11 refactor) to the fixed layout:
+role → game rules → stage special rules (when the stage has any) → card knowledge
+(+ glossary) → objectives → candidate-forecast precedence note → learned skills →
+output contract. ``user_message`` stays inherited, so the per-decision progress
+block, board and candidate list are unchanged.
 """
 
 from __future__ import annotations
@@ -30,7 +39,24 @@ from typing import Any
 
 from reps.schema import OptionKind
 from skillloop.passive_skills import passives_for
-from skillloop.render import StateRenderer, _dice_symbol, _phase_label
+from skillloop.prompt_v2 import (
+    CARD_INFO_HEADER,
+    GAME_RULES_V2,
+    PREVIEW_PRECEDENCE_NOTE,
+    SKILLS_HEADER,
+    STAGE_RULES_HEADER,
+    glossary_section,
+    objective_message,
+    stage_special_rules_text,
+)
+from skillloop.render import (
+    OUTPUT_CONTRACT,
+    SYSTEM_ROLE,
+    StateRenderer,
+    _dice_symbol,
+    _phase_label,
+    opponent_status_label,
+)
 
 _SKILL_TYPE_LABELS = {
     "GCG_SKILL_TAG_A": "普通攻击",
@@ -66,43 +92,64 @@ _REACTION_EFFECTS = {
     "结晶": "本次伤害+1，获得1点护盾（最多2）",
     "燃烧": "本次伤害+1，生成燃烧烈焰（结束阶段1点火伤，可用1，最多叠到2）",
     "绽放": "本次伤害+1，生成草原核（我方对敌出战角色造成火/雷伤害+2，可用1）",
-    "原激化": "本次伤害+1，生成激化领域（我方对敌出战角色造成雷/草伤害+1，可用3）",
+    "原激化": "本次伤害+1，生成激化领域（我方对敌出战角色造成雷/草伤害+1，可用2）",
 }
-_RULES_33 = """规则要点（3.3）：
-- 回合流程：双方各抓5张起始手牌 → 投掷8个元素骰（可任选数量重投1次）→ 双方轮流行动 → 都宣布结束后进入结束阶段（先结算结束阶段效果，再各抓2张；牌堆空则不抓）。
-- 行动类型：战斗行动（使用技能/切换角色/宣布结束）后换对方行动；快速行动（打出手牌/元素调和）后可继续行动。若一方已宣布结束，另一方使用技能/切换角色不会换对方行动，可继续行动直到宣布结束。
-- 打出手牌（装备/支援/事件）默认是快速行动，**不结束行动权**，只需支付费用；卡面写「战斗行动」的行动牌（如天赋装备）除外。装备牌不是一次“结束回合的行动”。
-- 角色附属：每个角色最多装备1张武器、1张圣遗物、1张特技，其他类型装备不限；出战状态会随出战角色转移。角色身上的非装备效果是“状态”，不要当成装备。
-- 费用记法：N火/N水/N冰/N雷/N风/N岩/N草 = N个该元素骰；N任意 = N个任意元素骰；N同色 = N个相同元素的骰；N能量 = N点充能。万能元素可当任意元素。元素骰上限16个。
-- 切换角色花1任意骰；角色被击倒后免费“选择”新的出战角色。打出元素爆发需支付其全部充能（清空）。
-- 充能：使用普通攻击或元素战技后+1（受到伤害不会充能）；充能达到上限才能用元素爆发。
-- 区域上限：支援区最多4张支援牌（满时打出新支援要先弃1张）；召唤物区最多4个召唤物（满时无法生成新召唤物）；手牌上限10张。
-- 击倒：HP降到0并在结算后击倒，装备/状态弃置、充能清空；有“免于击倒”效果时不视为被击倒。
-- 伤害：普通伤害先被护盾抵消；穿透伤害不受伤害加成，也不被护盾抵消。
-- 元素附着：冰/水/火/雷/草元素伤害会附着对应元素；风/岩元素伤害不附着。非伤害的元素附着也会触发反应（只结算反应效果，不结算伤害）。
-- 元素反应（对已附着目标）：
-  融化/蒸发：本次伤害+2。
-  超载：本次伤害+2；若目标是出战角色，强制切换到下一角色；若因此击倒，则直接选择下一个角色。
-  超导/感电：本次伤害+1，并对目标以外的敌方角色各1点穿透伤害。
-  冻结：本次伤害+1，目标冻结（本回合不能使用技能；受到火或物理伤害+2并解除）。
-  扩散：对目标以外的敌方角色各1点“目标原附着元素”（冰/水/火/雷）伤害。
-  结晶：本次伤害+1，给我方出战角色1点护盾（最多叠到2）。
-  燃烧：本次伤害+1，生成燃烧烈焰（结束阶段造成1点火伤，可用1，最多叠到2）。
-  绽放：本次伤害+1，生成草原核（我方对敌方出战角色造成火/雷伤害+2，可用1）。
-  原激化：本次伤害+1，生成激化领域（我方对敌方出战角色造成雷/草伤害+1，可用3）。
-- 冰草共存附着（附着:冰草）：同时视为冰与草附着；按攻击元素分别按冰/草反应处理。
-- 胜负：击倒对方全部角色即胜利；第15回合开始仍未分胜负则双方判负。
-- 资料使用：当前局面给角色/装备/支援/召唤物/状态/手牌的名称、数值与行动所需效果。"""
 _REACTING_AURAS = frozenset(("火", "水", "冰", "雷"))
 _ANEMO_GEO = frozenset(("风", "岩"))
+
+# Engine ``DamageEM.damage_type`` (build/engine/proto/enums.proto). 8 is piercing,
+# 9 is HEAL (handled separately: it is not an element).
+_PREVIEW_DAMAGE_TYPES = {
+    0: "物理",
+    1: "冰",
+    2: "水",
+    3: "火",
+    4: "雷",
+    5: "风",
+    6: "岩",
+    7: "草",
+    8: "穿透",
+}
+_PREVIEW_HEAL_TYPE = 9
+# ``Action.preview`` reuses its own reaction numbering (101+, as the engine writes it
+# into ``DamageEM.reaction_type``); it is *not* the 1..17 ``ReactionType`` enum used
+# by the mutation log, so this table is separate from ``_REACTIONS`` above.
+_PREVIEW_REACTIONS = {
+    101: "融化",
+    102: "蒸发",
+    103: "超载",
+    104: "超导",
+    105: "感电",
+    106: "冻结",
+    107: "扩散·冰",
+    108: "扩散·水",
+    109: "扩散·火",
+    110: "扩散·雷",
+    111: "结晶·冰",
+    112: "结晶·水",
+    113: "结晶·火",
+    114: "结晶·雷",
+    115: "燃烧",
+    116: "绽放",
+    117: "原激化",
+}
+_PREVIEW_MAX_LINES = 6
+_NO_ELEMENT = frozenset(("物理", "穿透"))
 
 _WHITESPACE = re.compile(r"\s+")
 _DAMAGE = re.compile(
     r"造成\s*(\d+)\s*点\s*(?:(物理)伤害|([火水冰雷风岩草])元素伤害)"
 )
+# Talent cards: "角色装备此牌后，立刻使用一次星斗归位。" → capture the skill name.
+_TALENT_USE = re.compile(r"立刻使用一次\s*[「『]?([^」，。；、\n）)]+)")
 
-_DESCRIPTION_LIMIT = 80
-_HAND_DESCRIPTION_LIMIT = 60
+# Card/skill text length caps. The system prefix is the *reference* copy of a card, so
+# it prints the full description and only keeps a generous safety cap for anomalous
+# data; the per-decision user message is a cost guard, so its card/skill summaries keep
+# a (raised) cap and end with "…" when cut.
+_KNOWLEDGE_LIMIT = 400
+_USER_DESCRIPTION_LIMIT = 120
+_DESCRIPTION_LIMIT = 120
 
 _ELEMENT_TAGS = {
     "GCG_TAG_ELEMENT_CRYO": "冰",
@@ -132,6 +179,14 @@ _COST_NAMES = {
     "energy": "能量", "legend": "秘传", "physical": "物理",
 }
 
+# Engine ``DiceRequirementType`` → prompt label (build/engine/proto/enums.proto).
+# 0 is VOID (任意), *not* "unspecified": a normal attack really is 1火+2任意.
+_REQUIREMENT_LABELS = {
+    0: "任意",
+    1: "冰", 2: "水", 3: "火", 4: "雷", 5: "风", 6: "岩", 7: "草",
+    8: "同色", 9: "能量", 10: "秘传",
+}
+
 _COST_LABELS = {
     "GCG_COST_DICE_SAME": "同色",
     "GCG_COST_DICE_VOID": "任意",
@@ -148,11 +203,42 @@ _COST_LABELS = {
 
 
 def _one_line(text: Any, limit: int = _DESCRIPTION_LIMIT) -> str:
-    """Collapse whitespace (descriptions contain newlines) and truncate."""
+    """Collapse whitespace (descriptions contain newlines) and cap at ``limit``.
+
+    Callers in the system prefix pass ``_KNOWLEDGE_LIMIT`` (full text), callers in
+    the user message pass ``_USER_DESCRIPTION_LIMIT``; a cut always ends with "…".
+    """
     collapsed = _WHITESPACE.sub(" ", str(text or "")).strip()
     if len(collapsed) > limit:
-        collapsed = collapsed[:limit].rstrip() + "…"
+        # The ellipsis counts towards the cap, so a cut line is never limit+1 long.
+        collapsed = collapsed[: limit - 1].rstrip() + "…"
     return collapsed
+
+
+def _no_period(text: str) -> str:
+    """Drop one trailing "。" so "描述。；提示" never appears in a candidate line."""
+    return text[:-1] if text.endswith("。") else text
+
+
+def _format_cost(items: Any) -> str:
+    """``[(label, count), ...]`` → ``［3火+2能量］`` (empty list → ``""``)."""
+    parts = [f"{int(count)}{label}" for label, count in items]
+    return f"［{'+'.join(parts)}］" if parts else ""
+
+
+def _cost_signature(items: Any) -> tuple[tuple[str, int], ...]:
+    """Order-insensitive comparison key for two cost breakdowns.
+
+    ``万`` is the engine's universal die and ``任意`` is how the asset dump spells
+    the same requirement, so both collapse to one label; otherwise an unchanged
+    cost would look "different" purely because of vocabulary.
+    """
+    return tuple(
+        sorted(
+            ("任意" if str(label) == "万" else str(label), int(count))
+            for label, count in items
+        )
+    )
 
 
 def _aura_element(character: Any) -> str | None:
@@ -215,6 +301,12 @@ def _reaction_name(element: str | None, aura: str | None) -> str | None:
 class RichStateRenderer(StateRenderer):
     """``StateRenderer`` with element-name auras and skill/card effect hints."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Play-card descriptions are printed once per render pass (M12): the first
+        # target variant carries the effect, later variants only add "→ 目标".
+        self._seen_card_descriptions: set[int] = set()
+
     # -- assets ------------------------------------------------------------
     def _skill_info(self, definition_id: int) -> Any:
         try:
@@ -243,7 +335,7 @@ class RichStateRenderer(StateRenderer):
                 continue  # rendered from the GTS passive sheet below
             label = _SKILL_TYPE_LABELS.get(str(getattr(skill, "skill_type", "")), "")
             cost = self._cost(skill)
-            description = _one_line(getattr(skill, "description", ""), 90)
+            description = _one_line(getattr(skill, "description", ""), _KNOWLEDGE_LIMIT)
             head = str(getattr(skill, "name", "") or f"技能#{skill_id}")
             if label or cost:
                 head += f"（{label}{cost}）"
@@ -269,7 +361,7 @@ class RichStateRenderer(StateRenderer):
             return []
         element = _NPC_ELEMENTS.get(str(enemy.element), str(enemy.element))
         lines = [
-            f"  - {enemy.name}[{element}] HP上限{enemy.hp}，能量上限{enemy.energy}"
+            f"  - {enemy.name}[{element}] 生命值上限{enemy.hp}，能量上限{enemy.energy}"
         ]
         skills = [
             enemy.skills.get(kind) for kind in ("A", "E", "Q")
@@ -298,7 +390,10 @@ class RichStateRenderer(StateRenderer):
         lines = []
         seen = set()
         for passive in passives_for(character_id):
-            description = str(passive.get("description") or "").replace("【被动】", "")
+            description = _one_line(
+                str(passive.get("description") or "").replace("【被动】", ""),
+                _KNOWLEDGE_LIMIT,
+            )
             key = description.strip()
             if not key or key in seen:
                 continue
@@ -314,19 +409,30 @@ class RichStateRenderer(StateRenderer):
             return []
         header = (
             f"  - {self._char(character_id)}{self._char_tags(character_id)}"
-            f" HP上限{getattr(info, 'max_health', '?')}"
+            f" 生命值上限{getattr(info, 'max_health', '?')}"
             f"，能量上限{getattr(info, 'max_energy', '?')}"
         )
         return [header, *self._skill_lines(character_id), *self._passive_lines(character_id)]
 
     def knowledge_message(self, task: Any) -> str:
-        """Full character skills + entire deck, fixed for the whole game."""
+        """Segment 3: full character skills + entire deck, plus the glossary.
+
+        Fixed for the whole game, so it belongs in the cached system prefix. The
+        ``名词解释`` block is appended last: it only explains names that the lines
+        above actually use, and is omitted when nothing matches.
+        """
+        blocks = [*self._character_blocks(task), *self._deck_block(task)]
+        if not blocks:
+            return ""
+        body = "\n".join([CARD_INFO_HEADER, *blocks])
+        glossary = glossary_section(body)
+        return f"{body}\n{glossary}" if glossary else body
+
+    def _character_blocks(self, task: Any) -> list[str]:
+        """Our sheet first, then the opponent's (NPC overlays fall back to configs)."""
+        lines: list[str] = []
         ours = tuple(getattr(task, "characters", ()) or ())
         theirs = tuple(getattr(task, "opponent_characters", ()) or ())
-        cards = tuple(getattr(task, "cards", ()) or ())
-        if not (ours or theirs or cards):
-            return ""
-        lines = [_RULES_33, "", "对局资料（整局固定；当前局面只给名称/数值）："]
         if ours:
             lines.append("我方角色与技能：")
             for character_id in ours:
@@ -336,37 +442,119 @@ class RichStateRenderer(StateRenderer):
             for character_id in theirs:
                 block = self._character_block(character_id)
                 lines.extend(block or self._npc_block(character_id))
-        if cards:
-            counts = Counter(cards)
-            lines.append(f"我方牌组（{len(cards)}张）：")
-            for card_id in dict.fromkeys(cards):
-                info = self._card_info(int(card_id))
-                name = self._card(int(card_id))
-                cost = self._cost(info)
-                description = _one_line(
-                    getattr(info, "description", "") if info is not None else "",
-                    _HAND_DESCRIPTION_LIMIT,
+        return lines
+
+    def _deck_block(self, task: Any) -> list[str]:
+        cards = tuple(getattr(task, "cards", ()) or ())
+        if not cards:
+            return []
+        counts = Counter(cards)
+        lines = [f"我方牌组（{len(cards)}张）："]
+        for card_id in dict.fromkeys(cards):
+            info = self._card_info(int(card_id))
+            name = self._card(int(card_id))
+            cost = self._cost(info)
+            description = _one_line(
+                getattr(info, "description", "") if info is not None else "",
+                _KNOWLEDGE_LIMIT,
+            )
+            copies = f"×{counts[card_id]}" if counts[card_id] > 1 else ""
+            lines.append(
+                f"  - {name}{cost}{copies}"
+                + (f"：{description}" if description else "")
+            )
+        return lines
+
+    # -- prompt ------------------------------------------------------------
+    def system_parts(self, *, task: Any, skills: Any) -> list[tuple[str, str]]:
+        """Labelled segments of the system message, in prompt order.
+
+        Single source for both the rendered prompt and the per-segment sizes in
+        reports, so a report can never claim a layout the prompt does not have.
+        """
+        parts: list[tuple[str, str]] = [
+            ("SYSTEM_ROLE", SYSTEM_ROLE),
+            ("游戏规则（GAME_RULES_V2）", GAME_RULES_V2),
+        ]
+        special_rules = stage_special_rules_text(str(getattr(task, "stage", "") or ""))
+        if special_rules:
+            parts.append(
+                ("关卡特殊规则", f"{STAGE_RULES_HEADER}\n{special_rules}")
+            )
+        knowledge = self.knowledge_message(task)
+        if knowledge:
+            parts.append(("卡组信息 + 名词解释", knowledge))
+        parts.append(("获胜目标 + 目标判定", objective_message(task)))
+        # One fixed line, before the (optional) skill block: the engine forecast in
+        # a candidate line already includes infusion/equipment/shield/reaction, so it
+        # outranks the base numbers printed in a skill's own text.
+        parts.append(("候选「预计」优先级", PREVIEW_PRECEDENCE_NOTE))
+        if skills:
+            parts.append(
+                (
+                    "学习得来的技能",
+                    "\n".join(
+                        [SKILLS_HEADER, *(skill.prompt_block() for skill in skills)]
+                    ),
                 )
-                copies = f"×{counts[card_id]}" if counts[card_id] > 1 else ""
-                lines.append(
-                    f"  - {name}{cost}{copies}"
-                    + (f"：{description}" if description else "")
-                )
-        return "\n".join(lines)
+            )
+        parts.append(("OUTPUT_CONTRACT", OUTPUT_CONTRACT))
+        return parts
+
+    def system_message(
+        self,
+        *,
+        task: Any,
+        skills: Any,
+        rules_note: str = "",
+    ) -> dict[str, str]:
+        """The fixed six-part system message (role → rules → knowledge → goals → skills).
+
+        ``rules_note`` is accepted but **ignored**: the always-on rules now come from
+        ``prompt_v2.GAME_RULES_V2`` instead of the library's 17 ``rule_*`` skills.
+        Those skills stay in ``data/skills/*`` (the paired gate and historical
+        runs need them) but no longer appear as prompt lines, so keeping the
+        parameter only avoids touching every caller.
+        """
+        content = "\n".join(text for _name, text in self.system_parts(task=task, skills=skills))
+        return {"role": "system", "content": content}
 
     # -- state -------------------------------------------------------------
     def _entity(self, snapshot: Any, *, detail: bool = False) -> str:
-        """Name a support/summon/status/attachment (they share the card pool)."""
+        """Name a support/summon/status/attachment (they share the card pool).
+
+        Counters carry their unit so a bare number cannot be mistaken for damage:
+        ``usage``/``usages`` → ``(N次)``, a ``duration`` variable → ``(N回合)``;
+        other numeric variables (e.g. stacks/layers) stay a bare ``(N)``.
+        """
         definition_id = int(getattr(snapshot, "definition_id", 0) or 0)
         name = self._card(definition_id)
         variables = getattr(snapshot, "variables", None) or {}
-        usage = variables.get("usage") or variables.get("usages")
-        label = f"{name}({usage})" if usage not in (None, "", 0) else name
+        usage = variables.get("usage")
+        if usage in (None, "", 0):
+            usage = variables.get("usages")
+        duration = variables.get("duration")
+        if duration in (None, "", 0):
+            duration = getattr(snapshot, "duration", None)
+        if usage not in (None, "", 0):
+            label = f"{name}({int(usage)}次)"
+        elif duration not in (None, "", 0):
+            label = f"{name}({int(duration)}回合)"
+        else:
+            numeric = next(
+                (
+                    int(value)
+                    for key, value in sorted(variables.items())
+                    if isinstance(value, int) and value not in (0,)
+                ),
+                None,
+            )
+            label = f"{name}({numeric})" if numeric is not None else name
         if detail:
             info = self._card_info(definition_id)
             description = _one_line(
                 getattr(info, "description", "") if info is not None else "",
-                _HAND_DESCRIPTION_LIMIT,
+                _USER_DESCRIPTION_LIMIT,
             )
             if description:
                 label += f"：{description}"
@@ -389,13 +577,16 @@ class RichStateRenderer(StateRenderer):
         parts = [part for part in (element, weapon) if part]
         return f"[{'·'.join(parts)}]" if parts else ""
 
-    def _cost(self, info: Any) -> str:
+    def _cost_items(self, info: Any) -> list[tuple[str, int]]:
+        """Asset ``play_cost`` as ``[(label, count), ...]`` (includes 能量 etc.)."""
         costs = getattr(info, "play_cost", ()) if info is not None else ()
-        parts = []
-        for kind, count in costs or ():
-            label = _COST_LABELS.get(str(kind), str(kind))
-            parts.append(f"{int(count)}{label}")
-        return f"［{'+'.join(parts)}］" if parts else ""
+        return [
+            (_COST_LABELS.get(str(kind), str(kind)), int(count))
+            for kind, count in (costs or ())
+        ]
+
+    def _cost(self, info: Any) -> str:
+        return _format_cost(self._cost_items(info))
 
     def _npc_cost(self, raw: Any) -> str:
         """Normalise config strings like ``Cryo1+Unaligned2`` to ``1冰+2任意``."""
@@ -424,7 +615,7 @@ class RichStateRenderer(StateRenderer):
             # identifiable by name only.
             description = _one_line(
                 getattr(info, "description", "") if info is not None else "",
-                _HAND_DESCRIPTION_LIMIT,
+                _USER_DESCRIPTION_LIMIT,
             )
             suffix = f"：{description}" if description else ""
             lines.append(
@@ -465,36 +656,78 @@ class RichStateRenderer(StateRenderer):
                 + self._attachments(c)
                 + ("★出战" if c.is_active else "")
                 + ("✖" if c.defeated else "")
+                + (
+                    "（可重击）"
+                    if c.is_active and bool(getattr(player, "can_charged", False))
+                    else ""
+                )
+                + (
+                    "（可下落攻击）"
+                    if c.is_active and bool(getattr(player, "can_plunging", False))
+                    else ""
+                )
                 for c in player.characters
             )
 
         dice = "".join(_dice_symbol(d) for d in me.dice) or "无"
         hand = self._hand(me.hand_cards)
+        # The engine masks our *view* of the opponent's dice (``players[1].dice == ()``),
+        # but the dice themselves are public, so the unmasked ``full_state`` is read
+        # first. Nothing else of the opponent is taken from it: their hand stays a
+        # count from ``player_view``, so hidden information cannot leak into the prompt.
+        opp_dice = tuple(getattr(opp, "dice", ()) or ())
+        full_state = getattr(context, "full_state", None)
+        if full_state is not None:
+            try:
+                unmasked = full_state.players[1 - context.acting_player]
+            except (AttributeError, IndexError, TypeError):
+                unmasked = None
+            if unmasked is not None:
+                real_dice = tuple(getattr(unmasked, "dice", ()) or ())
+                if real_dice:
+                    opp_dice = real_dice
+        if opp_dice:
+            symbols = "".join(_dice_symbol(d) for d in opp_dice)
+            opp_dice_text = f"骰子{len(opp_dice)}个：{symbols}"
+        else:
+            # Not "hidden by the rules": the renderer simply has no unmasked source.
+            opp_dice_text = "骰子：引擎视图未提供"
+        # Remaining deck counts are public on both sides (the masked view keeps the
+        # list length while hiding each opponent card's definition_id).
+        me_pile = len(getattr(me, "pile_cards", ()) or ())
+        opp_pile = len(getattr(opp, "pile_cards", ()) or ())
         return "\n".join([
             f"第{state.round_number}轮 {_phase_label(state.phase)} 行动方={'我方' if state.current_turn == context.acting_player else '对方'}",
             f"我方：{side(me)}",
             f"我方骰子：{dice}（{len(me.dice)}个）",
             f"我方手牌（{len(me.hand_cards)}/10）：{hand}",
+            f"我方牌堆：{me_pile} 张",
             f"我方支援：{self._entities(getattr(me, 'supports', ()), detail=True)}",
             f"我方召唤物：{self._entities(getattr(me, 'summons', ()), detail=True)}",
             f"我方状态：{self._entities(getattr(me, 'combat_statuses', ()), detail=True)}",
-            f"{self.opponent_name}：{side(opp)}；手牌{len(opp.hand_cards)}张，骰子{len(opp.dice)}个",
-            f"{self.opponent_name}支援：{self._entities(getattr(opp, 'supports', ()), detail=True)}",
-            f"{self.opponent_name}召唤物：{self._entities(getattr(opp, 'summons', ()), detail=True)}",
-            f"{self.opponent_name}状态：{self._entities(getattr(opp, 'combat_statuses', ()), detail=True)}",
-            f"我方已宣布结束={bool(me.declared_end)}",
-            f"对方已宣布结束={bool(opp.declared_end)}",
+            f"{opponent_status_label(self.opponent_name)}：{side(opp)}；手牌{len(opp.hand_cards)}张，{opp_dice_text}，牌堆 {opp_pile} 张",
+            f"对方支援：{self._entities(getattr(opp, 'supports', ()), detail=True)}",
+            f"对方召唤物：{self._entities(getattr(opp, 'summons', ()), detail=True)}",
+            f"对方状态：{self._entities(getattr(opp, 'combat_statuses', ()), detail=True)}",
+            f"我方已宣布结束={'是' if bool(me.declared_end) else '否'}",
+            f"对方已宣布结束={'是' if bool(opp.declared_end) else '否'}",
         ])
 
     # -- reaction hints ----------------------------------------------------
     def _damage_hint(self, context: Any, element: str | None) -> str:
-        """One-line attachment/reaction preview; empty when unparseable."""
+        """One-line attachment/reaction preview; empty when there is nothing to say.
+
+        Wording avoids engine-log phrasing ("将附着火") so it reads as advice next to
+        the skill's own description; the two are joined with "；".
+        """
         if not element:
             return ""
-        if element == "物理":
-            return "物理伤害（不附着元素）"
         active = _opponent_active_character(context)
         aura = _aura_element(active)
+        if element == "物理":
+            # Physical damage never attaches an element: only explain the (missing)
+            # reaction when the target actually carries an aura.
+            return "物理伤害不触发元素反应" if aura else ""
         if aura == "冰草":
             return (
                 f"目标附着冰+草：{element}元素将按冰或草相关反应结算（"
@@ -507,9 +740,9 @@ class RichStateRenderer(StateRenderer):
                     f"将对附着{aura}的出战角色触发{reaction}"
                     f"（{_REACTION_EFFECTS.get(reaction, '')}）"
                 )
-            return f"{element}元素伤害（不附着元素）"
+            return f"{element}元素伤害不附着元素"
         if not aura:
-            return f"将附着{element}"
+            return f"命中后为目标附着{element}元素"
         reaction = _reaction_name(element, aura)
         if reaction:
             return (
@@ -517,20 +750,294 @@ class RichStateRenderer(StateRenderer):
                 f"（{_REACTION_EFFECTS.get(reaction, '')}）"
             )
         if element == aura:
-            return f"出战角色已附着{aura}（同元素，不触发新反应）"
-        return f"将附着{element}（与当前{aura}附着不触发反应）"
+            return f"目标已附着{aura}，不触发新反应"
+        return f"命中后为目标附着{element}元素（与当前{aura}附着不触发反应）"
 
     # -- candidates --------------------------------------------------------
+    def _cost_subject(self, spec: Any) -> Any:
+        """Asset entry whose ``play_cost`` is the *requirement* for this action.
+
+        Switching actions have no asset entry (the 1-die switch cost is a game
+        rule, not a card), so they return ``None`` and fall back to payment-only
+        rendering.
+        """
+        if spec.kind == OptionKind.ACTION_USE_SKILL:
+            return self._skill_info(int(spec.subject_definition_id or 0))
+        if spec.kind == OptionKind.ACTION_PLAY_CARD:
+            return self._card_info(int(spec.subject_definition_id or 0))
+        return None
+
+    def _requirement_items(self, spec: Any) -> list[tuple[str, int]]:
+        """**Effective** cost requirement, as ``[(label, count), ...]``.
+
+        ``metadata["required_cost"]`` is written by ``reps.action_adapter`` from the
+        engine's ``action.required_cost``, i.e. *after* discounts. The asset
+        ``play_cost`` is the undiscounted list price and could not explain why the
+        same card showed ``需求 1火+2任意`` while the payment was 2 or 3 dice.
+
+        Requirement types follow ``build/engine/proto/enums.proto``: 0=Void/任意,
+        1–7=ice/hydro/pyro/electro/anemo/geo/dendro, 8=aligned/同色, 9=energy,
+        10=legend. Entries with ``count <= 0`` are dropped, so a free card (or
+        ``ACTION_DECLARE_END``, whose requirement is ``(8, 0)``) prints no 需求.
+        Historical recordings without metadata fall back to the asset ``play_cost``.
+        """
+        metadata = getattr(spec, "metadata", None)
+        if isinstance(metadata, dict) and "required_cost" in metadata:
+            items: list[tuple[str, int]] = []
+            for entry in metadata.get("required_cost") or ():
+                try:
+                    type_id, count = int(entry[0]), int(entry[1])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if count <= 0:
+                    continue
+                label = _REQUIREMENT_LABELS.get(type_id)
+                if label is None:
+                    continue
+                items.append((label, count))
+            return items
+        info = self._cost_subject(spec)
+        return self._cost_items(info) if info is not None else []
+
+    # -- engine preview ----------------------------------------------------
+    def _character_names(self, context: Any) -> dict[int, str]:
+        """``instance id -> character name`` for both sides.
+
+        ``Action.preview`` targets are *instance* ids (negative for the opponent),
+        so the name of a target can only be resolved through the live state; the
+        definition id is the fallback for a stale or empty view.
+        """
+        names: dict[int, str] = {}
+        state = getattr(context, "player_view", None)
+        if state is None:
+            return names
+        for player in getattr(state, "players", ()) or ():
+            for character in getattr(player, "characters", ()) or ():
+                try:
+                    names[int(character.id)] = self._char(character.definition_id)
+                except (AttributeError, TypeError, ValueError):
+                    continue
+        return names
+
+    def _active_character_name(self, context: Any) -> str:
+        state = getattr(context, "player_view", None)
+        if state is None:
+            return ""
+        try:
+            characters = state.players[context.acting_player].characters
+        except (AttributeError, IndexError, TypeError):
+            return ""
+        for character in characters:
+            if getattr(character, "is_active", False) and not getattr(character, "defeated", False):
+                return self._char(character.definition_id)
+        return ""
+
+    def _preview_target_name(self, entry: dict[str, Any], names: dict[int, str]) -> str:
+        try:
+            target_id = int(entry.get("target_id", 0) or 0)
+        except (TypeError, ValueError):
+            target_id = 0
+        name = names.get(target_id)
+        if name:
+            return name
+        try:
+            definition_id = int(entry.get("target_definition_id", 0) or 0)
+        except (TypeError, ValueError):
+            definition_id = 0
+        if definition_id > 0:
+            resolved = self._char(definition_id)
+            if resolved and not str(resolved).startswith("角色#"):
+                return resolved
+        return "目标"
+
+    def _preview_entry_text(self, entry: dict[str, Any], names: dict[int, str]) -> str:
+        """One ``Action.preview`` entry as prompt text (``""`` = nothing to say)."""
+        if str(entry.get("kind") or "") != "damage":
+            # An aura attachment is already reflected in the damage entry's reaction
+            # name; printing it again would repeat the same reaction twice.
+            return ""
+        try:
+            value = int(entry.get("value", 0) or 0)
+            damage_type = int(entry.get("damage_type", 0) or 0)
+            heal_kind = int(entry.get("heal_kind", 0) or 0)
+            reaction = int(entry.get("reaction_type", 0) or 0)
+            old_health = int(entry.get("old_health", 0) or 0)
+            new_health = int(entry.get("new_health", 0) or 0)
+            defeated = bool(entry.get("cause_defeated", False))
+        except (TypeError, ValueError):
+            return ""
+        target = self._preview_target_name(entry, names)
+        if damage_type == _PREVIEW_HEAL_TYPE or heal_kind:
+            # A heal entry on a full-HP character carries value=0 and changes nothing,
+            # so it is dropped instead of printing "治疗0".
+            return f"对{target}治疗{value}" if value > 0 else ""
+        element = _PREVIEW_DAMAGE_TYPES.get(damage_type)
+        if element is None:
+            return ""
+        element_text = element if element in _NO_ELEMENT else f"{element}元素"
+        text = f"对{target}造成{value}点{element_text}伤害"
+        reaction_name = _PREVIEW_REACTIONS.get(reaction) if element not in _NO_ELEMENT else None
+        if reaction_name:
+            text += f"（{reaction_name}）"
+        if defeated:
+            text += "，击倒"
+        if old_health != new_health and (old_health - new_health) != value:
+            # The engine settled shields / damage reduction already, so the health
+            # delta disagrees with the nominal value: show both.
+            text += f"（HP {old_health}→{new_health}）"
+        return text
+
+    def _preview_parts(self, context: Any, spec: Any) -> list[str]:
+        """``预计：…`` segments from ``metadata["preview"]`` (empty for old data)."""
+        metadata = getattr(spec, "metadata", None)
+        if not isinstance(metadata, dict):
+            return []
+        entries = metadata.get("preview")
+        if not isinstance(entries, (list, tuple)) or not entries:
+            return []
+        names = self._character_names(context)
+        parts: list[str] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            text = self._preview_entry_text(entry, names)
+            if text:
+                parts.append(text)
+        if len(parts) > _PREVIEW_MAX_LINES:
+            return [f"{'；'.join(parts[:_PREVIEW_MAX_LINES])}等{len(parts)}项"]
+        return parts
+
+    def _switch_line(self, context: Any, spec: Any, index: int, line: str) -> str:
+        """``切换出战：X → 我方·X`` → ``切换出战：当前·Y → X``.
+
+        The target-only wording repeated itself; the current active character is the
+        half of the change the model cannot read off the candidate list.
+        """
+        try:
+            definition_id = int(getattr(spec, "subject_definition_id", 0) or 0)
+        except (TypeError, ValueError):
+            return line
+        if definition_id <= 0:
+            return line
+        target = self._char(definition_id)
+        current = self._active_character_name(context)
+        if not current or current == target:
+            return line
+        head = f"[{index}] 切换出战：{target}"
+        if not line.startswith(head):
+            return line
+        rest = line[len(head):]
+        marker = f" → 我方·{target}"
+        if rest.startswith(marker):
+            rest = rest[len(marker):]
+        return f"[{index}] 切换出战：当前·{current} → {target}{rest}"
+
+    def _cost_line(self, line: str, spec: Any) -> str:
+        """Replace the base renderer's raw ``花费`` with 需求 (effective) + 支付.
+
+        ``used_dice`` is what the engine auto-selected to pay with, not what the
+        skill/card *requires*: a burst with ``需求［3火+2能量］`` was rendered as
+        ``花费［1火+2万］``, hiding the energy requirement. The requirement is the
+        engine's effective ``required_cost`` (discounts included); the payment is
+        only printed when its breakdown differs from the requirement. Without any
+        cost entry the line never claims ``需求`` and simply says ``支付［…］``.
+        """
+        line = line[: line.rfind(" 花费")] if " 花费" in line else line
+        used = tuple(getattr(spec, "used_dice", ()) or ())
+        payment: list[tuple[str, int]] = []
+        if used:
+            counts = Counter(_dice_symbol(int(die)) for die in used)
+            payment = list(counts.items())
+        requirement = self._requirement_items(spec)
+        suffix: list[str] = []
+        if requirement:
+            suffix.append(f"需求{_format_cost(requirement)}")
+            if payment and _cost_signature(payment) != _cost_signature(requirement):
+                suffix.append(f"支付{_format_cost(payment)}")
+                energy = sum(count for label, count in requirement if label == "能量")
+                if energy:
+                    # 需求 already names the energy; the payment line adds what
+                    # actually happens to the charges (a burst spends them all).
+                    suffix[-1] += f"（清空{energy}能量）"
+        elif payment:
+            # No effective cost (switch/tuning) or a genuinely free card.
+            suffix.append(f"支付{_format_cost(payment)}")
+        return line + "".join(f" {part}" for part in suffix)
+
+    def _skill_name_map(self, character_ids: Any) -> dict[str, int]:
+        """Skill **name → id** for our own characters.
+
+        Talent cards say "立刻使用一次星斗归位" by name; only our characters can be
+        the target of our talent cards, so scanning our lineup keeps the mapping
+        unambiguous (many characters share names like "普通攻击").
+        """
+        mapping: dict[str, int] = {}
+        for character_id in character_ids or ():
+            try:
+                info = self.assets.character(int(character_id))
+            except Exception:
+                continue
+            for skill_id in getattr(info, "skill_ids", ()) or ():
+                skill = self._skill_info(int(skill_id))
+                name = str(getattr(skill, "name", "") or "") if skill is not None else ""
+                if name:
+                    mapping.setdefault(name, int(skill_id))
+        return mapping
+
+    def _talent_followup(self, context: Any, raw: str, *, include_hint: bool = True) -> str:
+        """Preview the skill a talent card triggers ("装备后，立刻使用一次X").
+
+        Returns ``""`` unless the named skill belongs to our lineup and its
+        description carries a damage figure; nothing is invented for buffs.
+        ``include_hint`` is ``False`` when the engine preview already states the
+        settled damage, so the static reaction hint would be a second number set.
+        """
+        match = _TALENT_USE.search(str(raw or ""))
+        if match is None:
+            return ""
+        name = match.group(1).strip()
+        if not name:
+            return ""
+        state = getattr(context, "player_view", None)
+        if state is None:
+            return ""
+        try:
+            characters = state.players[context.acting_player].characters
+        except Exception:
+            return ""
+        skill_id = self._skill_name_map(
+            getattr(character, "definition_id", 0) for character in characters
+        ).get(name)
+        if skill_id is None:
+            return ""
+        info = self._skill_info(skill_id)
+        damage = _parse_damage(getattr(info, "description", "") if info is not None else "")
+        if damage is None:
+            return ""
+        element, amount = damage
+        element_text = "物理" if element == "物理" else f"{element}元素"
+        segment = f"随后：{name} —— 造成{amount}点{element_text}伤害"
+        if include_hint:
+            hint = self._damage_hint(context, element)
+            if hint:
+                segment += f"；{hint}"
+        return segment
+
+    def user_message(self, context: Any, candidates: Any, *, progress: str | None = None) -> dict[str, str]:
+        """Reset the per-pass card-description cache before rendering (M12)."""
+        self._seen_card_descriptions = set()
+        return super().user_message(context, candidates, progress=progress)
+
     def describe_candidate(self, context: Any, spec: Any, index: int) -> str:
         line = super().describe_candidate(context, spec, index)
         kind = spec.kind
-        used_dice = tuple(getattr(spec, "used_dice", ()) or ())
-        if used_dice and kind != OptionKind.ACTION_ELEMENTAL_TUNING:
-            counts = Counter(_dice_symbol(int(die)) for die in used_dice)
-            grouped = "+".join(f"{count}{symbol}" for symbol, count in counts.items())
-            cut = line.rfind(" 花费")
-            if cut >= 0:
-                line = line[:cut] + f" 花费［{grouped}］"
+        if kind != OptionKind.ACTION_ELEMENTAL_TUNING:
+            # Tuning already renders "把 1 个X骰转为Y骰"; a cost suffix would repeat it.
+            line = self._cost_line(line, spec)
+        # The engine's settled forecast (damage / reaction / defeat / heal) outranks
+        # the static card text, so the static reaction hint is dropped when it exists.
+        preview_parts = self._preview_parts(context, spec)
+        has_preview_damage = bool(preview_parts)
         extras: list[str] = []
         if kind == OptionKind.ACTION_USE_SKILL:
             info = self._skill_info(int(spec.subject_definition_id or 0))
@@ -538,32 +1045,48 @@ class RichStateRenderer(StateRenderer):
             if label:
                 line = line.replace("使用技能：", f"{label}：", 1)
             description = getattr(info, "description", "") if info else ""
-            summary = _one_line(description)
+            summary = _no_period(_one_line(description))
             if summary:
                 extras.append(summary)
             damage = _parse_damage(description)
-            if damage is not None:
+            if damage is not None and not has_preview_damage:
                 hint = self._damage_hint(context, damage[0])
                 if hint:
                     extras.append(hint)
         elif kind == OptionKind.ACTION_PLAY_CARD:
-            info = self._card_info(int(spec.subject_definition_id or 0))
-            raw = str(getattr(info, "description", "") if info is not None else "")
-            summary = _one_line(raw)
-            if summary:
-                extras.append(summary)
-            tags = set(getattr(info, "tags", ()) or ()) if info is not None else set()
-            # The engine marks combat-action cards with GCG_TAG_SLOWLY; the
-            # description string is not authoritative (many fast cards mention
-            # “战斗行动” only to say they are *not* one).
-            extras.append(
-                "战斗行动（会换对方行动）"
-                if "GCG_TAG_SLOWLY" in tags
-                else "快速行动，不结束行动权"
-            )
+            card_id = int(spec.subject_definition_id or 0)
+            # One card with several targets differs only by the target: print the
+            # effect once, then let the base renderer's "→ 目标" (plus 需求/支付)
+            # identify the other variants (M12).
+            first_variant = card_id not in self._seen_card_descriptions
+            self._seen_card_descriptions.add(card_id)
+            if first_variant:
+                info = self._card_info(card_id)
+                raw = str(getattr(info, "description", "") if info is not None else "")
+                summary = _no_period(_one_line(raw))
+                if summary:
+                    extras.append(summary)
+                followup = self._talent_followup(
+                    context, raw, include_hint=not has_preview_damage
+                )
+                if followup:
+                    extras.append(followup)
+                tags = set(getattr(info, "tags", ()) or ()) if info is not None else set()
+                # The engine marks combat-action cards with GCG_TAG_SLOWLY; the
+                # description string is not authoritative (many fast cards mention
+                # “战斗行动” only to say they are *not* one).
+                extras.append(
+                    "战斗行动（会换对方行动）"
+                    if "GCG_TAG_SLOWLY" in tags
+                    else "快速行动，不结束行动权"
+                )
         elif kind == OptionKind.ACTION_SWITCH_ACTIVE:
-            # No damage is invented here; switching is just an action.
+            # No damage is invented here; switching is just an action. The base line
+            # named the target twice, so it is rewritten to "当前·X → Y".
+            line = self._switch_line(context, spec, index, line)
             extras.append("切换出战角色")
         if extras:
             line = f"{line}（{'；'.join(extras)}）"
+        if preview_parts:
+            line = f"{line}；预计：{'；'.join(preview_parts)}"
         return line

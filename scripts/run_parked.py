@@ -8,13 +8,17 @@ requests (see ``skillloop.parked``). Rows are written in the same shape as
 Evaluated with the same protocol as ``skillloop.run``::
 
     python -m scripts.run_parked --group llm_empty --stages all --seeds 10 \\
-        --stage-decks configs/stage_decks.json --card-version v3.3.0 --stage-rules \\
+        --stage-decks configs/stage_decks.json --stage-rules \\
         --concurrency 96 --out data/runs/parked_llm_empty.jsonl
 
     python -m scripts.run_parked --group dynamic --stages all --seeds 10 \\
         --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \\
-        --card-version v3.3.0 --stage-rules \\
+        --stage-rules \\
         --concurrency 96 --out data/runs/parked_dynamic.jsonl
+
+The card pool is not pinned: omit ``--card-version`` to follow the engine's
+built-in pool (``configs/engine.lock``). Do not pass ``v3.3.0`` — its asset API is
+retired, so pinning it mismatches the latest card text/costs.
 
 ``llm_empty`` is fixed to ``data/skills/rules_v1`` (LLM + game rules only) and does
 not accept a loadout; ``static``/``dynamic`` default to ``static_v1``/``dyn_v4``
@@ -58,12 +62,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--loadout", default=None,
         help=(
-            "frozen skill loadouts (evaluation: reports/loadouts/v1 for static, "
+            "frozen skill loadouts (evaluation: reports/loadouts/v2 for static, "
             "reports/loadouts/v4 for dynamic); static/dynamic only"
         ),
     )
-    ap.add_argument("--card-version", default=None,
-                    help="pin the engine card pool (e.g. v3.3.0); default: engine default pool")
+    ap.add_argument(
+        "--card-version", default=None,
+        help=(
+            "optional card-pool pin; default None follows the engine's built-in "
+            "pool (configs/engine.lock). Do NOT pass v3.3.0: its asset API is "
+            "retired and the pin mismatches the latest card text/costs"
+        ),
+    )
     ap.add_argument(
         "--stage-rules", action="store_true",
         help="send each stage's special rules (configs/npc/special_rules.json)",

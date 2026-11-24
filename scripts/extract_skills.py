@@ -9,9 +9,14 @@ Pipeline (the "dynamic" arm's first half):
 3. attach the stage's fixed deck facts (``configs/stage_decks.json``), its special
    rules (``configs/npc/special_rules.json``) and the relevant non-rule skills from
    the base library, so candidates can name concrete characters/cards and replace
-   a known-bad skill instead of repeating it;
+   a known-bad skill instead of repeating it. Relevance is stage-first and demotes
+   strategy text that names another stage; at least two generic ``strat_*`` skills
+   are kept (B5);
 4. ask the model to write at most 2 injected prompts per failing stage
-   (``skillloop.extract``);
+   (``skillloop.extract``). A candidate whose valid ``replaces`` id points at a
+   skill of the same layer (and, for ``stage_specific``, the same stage) rewrites
+   that skill in place (description/conditions) instead of adding a contradictory
+   twin; any other id is ignored and the candidate is added;
 5. write a **new library version** = current library + the candidates, snapshot it, and
    print the candidates so the gate can be run on unseen seeds.
 
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -40,7 +46,18 @@ STAGES_JSON = REPO / "configs/npc/npc_stages_mond_liyue.json"
 STAGE_DECKS_JSON = REPO / "configs/stage_decks.json"
 
 EXISTING_SKILLS_LIMIT = 8
-EXISTING_DESCRIPTION_LIMIT = 120
+#: B5: the old 120-char cut landed mid-clause ("…切…"), destroying the
+#: trigger→action structure. 300 keeps a full rule; cutting happens only at a
+#: sentence end (see :func:`_one_line`).
+EXISTING_DESCRIPTION_LIMIT = 300
+#: Generic cross-stage ``strat_*`` skills the prompt must still show (B5), so a
+#: stage full of near-duplicate stage-named strategy text cannot crowd them out.
+GENERIC_STRATEGY_RESERVE = 2
+#: Descriptions sharing this prefix are the same advice (B5 synonym dedupe).
+DEDUPE_PREFIX = 24
+_SENTENCE_ENDS = "。；！？"
+_CLAUSE_ENDS = "，、,;："
+_GENERIC_STRATEGY_PREFIX = "strat_"
 
 _ELEMENT_CN = {
     "CRYO": "冰", "HYDRO": "水", "PYRO": "火", "ELECTRO": "雷",
@@ -172,8 +189,47 @@ def stage_special_rules_text(stage: str) -> str:
     return "、".join(str(rule_id) for rule_id in getattr(spec, "special_rules", ()) or ())
 
 
+def build_stage_tasks(
+    stages: Sequence[str],
+    *,
+    decks: dict[str, str] | None = None,
+    rows: Sequence[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """``stage -> TaskSpec`` built with the decision side's ``loadout.stage_task``.
+
+    The deck is the one the run actually used: the per-stage config first
+    (``configs/stage_decks.json``), then a ``deck`` field on any row of that stage.
+    Stages that cannot be resolved are simply omitted, so the reflection prompt
+    falls back to its legacy form for them instead of failing the whole round.
+    """
+    from npc.spec import get_stage
+    from skillloop.loadout import stage_task
+
+    row_decks: dict[str, str] = {}
+    for row in rows or ():
+        name = str(row.get("stage") or "")
+        deck = row.get("deck")
+        if name and deck and name not in row_decks:
+            row_decks[name] = str(deck)
+
+    tasks: dict[str, Any] = {}
+    for stage_name in stages:
+        name = str(stage_name)
+        deck = (decks or {}).get(name) or row_decks.get(name) or ""
+        try:
+            tasks[name] = stage_task(get_stage(name), deck)
+        except Exception:  # missing stage/deck registry: degrade, never fail extraction
+            continue
+    return tasks
+
+
 def stage_context(stage: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """``(objective_types, enemy_slugs)`` used to match strategy skills."""
+    """``(objective_types, enemy_ids_or_names)`` used to match strategy skills.
+
+    Enemy entries carry both the engine id (``fatuipyroagent``, what new
+    candidates and ``parse_skills`` write) and the Chinese display name (what
+    older extracted conditions stored), so historical skills keep matching.
+    """
     try:
         from npc.spec import get_stage
 
@@ -181,15 +237,34 @@ def stage_context(stage: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     except Exception:
         return (), ()
     objectives = tuple(objective.type for objective in spec.objectives)
-    enemies = tuple(
-        entry.id for entry in (*spec.lineup, *spec.reserve)
-    )
-    return objectives, enemies
+    enemies: list[str] = []
+    for entry in (*spec.lineup, *spec.reserve):
+        for value in (getattr(entry, "id", ""), getattr(entry, "name", "")):
+            text = str(value or "").strip()
+            if text and text not in enemies:
+                enemies.append(text)
+    return objectives, tuple(enemies)
 
 
 def _one_line(text: Any, limit: int = EXISTING_DESCRIPTION_LIMIT) -> str:
+    """Flatten to one line, truncating only at a sentence end (B5).
+
+    A hard cut used to leave half a clause ("…切…"), which reads as a broken rule
+    and invites the model to "repair" it. Within ``limit`` we cut *after* the last
+    sentence end; only when the window has none do we fall back to a clause
+    boundary, and only then to a hard cut. Both fallbacks still mark the cut.
+    """
     flat = " ".join(str(text or "").split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+    if len(flat) <= limit:
+        return flat
+    window = flat[:limit]
+    cut = max(window.rfind(char) for char in _SENTENCE_ENDS)
+    if cut > 0:
+        return window[: cut + 1]
+    cut = max(window.rfind(char) for char in _CLAUSE_ENDS)
+    if cut > 0:
+        return window[: cut + 1] + "…"
+    return window[: limit - 1] + "…"
 
 
 def _is_relevant(skill: Any, *, stage: str, objective_types: Sequence[str],
@@ -206,6 +281,27 @@ def _is_relevant(skill: Any, *, stage: str, objective_types: Sequence[str],
     return True
 
 
+def _names_other_stage(skill: Any, *, stage: str, known_stages: set[str]) -> bool:
+    """True when a strategy skill names a *different* stage in id/name/body (B5).
+
+    Extracted strategy text is often a stage rule that lost its ``stage_specific``
+    label (e.g. ``skill_blanche``, ``frontload_reaction_into_kill_line_shitou``).
+    It was injected into every stage's reflection prompt, wasting slots and asking
+    the model to copy advice about characters this deck does not have. Such rows
+    are demoted behind every generic strategy instead of being shown first.
+    """
+    others = {name for name in known_stages if name and name != stage}
+    if not others:
+        return False
+    if set(str(s) for s in skill.conditions.stages) - {stage}:
+        return True
+    tokens = {token for token in re.split(r"[^a-z0-9]+", skill.skill_id.lower()) if token}
+    if tokens & others:
+        return True
+    text = f"{skill.skill_name}\n{skill.description}".lower()
+    return any(name in text for name in others if len(name) >= 4)
+
+
 def relevant_existing_skills(
     library: Any,
     *,
@@ -213,31 +309,95 @@ def relevant_existing_skills(
     objective_types: Sequence[str] = (),
     enemies: Sequence[str] = (),
     limit: int = EXISTING_SKILLS_LIMIT,
+    all_stages: Sequence[str] = (),
 ) -> tuple[str, ...]:
     """Rendered ``[id] name: description`` for non-rule skills relevant to ``stage``.
 
-    Stage-specific skills whose id ends in ``_<stage>`` always qualify; strategy
-    skills qualify when their conditions match the stage/objectives/enemies.
-    Rule-layer skills are excluded because the prompt already carries
-    ``rules_note``. Ordering is stable (stage-specific first, then by id).
+    Ordering (B5), because the prompt asks the model to critique/replace these and
+    the wrong eight entries produce critique of the wrong stage:
+
+    1. ``stage_specific`` skills that belong to **this** stage;
+    2. strategy skills whose ``conditions.objective_types`` match this stage's set
+       exactly (same advice, same difficulty);
+    3. remaining relevant generic strategy skills (``strat_*`` reserve below);
+    4. demoted: strategy skills that name another stage (see
+       :func:`_names_other_stage`) — they only appear when nothing else fills the
+       slots.
+
+    Near-duplicate advice is de-duplicated by its first :data:`DEDUPE_PREFIX`
+    characters (highest rank wins), and at least
+    :data:`GENERIC_STRATEGY_RESERVE` slots stay for generic ``strat_*`` skills so
+    a stage never only sees stage-named text. Rule-layer skills are excluded
+    (they arrive via ``rules_note``).
     """
-    picked: list[tuple[int, Any]] = []
+    cap = max(0, int(limit))
+    if cap == 0:
+        return ()
+    known_stages = {str(name) for name in all_stages if str(name)}
+    for skill in library:  # older callers pass no stage list; learn what we can
+        known_stages.update(str(name) for name in skill.conditions.stages if str(name))
+    current_objectives = set(objective_types)
+
+    ranked: list[tuple[int, str, Any]] = []
     for skill in library:
         if skill.layer == "rule" or skill.status != "active":
             continue
         if skill.layer == "stage_specific":
             if skill.skill_id.endswith(f"_{stage}") or stage in skill.conditions.stages:
-                picked.append((0, skill))
+                ranked.append((0, skill.skill_id, skill))
             continue
-        if _is_relevant(
+        if not _is_relevant(
             skill, stage=stage, objective_types=objective_types, enemies=enemies
         ):
-            picked.append((1, skill))
-    picked.sort(key=lambda item: (item[0], item[1].skill_id))
+            continue
+        if _names_other_stage(skill, stage=stage, known_stages=known_stages):
+            ranked.append((3, skill.skill_id, skill))
+        elif (
+            current_objectives
+            and set(skill.conditions.objective_types) == current_objectives
+        ):
+            ranked.append((1, skill.skill_id, skill))
+        else:
+            ranked.append((2, skill.skill_id, skill))
+    ranked.sort(key=lambda entry: (entry[0], entry[1]))
+
+    deduped: list[tuple[int, str, Any]] = []
+    seen_prefixes: set[str] = set()
+    for entry in ranked:
+        prefix = " ".join(str(entry[2].description).split())[:DEDUPE_PREFIX]
+        if prefix and prefix in seen_prefixes:
+            continue
+        if prefix:
+            seen_prefixes.add(prefix)
+        deduped.append(entry)
+
+    generic = [
+        entry for entry in deduped
+        if entry[1].startswith(_GENERIC_STRATEGY_PREFIX) and entry[0] < 3
+    ]
+    reserve = min(GENERIC_STRATEGY_RESERVE, len(generic), cap)
+    chosen_ids: list[str] = []
+    if reserve:
+        generic_ids = {entry[1] for entry in generic}
+        # Reserve the generic slots first, but only from ranks that are not
+        # demoted; otherwise six other-stage rules would eat the whole budget.
+        preferred = [
+            entry for entry in deduped
+            if entry[0] < 3 and entry[1] not in generic_ids
+        ]
+        chosen_ids.extend(entry[1] for entry in preferred[: cap - reserve])
+        chosen_ids.extend(entry[1] for entry in generic[:reserve])
+    for entry in deduped:
+        if len(chosen_ids) >= cap:
+            break
+        if entry[1] not in chosen_ids:
+            chosen_ids.append(entry[1])
+    selected = set(chosen_ids)
     return tuple(
         f"[{skill.skill_id}] {skill.skill_name}: {_one_line(skill.description)}"
-        for _rank, skill in picked[: max(0, int(limit))]
-    )
+        for _rank, skill_id, skill in deduped
+        if skill_id in selected
+    )[:cap]
 
 
 def backfill_stage_specific_stages(library: Any, stages: Sequence[str]) -> list[str]:
@@ -264,11 +424,67 @@ def backfill_stage_specific_stages(library: Any, stages: Sequence[str]) -> list[
     return sorted(changed)
 
 
+def replacement_target(skill: Any, library: Any) -> str:
+    """The existing id this candidate may rewrite, or ``""`` to add it as new.
+
+    ``parse_skills`` only checks that ``replaces`` **exists** (B6). That is not
+    enough: the model may point a ``stage_specific`` candidate at a cross-stage
+    ``strategy`` rule (e.g. ``strat_burst_timing``) and overwrite universal
+    advice with stage-local text. A rewrite is therefore accepted only when
+
+    * the target exists and has the same ``layer`` as the candidate, and
+    * for ``stage_specific``, the target belongs to the candidate's own stage —
+      ``stage in target.conditions.stages`` or the id suffix ``_<stage>``.
+
+    Anything else is reported on stderr and the candidate is written as a new
+    skill (the ``replaces`` field is cleared by the caller).
+    """
+    target_id = str(getattr(skill, "replaces", "") or "")
+    if not target_id:
+        return ""
+    target = library.get(target_id)
+    if target is None:
+        print(
+            f"[extract] {skill.skill_id}: replaces unknown skill {target_id!r}; "
+            "adding as a new skill",
+            file=sys.stderr,
+        )
+        return ""
+    if target.layer != skill.layer:
+        print(
+            f"[extract] {skill.skill_id}: replaces {target_id!r} of layer "
+            f"{target.layer!r} but candidate layer is {skill.layer!r}; "
+            "keeping it as a new skill",
+            file=sys.stderr,
+        )
+        return ""
+    if skill.layer == "stage_specific":
+        stages = tuple(str(name) for name in (skill.conditions.stages or ()))
+        stage = stages[0] if stages else ""
+        if not stage:
+            print(
+                f"[extract] {skill.skill_id}: cannot tell its stage, so "
+                f"{target_id!r} stays unchanged; adding as a new skill",
+                file=sys.stderr,
+            )
+            return ""
+        target_stages = {str(name) for name in target.conditions.stages}
+        if stage not in target_stages and not target_id.endswith(f"_{stage}"):
+            print(
+                f"[extract] {skill.skill_id}: replaces {target_id!r}, which is not "
+                f"a {stage!r} skill; keeping it as a new skill",
+                file=sys.stderr,
+            )
+            return ""
+    return target_id
+
+
 def enrich_profiles(
     profiles: Sequence[Any],
     *,
     decks: dict[str, str],
     library: Any,
+    all_stages: Sequence[str] = (),
 ) -> list[Any]:
     """Attach deck facts, special rules and relevant existing skills to each profile."""
     enriched = []
@@ -286,6 +502,7 @@ def enrich_profiles(
                     stage=profile.stage,
                     objective_types=objective_types,
                     enemies=enemies,
+                    all_stages=all_stages,
                 ),
             )
         )
@@ -300,7 +517,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", default=None)
     ap.add_argument("--min-failure-rate", type=float, default=0.15)
     ap.add_argument("--effort", default="high", help="thinking effort for extraction (default high)")
-    ap.add_argument("--max-tokens", type=int, default=8192)
+    ap.add_argument(
+        "--max-tokens", type=int, default=24576,
+        help="completion budget; hidden reasoning and the JSON body share it "
+             "(default 24576; one truncation retry doubles it, capped at 49152)",
+    )
     ap.add_argument("--max-replays", type=int, default=2,
                     help="representative game traces per stage (max 2: one loss + one 3★)")
     ap.add_argument("--dry-run", action="store_true", help="print candidates, do not write")
@@ -317,9 +538,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Rows written with ``skillloop.run --trace`` carry ``trace``; older rows do
     # not and simply contribute statistics with no replay block.
+    objectives_by_stage = stage_objectives()
     profiles = failure_profiles(
         rows,
-        objectives_by_stage=stage_objectives(),
+        objectives_by_stage=objectives_by_stage,
         round_caps_by_stage=stage_round_caps(),
         max_replays=args.max_replays,
     )
@@ -328,10 +550,25 @@ def main(argv: list[str] | None = None) -> int:
     library = SkillLibrary.load(base_path) if (base_path / "library.json").exists() else SkillLibrary()
     # The fixed deck + stage rules + existing skills are what make a candidate
     # concrete; a missing config degrades that block rather than failing extraction.
+    decks = load_stage_decks()
     profiles = enrich_profiles(
-        profiles, decks=load_stage_decks(), library=library
+        profiles,
+        decks=decks,
+        library=library,
+        # Known stage names let the selector demote strategy text that names
+        # another stage (B5) instead of spending a slot on it.
+        all_stages=tuple(objectives_by_stage),
     )
     rules_note = library.rules_text()
+    # Same TaskSpec / special-rules text the decision prompt uses, so the
+    # reflection system message and the in-game system message share one source.
+    tasks = build_stage_tasks(
+        [profile.stage for profile in profiles], decks=decks, rows=rows
+    )
+    special_rules_by_stage = {
+        profile.stage: profile.special_rules for profile in profiles
+        if profile.special_rules
+    }
 
     client = build_llm_client()
     if client is None:
@@ -341,9 +578,14 @@ def main(argv: list[str] | None = None) -> int:
         client, profiles, model=args.model, rules_note=rules_note,
         min_failure_rate=args.min_failure_rate,
         effort=args.effort, max_tokens=args.max_tokens,
+        tasks=tasks, special_rules_by_stage=special_rules_by_stage,
+        # ``replaces`` is validated against the library the candidates are
+        # written into, so a hallucinated id can never rewrite the wrong skill.
+        existing_ids=tuple(library.skills),
     )
     print(f"[extract] {len(profiles)} stage profiles -> {len(candidates)} candidates "
-          f"({client.usage.calls} calls, ${client.usage.cost_usd:.4f})")
+          f"({client.usage.calls} calls, {getattr(client.usage, 'errors', 0)} errors, "
+          f"${client.usage.cost_usd:.4f})")
     for skill in candidates:
         print(f"  - {skill.skill_id:40s} [{skill.layer}] {skill.skill_name}")
         print(f"      {skill.description[:100]}")
@@ -354,7 +596,18 @@ def main(argv: list[str] | None = None) -> int:
 
     for skill in candidates:
         skill.status = "active"          # active only in this new version; the gate decides
-        if skill.skill_id in library.skills:
+        # B6/B7: only a same-layer (and, for stage_specific, same-stage) target
+        # may be rewritten in place; anything else becomes a new skill.
+        target = replacement_target(skill, library)
+        skill.replaces = target
+        if target:
+            # B6: the model declared this rule a replacement. Rewrite that skill
+            # in place so the id (and its gate history) survives, instead of
+            # adding a contradictory twin next to the advice it contradicts.
+            library.update(target, description=skill.description,
+                           conditions=skill.conditions)
+            print(f"[extract] replaced {target} (candidate {skill.skill_id})")
+        elif skill.skill_id in library.skills:
             library.update(skill.skill_id, description=skill.description,
                            conditions=skill.conditions)
         else:

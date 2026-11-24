@@ -55,8 +55,84 @@ def _row(stage: str, seed: int, three_star: bool, *, stars: int = 3, n_obj: int 
 
 
 def test_seed_list_accepts_count_or_list():
-    assert _seed_list("4") == (0, 1, 2, 3)
+    # A bare count N means seeds 1..N (seed 0 is unusable, see the tests below).
+    assert _seed_list("4") == (1, 2, 3, 4)
+    assert _seed_list("1") == (1,)
     assert _seed_list("3,7,9") == (3, 7, 9)
+
+
+def test_seed_list_rejects_engine_seed_zero():
+    with pytest.raises(SystemExit, match="absorbing"):
+        _seed_list("0")
+    with pytest.raises(SystemExit, match="absorbing"):
+        _seed_list("1,0,2")
+    with pytest.raises(SystemExit, match="absorbing"):
+        _seed_list("0,1,2")
+
+
+def test_cli_rejects_engine_seed_zero():
+    for seeds in ("0", "1,0,2"):
+        with pytest.raises(SystemExit, match="absorbing"):
+            run_module.main(["--group", "scripted", "--seeds", seeds])
+
+
+def test_run_rejects_programmatic_seed_zero(tmp_path, monkeypatch):
+    launched: list[int] = []
+
+    def fake_play_one(item):
+        launched.append(item["seed"])
+        return _row(item["stage"], item["seed"], True)
+
+    monkeypatch.setattr(run_module, "play_one", fake_play_one)
+    spec = RunSpec(
+        group="scripted",
+        stages=("wagner",),
+        seeds=(0,),
+        deck="superconduct_aggro",
+        out=str(tmp_path / "run.jsonl"),
+    )
+    with pytest.raises(SystemExit, match="absorbing"):
+        run(spec, progress=False)
+    assert launched == []
+    assert not (tmp_path / "run.jsonl").exists()
+
+
+def test_engine_seed_zero_changes_the_first_roll():
+    """Engine-level evidence for refusing seed 0.
+
+    The engine's RNG is a minstd LCG (``A=48271, C=0``), so 0 is an absorbing
+    state: a real seed-0 game freezes the first-round dice into a degenerate
+    pattern (with ``blanche/keqing_shuanghuo`` all eight dice come out as
+    ``DICE_TYPE_CRYO`` = 1), which is why the runner refuses that seed.
+    """
+    from envs.policy import build_policy as env_build_policy
+
+    def first_action_dice(seed: int) -> tuple[int, ...]:
+        stage = get_stage("timmie")
+        deck = run_module.resolve_deck("superconduct_aggro")
+        npc_deck = type(deck)(
+            name=f"npc_{stage.name}", characters=stage.deck_characters, cards=deck.cards
+        )
+        record = run_module.run_match(
+            deck,
+            npc_deck,
+            env_build_policy("expert:superconduct_aggro", seed=0, role="player"),
+            run_module.npc_policy_for_stage(stage),
+            seed=seed,
+            max_steps=40,          # the first action request happens in round 1
+            record_decisions=True,
+            record_views=True,
+        )
+        decision = next(
+            d for d in record.decisions
+            if d.request_type == "action" and d.player == 0
+        )
+        return tuple(decision.player_view["players"][0]["dice"])
+
+    zero = first_action_dice(0)
+    one = first_action_dice(1)
+    assert len(zero) == len(one) == 8
+    assert zero != one
 
 
 def test_summarize_computes_rates_and_ignores_invalid_rows():
@@ -117,22 +193,22 @@ def test_group_library_defaults():
     }
     assert run_module.LIBRARY_GROUPS == ("llm_empty", "static", "dynamic")
     assert run_module.LOADOUT_GROUPS == ("static", "dynamic")
-    expected_versions = {"llm_empty": 1, "static": 1, "dynamic": 2}
+    expected_versions = {"llm_empty": 1, "static": 2, "dynamic": 2}
     for group, version in expected_versions.items():
         fp = RunSpec(
-            group=group, stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+            group=group, stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
         ).fingerprint()
         assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS[group]
         assert fp["library_version"] == version
     scripted = RunSpec(
-        group="scripted", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+        group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     ).fingerprint()
     assert scripted["library_root"] is None and scripted["library_version"] == 0
 
 
 def test_scripted_group_is_not_a_skill_agent():
     spec = RunSpec(
-        group="scripted", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+        group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     )
     policy = run_module.build_policy(spec, get_stage("wagner"))
     assert not isinstance(policy, SkillAgentPolicy)
@@ -146,7 +222,7 @@ def test_group_policies_load_expected_library_layers(tmp_path, group, strategies
     spec = RunSpec(
         group=group,
         stages=("wagner",),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_aggro",
         # llm_empty must ignore any override.
         library_root=_library_root(tmp_path) if group == "llm_empty" else None,
@@ -159,9 +235,12 @@ def test_group_policies_load_expected_library_layers(tmp_path, group, strategies
         "rule": 17, "strategy": strategies, "stage_specific": 0,
     }
     system = policy._system_message(SimpleNamespace(player_view=None))["content"]
+    # v2: the rules are one fixed text, so the library's 17 rule skills stay in the
+    # library (gate/reproducibility) but no longer print as prompt lines.
+    assert "[rule_" not in system
     for rule in policy.library.active():
         if rule.layer == "rule":
-            assert system.count(f"- [{rule.skill_id}]") == 1
+            assert rule.skill_id not in system
     # Retrieval never re-injects the rules layer as a strategy skill.
     assert all(skill.layer != "rule" for skill in policy._skills)
     if group == "llm_empty":
@@ -177,7 +256,7 @@ def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
     spec = RunSpec(
         group="llm_empty",
         stages=("wagner",),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_aggro",
         library_root=other,
         loadout_root=str(loadout_root),
@@ -196,7 +275,7 @@ def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
 
 def test_pinned_rule_from_loadout_is_not_duplicated_and_stays_citable():
     spec = RunSpec(
-        group="static", stages=("wagner",), seeds=(0,), deck="superconduct_aggro"
+        group="static", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     )
     client = _FakeLLMClient('{"choice": 0, "used": ["rule_burst"]}')
     policy = run_module.build_policy(
@@ -270,11 +349,11 @@ def test_play_one_adds_trace_keys_only_when_enabled(monkeypatch):
 
     def play(*, trace: bool) -> dict:
         spec = RunSpec(
-            group="scripted", stages=("timmie",), seeds=(0,),
+            group="scripted", stages=("timmie",), seeds=(1,),
             deck="superconduct_aggro", trace=trace,
         )
         return run_module.play_one(
-            {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+            {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
         )
 
     plain = play(trace=False)
@@ -342,12 +421,12 @@ def test_card_version_pins_the_pool_and_is_recorded(monkeypatch):
     spec = RunSpec(
         group="scripted",
         stages=("timmie",),
-        seeds=(0,),
+        seeds=(1,),
         deck=deck.name,
         card_version="v3.3.0",
     )
     row = run_module.play_one(
-        {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
     )
 
     assert row["error"] is None
@@ -364,7 +443,7 @@ def test_card_version_rejects_out_of_pool_cards_as_a_row_error(tmp_path, monkeyp
     spec = RunSpec(
         group="scripted",
         stages=("timmie",),
-        seeds=(0, 1),
+        seeds=(1, 2),
         deck=deck.name,
         card_version="v3.3.0",
         out=str(tmp_path / "run.jsonl"),
@@ -437,7 +516,7 @@ def test_stage_decks_change_scripted_and_dynamic_identically(tmp_path, group):
     spec = RunSpec(
         group=group,
         stages=("wagner",),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_aggro",
         library_root=_library_root(tmp_path) if group == "dynamic" else None,
         stage_decks_root=config,
@@ -459,7 +538,7 @@ def test_missing_stage_deck_falls_back_to_run_spec_deck(tmp_path, group):
     spec = RunSpec(
         group=group,
         stages=("timmie",),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_aggro",
         library_root=_library_root(tmp_path) if group == "dynamic" else None,
         stage_decks_root=config,
@@ -508,7 +587,7 @@ def test_run_passes_frozen_loadout_and_stage_deck_to_workers(tmp_path, monkeypat
     spec = RunSpec(
         group="dynamic",
         stages=("wagner",),
-        seeds=(0, 1),
+        seeds=(1, 2),
         deck="superconduct_aggro",
         library_root=library_root,
         loadout_root=str(loadout_root),
@@ -534,7 +613,7 @@ def test_missing_stage_loadout_fails_loudly(tmp_path, monkeypatch):
     spec = RunSpec(
         group="dynamic",
         stages=("wagner", "timmie"),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_aggro",
         library_root=_library_root(tmp_path),
         loadout_root=str(loadout_root),
@@ -553,7 +632,7 @@ def test_stale_loadout_is_rejected(tmp_path, monkeypatch):
     spec = RunSpec(
         group="dynamic",
         stages=("wagner",),
-        seeds=(0,),
+        seeds=(1,),
         deck="superconduct_mika_attack",
         library_root=library_root,
         loadout_root=str(loadout_root),
@@ -634,7 +713,7 @@ def test_budget_guard_stops_runner_and_marks_summary(tmp_path, monkeypatch):
     spec = RunSpec(
         group="llm_empty",
         stages=("wagner",),
-        seeds=(0, 1, 2, 3, 4),
+        seeds=(1, 2, 3, 4, 5),
         deck="superconduct_aggro",
         workers=1,
         out=str(tmp_path / "run.jsonl"),
@@ -682,7 +761,7 @@ def test_parallel_window_stays_full_without_batch_barrier(tmp_path, monkeypatch)
             starts[seed] = time.perf_counter()
             active += 1
             max_active = max(max_active, active)
-        time.sleep(0.05 if seed == 0 else 0.2)      # game 0 frees its slot early
+        time.sleep(0.05 if seed == 1 else 0.2)      # game 1 frees its slot early
         with lock:
             active -= 1
             ends[seed] = time.perf_counter()
@@ -694,7 +773,7 @@ def test_parallel_window_stays_full_without_batch_barrier(tmp_path, monkeypatch)
     spec = RunSpec(
         group="llm_empty",
         stages=("wagner",),
-        seeds=tuple(range(8)),
+        seeds=tuple(range(1, 9)),
         deck="superconduct_aggro",
         workers=3,
         out=str(tmp_path / "run.jsonl"),
@@ -703,8 +782,8 @@ def test_parallel_window_stays_full_without_batch_barrier(tmp_path, monkeypatch)
 
     assert summary["games"] == 8 and len(starts) == 8
     assert max_active == 3                         # window stays full
-    # A batch/barrier scheduler would wait for games 1 and 2 before starting 3.
-    assert starts[3] < ends[1] and starts[3] < ends[2]
+    # A batch/barrier scheduler would wait for games 2 and 3 before starting 4.
+    assert starts[4] < ends[2] and starts[4] < ends[3]
 
 
 def test_parallel_budget_stops_new_submissions(tmp_path, monkeypatch):
@@ -714,7 +793,7 @@ def test_parallel_budget_stops_new_submissions(tmp_path, monkeypatch):
     def fake_play_one(item):
         with lock:
             launched.append(item["seed"])
-        time.sleep(0.05 if item["seed"] == 0 else 0.4)
+        time.sleep(0.05 if item["seed"] == 1 else 0.4)
         return _row(item["stage"], item["seed"], True, cost_usd=0.03)
 
     monkeypatch.setattr(run_module, "ProcessPoolExecutor", _ThreadExecutor)
@@ -723,14 +802,14 @@ def test_parallel_budget_stops_new_submissions(tmp_path, monkeypatch):
     spec = RunSpec(
         group="llm_empty",
         stages=("wagner",),
-        seeds=tuple(range(8)),
+        seeds=tuple(range(1, 9)),
         deck="superconduct_aggro",
         workers=3,
         out=str(tmp_path / "run.jsonl"),
     )
     summary = run(spec, progress=False)
 
-    # 3 start immediately; the first costs $0.03, so one more (game 3) is allowed;
+    # 3 start immediately; the first costs $0.03, so one more (game 4) is allowed;
     # the second completion reaches $0.06 and no further games are submitted.
     assert len(launched) == 4
     assert summary["games"] == 4
@@ -756,7 +835,7 @@ def test_cli_scratchpad_flag():
 
 def test_build_policy_sets_scratchpad_and_token_budget():
     client = _FakeLLMClient()
-    base = dict(group="llm_empty", stages=("wagner",), seeds=(0,), deck="superconduct_aggro")
+    base = dict(group="llm_empty", stages=("wagner",), seeds=(1,), deck="superconduct_aggro")
     off = run_module.build_policy(RunSpec(**base), get_stage("wagner"), client=client)
     assert off.config.scratchpad is False
     assert off.config.max_tokens == 64
@@ -770,7 +849,7 @@ def test_build_policy_sets_scratchpad_and_token_budget():
 
 def test_build_policy_reasoning_raises_the_token_budget():
     client = _FakeLLMClient()
-    base = dict(group="llm_empty", stages=("wagner",), seeds=(0,), deck="superconduct_aggro")
+    base = dict(group="llm_empty", stages=("wagner",), seeds=(1,), deck="superconduct_aggro")
     none = run_module.build_policy(RunSpec(**base), get_stage("wagner"), client=client)
     assert none.config.reasoning_effort == "none"
     assert none.config.max_tokens == 64
@@ -785,7 +864,7 @@ def test_build_policy_reasoning_raises_the_token_budget():
 def test_stage_profiles_apply_to_the_era_base(tmp_path):
     path = tmp_path / "profiles.json"
     path.write_text(json.dumps({"stages": {"lan": {"setup_rounds": 0}}}), encoding="utf-8")
-    base = dict(group="scripted", stages=("lan",), seeds=(0,), deck="keqing_jihua")
+    base = dict(group="scripted", stages=("lan",), seeds=(1,), deck="keqing_jihua")
 
     default = run_module.build_policy(RunSpec(**base), get_stage("lan"))
     assert default.agent.profile.rule_config.setup_rounds == 2
@@ -808,10 +887,10 @@ def test_play_one_records_scratchpad_flag(monkeypatch):
         lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
     )
     spec = RunSpec(
-        group="scripted", stages=("timmie",), seeds=(0,),
+        group="scripted", stages=("timmie",), seeds=(1,),
         deck="superconduct_aggro", scratchpad=True,
     )
     row = run_module.play_one(
-        {"spec": spec.__dict__, "stage": "timmie", "seed": 0, "task_index": 0}
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
     )
     assert row["scratchpad"] is True

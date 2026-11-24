@@ -250,6 +250,9 @@ class SkillAgentPolicy:
                     skill.skill_id for skill in self._skills if skill.layer == "rule"
                 }
                 self.rules_note = self.library.rules_text(exclude_ids=pinned_rule_ids)
+            # ``rules_note`` feeds the plain/compact renderer (historical minimal
+            # prompt) and stays on the policy for audit; the rich renderer ignores it
+            # and uses the fixed ``prompt_v2.GAME_RULES_V2`` instead.
             system = self.renderer.system_message(
                 task=self.task, skills=self._skills, rules_note=self.rules_note
             )

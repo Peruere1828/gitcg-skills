@@ -17,7 +17,7 @@
 |---|---|---|---|
 | `scripted` | 无（无 LLM） | 不适用 | 不适用 |
 | `llm_empty` | `data/skills/rules_v1`（17 rule，仅游戏规则） | 不加载 | 忽略 |
-| `static` | `data/skills/static_v1`（17 rule + 10 strategy） | `reports/loadouts/v1` | 允许 |
+| `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2` | 允许 |
 | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | `reports/loadouts/v4` | 允许 |
 
 一局 **有效** 的条件：`error == 0` 且 `truncated == 0`；无效局不计入分母，但必须报数量。

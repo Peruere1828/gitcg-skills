@@ -7,8 +7,8 @@
 ## 1. 定位与边界
 
 - **人类固定执 NPC 牌组**（seat1）；**AI 执用户选定的牌组**（seat0），seat0 先手。
-- **游戏版本固定**：由所选关卡的 `eval.card_version` 决定（例如 `v3.3.0`）；
-  前端不提供版本选择。
+- **游戏版本**：默认跟随引擎内置池（`configs/engine.lock`）；`eval.card_version`
+  默认 `None`，仅显式配置时才 pin。前端不提供版本选择。
 - **前端不修改 LLM 策略；任何策略/库/提示词变更都在后端 `skillloop.run`
   协议内完成。** 桥构造策略时直接调用 `skillloop.run.build_policy`，与离线评测
   同源；前端只提供可视化界面、对局日志与决策信息展示。
@@ -52,7 +52,7 @@
 
 - **AI 反选**（`POST /choose-deck`）：评价协议下 AI 牌组由关卡 `eval.deck` 固定。
 - **取 AI 牌组**（`GET /ai-deck`）：牌组已由 `eval` 回填，主流程不需要。
-- **游戏版本选择**：版本跟随关卡 `eval.card_version`。
+- **游戏版本选择**：默认引擎内置池；`eval.card_version` 仅在显式配置时 pin。
 - **多人对战**：固定 1v1。
 - **导入日志**。
 - **摆盘器**。
@@ -67,7 +67,7 @@ bash scripts/serve_web_demo.sh
 ```
 
 默认值对齐 `v2_dynamic`：前端 7001、桥 8770、
-`configs/stage_decks.json` + `reports/loadouts/v4` + `v3.3.0`。
+`configs/stage_decks.json` + `reports/loadouts/v4` + 引擎内置池（不 pin）。
 后台常驻：
 
 ```sh
@@ -92,7 +92,7 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 | `CONDA_ENV` | `gitcg-skill` | Python 环境 |
 | `STAGE_DECKS` | `configs/stage_decks.json` | 关卡 → 牌组映射 |
 | `LOADOUT_ROOT` | `reports/loadouts/v4` | 冻结 loadout 根 |
-| `CARD_VERSION` | `v3.3.0` | 卡池版本 |
+| `CARD_VERSION` | 空 | 卡池版本；空 = 引擎内置池，设置才 pin |
 | `REASONING` | `none` | AI 决策的 reasoning effort（`none`/`low`/`medium`/`high`；非 `none` 时回复预算 12288 token，仅调试用） |
 | `LLM_TRACE` | `data/web/llm_trace.jsonl` | 模型调用 JSONL 路径（完整 prompt + content + reasoning_content；不含 key；设 `none` 关闭） |
 | `RICH_RENDER` | `1` | 完整渲染：system 前缀含双方角色技能与整套牌资料；局面含元素/武装、支援/召唤物/状态/装备与手牌费用；`0` 回紧凑渲染 |

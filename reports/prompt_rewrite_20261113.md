@@ -52,7 +52,8 @@
 
 ### 示例输出
 
-艾琳关起手（`reports/prompts/ellin_mulligan_20261113.md`）：
+艾琳关起手（当时的 `reports/prompts/ellin_mulligan_20261113.md` 已删除；真实调用样本见
+`reports/prompts/decision_prompt.md`）：
 system 4870 字符 / 3659 prompt tokens；user 564 字符。
 
 ## 3. effort=none：scripted / llm_empty / static（审计修复后的最终 prompt）

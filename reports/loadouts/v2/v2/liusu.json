@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_burst",
+    "rule_reaction",
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "需5回合内取胜且用1次爆发：选爆发规则与时机、元素反应增伤、集火残血，并强调回合上限节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "f1310dddf4bb",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

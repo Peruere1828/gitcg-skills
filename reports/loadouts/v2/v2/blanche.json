@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "rule_burst",
+    "rule_reaction",
+    "strat_burst_timing",
+    "规则_目标_元素爆发",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "三星需5回合内胜利并使用元素爆发，故优先爆发充能与时机、元素反应增伤，以及回合上限节奏规则。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "3ce02c45d3a7",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import skillloop.extract as extract
 from skillloop.extract import (
     SYSTEM,
     ReplaySample,
@@ -12,6 +13,7 @@ from skillloop.extract import (
     parse_skills,
     propose_candidates,
 )
+from skillloop.render import TaskSpec
 
 
 def _row(stage: str, *, three_star: bool, rounds: int = 5, objectives=None, **extra) -> dict:
@@ -43,16 +45,55 @@ def test_failure_profiles_aggregate_per_stage():
     assert wagner.mean_rounds > 5
 
 
-def test_profile_text_is_readable():
+def test_profile_text_is_readable_and_does_not_repeat_objectives():
     profile = StageProfile(
         stage="wagner", n=10, three_star_rate=0.3, mean_rounds=6.2,
         failed_objectives={"win_within_rounds": 7}, objectives=("5回合内胜利",),
     )
     text = profile.as_text()
-    assert "wagner" in text and "win_within_rounds" in text and "5回合内胜利" in text
+    assert "wagner" in text and "win_within_rounds" in text
+    # H11: the system message already renders task.describe() + 目标判定; the user
+    # statistics line must not repeat the objective texts a third time.
+    assert "关卡目标：" not in text and "5回合内胜利" not in text
 
 
 # -- replay sampling ---------------------------------------------------------
+def test_failure_replay_represents_the_most_failed_objective():
+    """B4: the loss shown must be evidence for the dominant failure, not a rarer one."""
+    rows = [
+        _row("chefmao", three_star=False, rounds=6, seed=4,
+             objectives={"win": True, "win_within_rounds": False,
+                         "defeated_less_than": True},
+             trace=["R1 P0 技能 超时局4", "结局 timeout"]),
+        _row("chefmao", three_star=False, rounds=6, seed=5,
+             objectives={"win": True, "win_within_rounds": False,
+                         "defeated_less_than": True},
+             trace=["R1 P0 技能 超时局5", "结局 timeout"]),
+        _row("chefmao", three_star=False, rounds=5, seed=1,
+             objectives={"win": True, "win_within_rounds": True,
+                         "defeated_less_than": False},
+             trace=["R1 P0 技能 少被击倒局1", "结局 defeat"]),
+        _row("chefmao", three_star=True, rounds=5, seed=2,
+             objectives={"win": True, "win_within_rounds": True,
+                         "defeated_less_than": True},
+             trace=["R1 P0 技能 三星局2", "结局 win"]),
+        _row("chefmao", three_star=True, rounds=4, seed=3,
+             objectives={"win": True, "win_within_rounds": True,
+                         "defeated_less_than": True},
+             trace=["R1 P0 技能 三星局3", "结局 win"]),
+    ]
+    profile = failure_profiles(rows, round_caps_by_stage={"chefmao": 5})[0]
+
+    assert profile.failed_objectives == {"win_within_rounds": 2, "defeated_less_than": 1}
+    assert [sample.label for sample in profile.replays] == ["失败", "三星"]
+    loss = profile.replays[0]
+    # win_within_rounds fails 2/5 vs defeated_less_than 1/5: the timeout game is
+    # the evidence the statistics line talks about (this used to pick seed 1).
+    assert loss.missing == ("win_within_rounds",)
+    assert loss.seed in (4, 5)
+    assert "超时局" in loss.lines[0]
+
+
 def test_failure_profiles_pick_close_loss_and_fast_three_star():
     rows = [
         _row("wagner", three_star=False, rounds=9, seed=2,
@@ -104,7 +145,8 @@ def test_failure_profiles_respect_max_replays():
 # -- parsing -----------------------------------------------------------------
 def test_parse_skills_reads_array():
     raw = json.dumps([
-        {"skill_name": "速攻少装备", "description": "只打一张装备", "conditions": {"objective_types": ["win_within_rounds"]}},
+        {"skill_name": "速攻少装备", "description": "只打一张装备", "layer": "strategy",
+         "conditions": {"objective_types": ["win_within_rounds"]}},
         {"skill_name": "", "description": "没有名字应被丢弃"},
     ])
     skills = parse_skills(raw, stage="wagner")
@@ -113,6 +155,7 @@ def test_parse_skills_reads_array():
     assert skill.skill_id.endswith("_wagner")
     assert skill.status == "candidate"
     assert skill.layer == "strategy"
+    assert skill.conditions.stages == ()
     assert skill.conditions.objective_types == ("win_within_rounds",)
 
 
@@ -147,6 +190,145 @@ def test_parse_skills_pins_stage_specific_to_current_stage():
     assert stage_specific.conditions.round_max == 5
     assert strategy.layer == "strategy"
     assert strategy.conditions.stages == ("other",)            # strategy stays as-is
+
+
+def test_parse_skills_missing_layer_defaults_to_stage_specific(capsys):
+    """A missing layer must not become a cross-stage ``strategy`` rule."""
+    raw = json.dumps([
+        {"skill_name": "缺层", "description": "本关专用动作",
+         "conditions": {"objective_types": ["win_within_rounds"]}},
+    ])
+    skill = parse_skills(raw, stage="chefmao")[0]
+    assert skill.layer == "stage_specific"
+    assert skill.conditions.stages == ("chefmao",)
+    assert skill.conditions.objective_types == ("win_within_rounds",)
+    err = capsys.readouterr().err
+    assert "layer missing/invalid" in err and "-> stage_specific" in err
+
+
+def test_parse_skills_invalid_layer_falls_back_to_stage_specific(capsys):
+    """An unknown layer is downgraded to ``stage_specific``, not dropped (H13)."""
+    raw = json.dumps([
+        {"skill_name": "坏层", "description": "仍然存活但只用于本关", "layer": "general"},
+        {"skill_name": "好层", "description": "跨关通用", "layer": "strategy"},
+    ])
+    skills = parse_skills(raw, stage="wagner")
+    assert [skill.skill_name for skill in skills] == ["坏层", "好层"]
+    bad, good = skills
+    assert bad.layer == "stage_specific"
+    assert bad.conditions.stages == ("wagner",)
+    assert good.layer == "strategy" and good.conditions.stages == ()
+    err = capsys.readouterr().err
+    assert "layer missing/invalid ('general' -> stage_specific)" in err
+
+
+def test_parse_skills_truncates_to_two_per_stage(capsys):
+    """H14: the parser enforces the prompt's '每关最多 2 条' contract."""
+    raw = json.dumps([
+        {"skill_name": f"技能{i}", "description": f"第{i}条动作"} for i in range(3)
+    ])
+    skills = parse_skills(raw, stage="wagner")
+    assert [skill.skill_name for skill in skills] == ["技能0", "技能1"]
+    assert "keeping the first 2" in capsys.readouterr().err
+
+
+def test_parse_skills_keeps_two_same_name_candidates_with_distinct_ids(capsys):
+    """B7: a shared slug must not silently delete the second failure's candidate.
+
+    chefmao got two rules (one for ``win_within_rounds``, one for
+    ``defeated_less_than``) whose Chinese names slug to the same id; the old code
+    parsed both and the writer's dedupe kept only the first, so one failure had no
+    candidate at all.
+    """
+    raw = json.dumps([
+        {"skill_name": "开局节奏", "layer": "stage_specific",
+         "description": "缺 win_within_rounds：前两轮先打武器，别急着切人。",
+         "conditions": {"objective_types": ["win_within_rounds"], "round_max": 5}},
+        {"skill_name": "开局节奏", "layer": "stage_specific",
+         "description": "缺 defeated_less_than：先集火火债，雷角色不要先手送死。",
+         "conditions": {"objective_types": ["defeated_less_than"]}},
+    ])
+    skills = parse_skills(raw, stage="chefmao")
+
+    assert len(skills) == 2
+    first, second = skills
+    assert first.skill_id != second.skill_id
+    assert second.skill_id == f"{first.skill_id}_2"
+    # the rename keeps it a stage-specific chefmao skill
+    for skill in skills:
+        assert skill.layer == "stage_specific"
+        assert skill.conditions.stages == ("chefmao",)
+    assert first.conditions.objective_types == ("win_within_rounds",)
+    assert second.conditions.objective_types == ("defeated_less_than",)
+    err = capsys.readouterr().err
+    assert "duplicate id" in err and "renamed to" in err
+
+
+def test_parse_skills_dedupes_only_identical_name_and_description():
+    entry = {"skill_name": "同一条", "description": "完全相同的规则。",
+             "layer": "strategy"}
+    skills = parse_skills(json.dumps([entry, dict(entry)]), stage="wagner")
+    assert len(skills) == 1 and skills[0].skill_id == "skill_wagner"
+
+
+def test_parse_skills_keeps_replaces_only_for_known_ids(capsys):
+    """B6: a candidate can rewrite an existing skill, but never a hallucinated id."""
+    raw = json.dumps([
+        {"skill_name": "改写旧规则", "description": "先手打武器。",
+         "replaces": "old_wagner"},
+        {"skill_name": "瞎写目标", "description": "不存在的引用。",
+         "replaces": "__nope__"},
+    ])
+    known, unknown = parse_skills(raw, stage="wagner", existing_ids=("old_wagner",))
+    assert known.replaces == "old_wagner"
+    assert unknown.replaces == ""
+    assert "replaces unknown skill '__nope__'" in capsys.readouterr().err
+
+
+def test_parse_skills_maps_enemy_names_and_drops_foreign_objectives(capsys):
+    """H12: conditions must be matchable on this stage (real values, ids)."""
+    raw = json.dumps([{
+        "skill_name": "火债前置",
+        "description": "先集火火之债务处理人。",
+        "conditions": {
+            "objective_types": ["win_within_rounds", "play_event_cards"],
+            "enemies": ["愚人众·火之债务处理人"],
+            "round_max": 5,
+        },
+    }])
+    skill = parse_skills(raw, stage="chefmao")[0]
+    assert skill.conditions.objective_types == ("win_within_rounds",)
+    assert skill.conditions.enemies == ("fatuipyroagent",)
+    assert skill.conditions.round_max == 5
+    assert "play_event_cards" in capsys.readouterr().err
+
+
+def test_output_schema_uses_real_values_and_replaces():
+    from skillloop.extract import COACH_ROLE, OUTPUT_SCHEMA
+
+    assert '"objective_types": ["win_within_rounds"]' in OUTPUT_SCHEMA
+    assert '"round_max": 5' in OUTPUT_SCHEMA
+    assert '"replaces"' in OUTPUT_SCHEMA
+    assert "fatuipyroagent" in COACH_ROLE      # enemies: english id, mapping is a fallback
+    assert "非法或缺失 layer 一律按 stage_specific 处理" in COACH_ROLE
+    # the prompt no longer promises a drop, and no longer prints an illegal
+    # ``"strategy" 或 "stage_specific"`` value, so a copy-paste reply parses.
+    assert "整条丢弃" not in COACH_ROLE
+    assert '或 "stage_specific"' not in OUTPUT_SCHEMA
+    assert '"layer": "stage_specific"' in OUTPUT_SCHEMA
+    assert '"replaces": ""' in OUTPUT_SCHEMA
+
+
+def test_output_schema_example_parses_as_json():
+    """The example inside the system message is valid JSON: models copy it verbatim."""
+    from skillloop.extract import SYSTEM
+
+    start, end = SYSTEM.find("{"), SYSTEM.rfind("}")
+    assert 0 <= start < end
+    example = json.loads(SYSTEM[start:end + 1])
+    assert example["layer"] == "stage_specific"
+    assert example["replaces"] == ""
+    assert isinstance(example["conditions"], dict)
 
 
 def test_backfill_stage_specific_stages_uses_longest_id_suffix():
@@ -320,6 +502,155 @@ def test_relevant_existing_skills_excludes_rules_and_keeps_stage_matches():
     assert "strategy_other_stage" not in joined
 
 
+def test_relevant_existing_skills_chefmao_keeps_generics_and_full_sentences():
+    """B5: chefmao must see generic advice, not other stages' strategy text."""
+    from pathlib import Path
+
+    from scripts.extract_skills import (
+        relevant_existing_skills,
+        stage_context,
+        stage_objectives,
+    )
+    from skillloop.library import SkillLibrary
+
+    root = Path(__file__).resolve().parents[1] / "data/skills/dyn_v6"
+    library = SkillLibrary.load(root)
+    objective_types, enemies = stage_context("chefmao")
+    rendered = relevant_existing_skills(
+        library,
+        stage="chefmao",
+        objective_types=objective_types,
+        enemies=enemies,
+        all_stages=tuple(stage_objectives()),
+    )
+
+    assert len(rendered) == 8
+    joined = "\n".join(rendered)
+    # Stage-named strategy rows (blanche/buyun/shitou/...) are demoted, not shown.
+    for other in ("blanche", "shitou", "buyun"):
+        assert other not in joined.lower()
+    # The generic cross-stage reserve survives (the prompt must still show them).
+    assert sum(line.startswith("[strat_") for line in rendered) >= 2
+    # Descriptions keep the full trigger→action text and end at a sentence end.
+    for line in rendered:
+        description = line.split(": ", 1)[1]
+        assert len(description) <= 300
+        assert description.endswith(("。", "；", "！", "？"))
+        assert "…" not in description
+
+
+def test_relevant_existing_skills_reserves_generic_slots_and_dedupes():
+    from scripts.extract_skills import relevant_existing_skills
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill, SkillConditions
+
+    long_description = (
+        "触发条件：每轮开局先看手牌。动作：先按本轮技能计算并锁死骰子，"
+        "剩余骰子才允许打事件牌；切人后当轮若仍有骰子，应直接用新出战角色技能输出，"
+        "不要在击杀轮连打不产生伤害的牌。" + "补充说明。" * 60
+    )
+    library = SkillLibrary.from_skills([
+        Skill("stage_rule_chefmao", "本关规则", "本关专用：开局先上支援。",
+              conditions=SkillConditions(stages=("chefmao",)), layer="stage_specific"),
+        # Same opening sentence = same advice; only the higher-ranked one is kept.
+        Skill("dup_one", "同义一", long_description, layer="strategy"),
+        Skill("dup_two", "同义二", long_description, layer="strategy"),
+        # Names another stage -> demoted behind every generic row.
+        Skill("other_rule_shitou", "别的关", "别的关专属：先打反应。", layer="strategy"),
+        Skill("skill_wagner", "装备目标前置化", "装备牌前两轮打。", layer="strategy"),
+        *[
+            Skill(f"strat_{name}", f"通用{name}", f"通用策略：{name}。", layer="strategy")
+            for name in ("a", "b", "c", "d", "e", "f")
+        ],
+    ])
+    rendered = relevant_existing_skills(
+        library,
+        stage="chefmao",
+        objective_types=("win", "win_within_rounds"),
+        all_stages=("chefmao", "wagner", "shitou"),
+    )
+    joined = "\n".join(rendered)
+    assert rendered[0].startswith("[stage_rule_chefmao]")
+    assert "other_rule_shitou" not in joined and "skill_wagner" not in joined
+    assert "dup_one" in joined and "dup_two" not in joined     # synonym dedupe
+    assert sum(line.startswith("[strat_") for line in rendered) >= 2
+    # The 300-char cap cuts at a sentence end, never mid-clause with "…".
+    for line in rendered:
+        description = line.split(": ", 1)[1]
+        assert len(description) <= 300
+        assert not description.endswith("…")
+        assert description.endswith(("。", "；", "！", "？"))
+
+
+def test_build_prompt_user_line_does_not_repeat_the_objectives(monkeypatch):
+    """H11: objectives live in the system prompt (task.describe + 目标判定) once."""
+    monkeypatch.setattr(extract, "_render_assets", lambda: None)
+    profile = _profile_for_new_prompt()
+    messages = build_prompt(profile, task=_task())
+    user = messages[1]["content"]
+    assert "关卡目标：" not in user
+    assert "5回合内胜利" not in user
+    assert "win_within_rounds 失败" in user
+    assert "5回合内胜利" in messages[0]["content"]
+
+
+def test_replay_block_explains_script_policy_rows():
+    """H10: the replay mixes script-policy and LLM rows; the block says which is which."""
+    profile = _profile_for_new_prompt()
+    user = build_prompt(profile)[1]["content"]
+    assert (
+        "说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。"
+        in user
+    )
+    header = user.index("代表局回放（用于定位失误；不要复述单局操作）：")
+    assert header < user.index("说明：重掷/换牌/选人") < user.index("代表局 A")
+
+
+def test_extract_skills_script_rewrites_a_replaced_skill_in_place(tmp_path, monkeypatch):
+    """B6: ``replaces`` hits an existing id -> update in place, no contradictory twin."""
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill, SkillConditions
+
+    base = tmp_path / "base"
+    SkillLibrary.from_skills([
+        Skill(
+            "old_wagner", "旧节奏规则", "旧规则：先铺场，后期再补伤害。",
+            conditions=SkillConditions(stages=("wagner",)), layer="stage_specific",
+        ),
+    ], version=1).save(base)
+    rows = [
+        _row("wagner", three_star=False, rounds=6,
+             objectives={"win": True, "win_within_rounds": False}),
+    ]
+    path = tmp_path / "rows.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    client = _ScriptClient(json.dumps([{
+        "skill_name": "新节奏规则",
+        "description": "先手打武器，五回合内击杀。",
+        "conditions": {"objective_types": ["win_within_rounds"], "round_max": 5},
+        "layer": "stage_specific",
+        "replaces": "old_wagner",
+    }]))
+    import common.llm
+
+    monkeypatch.setattr(common.llm, "build_llm_client", lambda: client)
+
+    from scripts.extract_skills import main
+
+    out = tmp_path / "out"
+    assert main(["--rows", str(path), "--base", str(base), "--out", str(out)]) == 0
+
+    library = SkillLibrary.load(out)
+    assert list(library.skills) == ["old_wagner"]        # id kept, no twin added
+    updated = library.get("old_wagner")
+    assert updated.description.startswith("先手打武器")
+    assert updated.version == 2                          # update() bumped it
+    assert updated.conditions.objective_types == ("win_within_rounds",)
+
+
 class _ScriptClient:
     def __init__(self, reply: str) -> None:
         self.reply = reply
@@ -330,6 +661,314 @@ class _ScriptClient:
         self.calls.append(messages)
         self.usage.calls += 1
         return self.reply
+
+
+def test_replacement_target_requires_same_layer_and_stage():
+    """B7: ``replaces`` may not cross layers, and stage skills stay in their stage."""
+    from scripts.extract_skills import replacement_target
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill, SkillConditions
+
+    library = SkillLibrary.from_skills([
+        Skill("strat_burst_timing", "爆发时机", "通用：留骰子给爆发。", layer="strategy"),
+        Skill("skill_wagner", "瓦格纳节奏", "瓦格纳专用。",
+              conditions=SkillConditions(stages=("wagner",)), layer="stage_specific"),
+        Skill("skill_timmie", "提米节奏", "提米专用。",
+              conditions=SkillConditions(stages=("timmie",)), layer="stage_specific"),
+    ])
+    stage_specific = dict(conditions=SkillConditions(stages=("wagner",)),
+                          layer="stage_specific")
+    wrong_layer = Skill("cand_a", "本关规则", "本关专用。",
+                        replaces="strat_burst_timing", **stage_specific)
+    other_stage = Skill("cand_b", "本关规则", "本关专用。",
+                        replaces="skill_timmie", **stage_specific)
+    same_stage = Skill("cand_c", "新节奏", "改写本关。",
+                       replaces="skill_wagner", **stage_specific)
+    strategy = Skill("cand_d", "通用", "跨关。", layer="strategy",
+                     replaces="strat_burst_timing")
+
+    assert replacement_target(wrong_layer, library) == ""
+    assert replacement_target(other_stage, library) == ""
+    assert replacement_target(same_stage, library) == "skill_wagner"
+    assert replacement_target(strategy, library) == "strat_burst_timing"
+    assert replacement_target(
+        Skill("cand_e", "无引用", "没有 replaces。", layer="strategy"), library
+    ) == ""
+
+
+def test_replacement_target_same_stage_suffix_and_strategy_rewrite():
+    """``stage_specific`` needs the same stage; ``strategy`` may rewrite same layer."""
+    from scripts.extract_skills import replacement_target
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill, SkillConditions
+
+    library = SkillLibrary.from_skills([
+        # No ``conditions.stages``: only the id suffix names the stage.
+        Skill("hydro_line_chefmao", "水雷线", "旧：先打水。", layer="stage_specific"),
+        Skill("strat_round_budget", "回合预算", "通用：五回合内结束。",
+              layer="strategy", conditions=SkillConditions(stages=("chefmao",))),
+    ])
+    by_suffix = Skill(
+        "cand_f", "水雷线", "先打水再切雷。", layer="stage_specific",
+        conditions=SkillConditions(stages=("chefmao",)),
+        replaces="hydro_line_chefmao",
+    )
+    assert replacement_target(by_suffix, library) == "hydro_line_chefmao"
+
+    # strategy -> strategy is a same-layer rewrite even if the target carries a stage
+    strategy_rewrite = Skill(
+        "cand_g", "回合预算", "三个回合内结束。", layer="strategy",
+        replaces="strat_round_budget",
+    )
+    assert replacement_target(strategy_rewrite, library) == "strat_round_budget"
+
+    # a stage_specific candidate with no known stage cannot claim any target
+    unknown_stage = Skill(
+        "cand_h", "无关卡", "不知道属于哪关。", layer="stage_specific",
+        replaces="hydro_line_chefmao",
+    )
+    assert replacement_target(unknown_stage, library) == ""
+
+
+def test_extract_skills_script_adds_candidate_instead_of_overwriting_strategy(
+    tmp_path, monkeypatch, capsys
+):
+    """B7: a stage_specific candidate must not rewrite a generic strategy rule."""
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill
+
+    base = tmp_path / "base"
+    SkillLibrary.from_skills([
+        Skill("strat_burst_timing", "爆发时机", "通用：把骰子留给爆发回合。",
+              layer="strategy"),
+    ], version=1).save(base)
+    rows = [
+        _row("wagner", three_star=False, rounds=6,
+             objectives={"win": True, "win_within_rounds": False}),
+    ]
+    path = tmp_path / "rows.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    client = _ScriptClient(json.dumps([{
+        "skill_name": "本关节奏",
+        "description": "瓦格纳前两轮先打武器。",
+        "layer": "stage_specific",
+        "replaces": "strat_burst_timing",
+    }]))
+    import common.llm
+
+    monkeypatch.setattr(common.llm, "build_llm_client", lambda: client)
+
+    from scripts.extract_skills import main
+
+    out = tmp_path / "out"
+    assert main(["--rows", str(path), "--base", str(base), "--out", str(out)]) == 0
+
+    library = SkillLibrary.load(out)
+    generic = library.get("strat_burst_timing")
+    assert generic.description == "通用：把骰子留给爆发回合。"
+    assert generic.version == 1                       # untouched: no update()
+    added = [
+        skill for skill_id, skill in library.skills.items()
+        if skill_id != "strat_burst_timing"
+    ]
+    assert len(added) == 1
+    assert added[0].layer == "stage_specific"
+    assert added[0].conditions.stages == ("wagner",)
+    assert added[0].replaces == ""                    # dangling reference cleared
+    assert "keeping it as a new skill" in capsys.readouterr().err
+
+
+def test_prompt_samples_parses_with_base_library_ids(tmp_path, capsys):
+    """Bug B7: sample generation must not warn about a ``replaces`` that exists."""
+    from scripts.prompt_samples import render_reflection
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill
+
+    base = tmp_path / "base"
+    SkillLibrary.from_skills([
+        Skill("strat_burst_timing", "爆发时机", "通用：留骰子给爆发。", layer="strategy"),
+    ], version=3).save(base)
+    record = {
+        "finish_reason": "stop",
+        "content": json.dumps([{
+            "skill_name": "本关节奏",
+            "description": "瓦格纳前两轮先打武器。",
+            "layer": "stage_specific",
+            "replaces": "strat_burst_timing",
+        }]),
+        "usage": {},
+    }
+    rows = [_row("wagner", three_star=False, rounds=6,
+                 objectives={"win": True, "win_within_rounds": False})]
+
+    text = render_reflection([record], rows, str(base), "cmd")
+    assert "replaces unknown skill" not in capsys.readouterr().err
+    assert "解出 1 条候选" in text
+    assert "version 3" in text
+
+
+
+# -- new decision-shaped system message --------------------------------------
+def _task(**overrides) -> TaskSpec:
+    payload = {
+        "stage": "wagner",
+        "display": "瓦格纳",
+        "objectives": ("5回合内胜利",),
+        "deck": "keqing_jihua",
+        "objective_types": ("win_within_rounds",),
+        "max_rounds": 5,
+    }
+    payload.update(overrides)
+    return TaskSpec(**payload)
+
+
+def test_build_system_orders_segments_and_shares_decision_rules(monkeypatch):
+    from skillloop.prompt_v2 import CARD_INFO_HEADER, GAME_RULES_V2, OBJECTIVE_HEADER
+
+    monkeypatch.setattr(
+        extract, "_knowledge_block",
+        lambda task: CARD_INFO_HEADER + "\n  - 测试角色[雷] HP上限10",
+    )
+    system = extract.build_system(_task(), special_rules="开局我方支援区有「凯瑟琳」")
+    assert system.startswith(extract.COACH_ROLE)
+    assert GAME_RULES_V2 in system                       # same constant as decisions
+    markers = [
+        extract.COACH_ROLE,
+        extract.GAME_RULES_HEADER,
+        GAME_RULES_V2,
+        extract.SPECIAL_RULES_HEADER,
+        "「凯瑟琳」",
+        CARD_INFO_HEADER,
+        OBJECTIVE_HEADER,
+        "关卡【瓦格纳】用【keqing_jihua】出战",
+        "目标判定：",
+        extract.OUTPUT_HEADER,
+        '"skill_name"',
+    ]
+    positions = [system.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+
+
+def test_build_system_degrades_without_assets(monkeypatch):
+    from skillloop.prompt_v2 import CARD_INFO_HEADER
+
+    monkeypatch.setattr(extract, "_render_assets", lambda: None)
+    system = extract.build_system(_task())
+    assert extract.GAME_RULES_V2 in system
+    assert "当前对局的获胜目标" in system
+    assert CARD_INFO_HEADER not in system
+    assert '"skill_name"' in system
+
+
+def test_build_system_omits_empty_special_rules():
+    assert extract.SPECIAL_RULES_HEADER not in extract.build_system(_task())
+    with_rules = extract.build_system(_task(), special_rules="   ")
+    assert extract.SPECIAL_RULES_HEADER not in with_rules
+
+
+def test_build_system_says_defeated_less_than_needs_a_win(monkeypatch):
+    """``npc.objectives`` scores ``won and defeated < k``: the wording must say 胜利时."""
+    monkeypatch.setattr(extract, "_render_assets", lambda: None)
+    task = _task(
+        objectives=("胜利；少被击倒",),
+        objective_types=("win", "defeated_less_than"),
+    )
+    system = extract.build_system(task)
+    assert "胜利时，我方被击倒的角色次数必须小于" in system
+    # stages without that objective get no such clarification
+    assert "胜利时，我方被击倒" not in extract.build_system(_task())
+
+
+def _profile_for_new_prompt() -> StageProfile:
+    return StageProfile(
+        "wagner", 10, 0.3, 6.0, {"win_within_rounds": 7}, ("5回合内胜利",),
+        replays=[
+            ReplaySample(
+                label="失败", seed=1, rounds=6,
+                missing=("win_within_rounds",),
+                lines=("R1 P0 技能 #1",),
+            ),
+        ],
+        deck="keqing_jihua",
+        deck_facts="刻晴(雷)；元素：雷x1；卡牌：事件x20",
+        special_rules="开局我方支援区有「凯瑟琳」",
+        existing_skills=("[x_wagner] 旧技能: 先打武器",),
+    )
+
+
+def test_build_prompt_with_task_moves_context_to_system(monkeypatch):
+    monkeypatch.setattr(extract, "_render_assets", lambda: None)
+    profile = _profile_for_new_prompt()
+    messages = build_prompt(
+        profile,
+        task=_task(),
+        special_rules=profile.special_rules,
+        rules_note="rule_dice: 骰子规则",
+    )
+    system, user = messages[0]["content"], messages[1]["content"]
+
+    assert "已知规则" not in user and "rule_dice" not in user
+    assert "固定牌组" not in user and "关卡特殊规则" not in user
+    assert "三星率 0.30" in user
+    assert "代表局 A" in user
+    assert "当前技能库中" in user
+    assert "【游戏规则】" in system and extract.GAME_RULES_V2 in system
+    assert "【关卡特殊规则】" in system and "「凯瑟琳」" in system
+    assert "当前对局的获胜目标" in system
+
+
+def test_build_prompt_task_none_keeps_legacy_layout():
+    profile = _profile_for_new_prompt()
+    messages = build_prompt(profile, rules_note="rule_dice: 骰子规则")
+    user = messages[1]["content"]
+    assert messages[0]["content"] == SYSTEM
+    assert "固定牌组：keqing_jihua" in user
+    assert "关卡特殊规则：开局我方支援区有「凯瑟琳」" in user
+    assert "已知规则：\nrule_dice: 骰子规则" in user
+
+
+def test_propose_candidates_injects_per_stage_task_and_special_rules():
+    profiles = [
+        StageProfile("wagner", 10, 0.3, 6.0, {"win": 7}, ()),
+        StageProfile("timmie", 10, 0.5, 5.0, {"win": 6}, ()),
+    ]
+    tasks = {
+        "wagner": _task(stage="wagner", display="瓦格纳", deck="deck_a"),
+        "timmie": _task(stage="timmie", display="提米", deck="deck_b"),
+    }
+    client = _Client(json.dumps([{"skill_name": "A", "description": "B"}]))
+    propose_candidates(
+        client,
+        profiles,
+        tasks=tasks,
+        special_rules_by_stage={
+            "wagner": "开局我方支援区有「甲」",
+            "timmie": "行动阶段开始为双方出战角色附着火元素",
+        },
+    )
+    systems = [call[0]["content"] for call in client.calls]
+    assert len(systems) == 2
+    wagner = next(text for text in systems if "关卡【瓦格纳】" in text)
+    timmie = next(text for text in systems if "关卡【提米】" in text)
+    assert "「甲」" in wagner and "附着火元素" not in wagner
+    assert "附着火元素" in timmie and "「甲」" not in timmie
+    assert "deck_a" in wagner and "deck_b" not in wagner
+
+
+def test_build_stage_tasks_uses_config_deck_then_row_deck():
+    from scripts.extract_skills import build_stage_tasks
+
+    tasks = build_stage_tasks(["lan"], decks={"lan": "keqing_jihua"})
+    assert tasks["lan"].stage == "lan"
+    assert tasks["lan"].deck == "keqing_jihua"
+    row_tasks = build_stage_tasks(
+        ["lan"], decks={}, rows=[{"stage": "lan", "deck": "keqing_jihua"}]
+    )
+    assert row_tasks["lan"].deck == "keqing_jihua"
+    assert build_stage_tasks(["__no_such_stage__"], decks={}) == {}
 
 
 def test_extract_skills_script_accepts_rows_with_and_without_traces(tmp_path, monkeypatch):
@@ -357,8 +996,85 @@ def test_extract_skills_script_accepts_rows_with_and_without_traces(tmp_path, mo
                  "--dry-run", "--max-replays", "2"])
     assert code == 0
     assert len(client.calls) == 2
-    prompts = {call[1]["content"]: call for call in client.calls}
-    wagner_prompt = next(text for text in prompts if "关卡 wagner" in text)
-    timmie_prompt = next(text for text in prompts if "关卡 timmie" in text)
+    wagner_call = next(
+        call for call in client.calls if "关卡 wagner" in call[1]["content"]
+    )
+    timmie_call = next(
+        call for call in client.calls if "关卡 timmie" in call[1]["content"]
+    )
+    wagner_prompt = wagner_call[1]["content"]
+    timmie_prompt = timmie_call[1]["content"]
     assert "代表局 A（失败，6 回合，缺 win_within_rounds" in wagner_prompt
     assert "代表局" not in timmie_prompt               # statistics-only fallback
+
+    # Each stage's system carries its own TaskSpec + special rules, and the rules
+    # note no longer appears as a user-side block.
+    wagner_system = wagner_call[0]["content"]
+    timmie_system = timmie_call[0]["content"]
+    for system in (wagner_system, timmie_system):
+        assert "【游戏规则】" in system
+        assert "已知规则" not in system
+    for text in (wagner_prompt, timmie_prompt):
+        assert "已知规则" not in text
+    assert "开局我方支援区有「瓦格纳」" in wagner_system
+    assert "开局我方支援区有「提米」" in timmie_system
+    assert "开局我方支援区有「提米」" not in wagner_system
+    assert "关卡【瓦格纳】" in wagner_system
+    assert "关卡【提米】" in timmie_system
+
+
+# -- truncation (finish_reason=length) retry ----------------------------------
+class _TruncatingClient:
+    """Reports ``length`` on the first call, then a chosen finish_reason rest."""
+
+    def __init__(self, replies, finish_reasons) -> None:
+        self.replies = list(replies)
+        self.finish_reasons = list(finish_reasons)
+        self.calls: list[list[dict]] = []
+        self.max_tokens: list[int] = []
+        self.last_finish_reason: str | None = None
+        self.usage = SimpleNamespace(calls=0, cost_usd=0.0)
+
+    def chat(self, messages, *, max_tokens=None, **_kwargs) -> str | None:
+        self.calls.append(messages)
+        self.max_tokens.append(max_tokens)
+        self.usage.calls += 1
+        self.last_finish_reason = self.finish_reasons.pop(0)
+        return self.replies.pop(0)
+
+
+def _failing_stage(name: str = "wagner") -> StageProfile:
+    return StageProfile(name, 10, 0.3, 6.0, {"win_within_rounds": 7}, ())
+
+
+def test_propose_candidates_retries_once_with_doubled_max_tokens_on_length(capsys):
+    profile = _failing_stage()
+    reply = json.dumps([{"skill_name": "回合预算", "description": "五回合内速攻"}])
+    client = _TruncatingClient(
+        replies=['[{"skill_name": "回合预', reply],   # first reply was cut mid-JSON
+        finish_reasons=["length", "stop"],
+    )
+    skills = propose_candidates(client, [profile], max_tokens=4096)
+
+    # same messages, budget doubled exactly once, then parsed normally
+    assert client.max_tokens == [4096, 8192]
+    assert len(client.calls) == 2 and client.calls[0] == client.calls[1]
+    assert len(skills) == 1 and skills[0].skill_id.endswith("_wagner")
+    assert "retrying once at max_tokens=8192" in capsys.readouterr().err
+
+
+def test_propose_candidates_caps_retry_budget_and_skips_still_truncated_stage(capsys):
+    profiles = [_failing_stage("wagner"), _failing_stage("timmie")]
+    ok = json.dumps([{"skill_name": "提米局", "description": "先打事件牌"}])
+    client = _TruncatingClient(
+        replies=["cut", "cut again", ok],
+        finish_reasons=["length", "length", "stop"],
+    )
+    skills = propose_candidates(client, profiles, max_tokens=40000)
+
+    # wagner: 40000 -> retry capped at 49152, still length -> skipped (logged, not 0-silent)
+    # timmie: first call is fine -> parsed
+    assert client.max_tokens == [40000, 49152, 40000]
+    assert [skill.skill_id.endswith("_timmie") for skill in skills] == [True]
+    err = capsys.readouterr().err
+    assert "still truncated after retry" in err and "skipping this stage" in err

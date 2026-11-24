@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_dice",
+    "rule_reaction",
+    "strat_focus_fire",
+    "规则_目标_事件牌",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "选骰子与反应基础规则，集火残血加速击杀；事件牌目标需留骰打出2张，5回合上限要求快节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "07b2013e3aed",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

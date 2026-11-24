@@ -1,0 +1,15 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "rule_equipment",
+    "strat_equipment_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "需打出圣遗物牌且5回合内速胜：装备规则与时机帮助尽早完成装备目标，回合上限强调速攻，集火残血加快击倒。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "24164684db4e",
+  "fallback": false,
+  "library_version": 2,
+  "engine_lock": "d3961dd5d34d"
+}

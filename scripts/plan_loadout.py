@@ -4,9 +4,9 @@
 One model call per stage (temperature 0), frozen for every seed of that stage.
 Loadouts are only used by the static/dynamic groups::
 
-    # static group -> reports/loadouts/v1
+    # static group -> reports/loadouts/v2
     python -m scripts.plan_loadout --library data/skills/static_v1 \\
-        --out reports/loadouts/v1 --stages all --client real
+        --out reports/loadouts/v2 --stages all --client real
 
     # dynamic group -> reports/loadouts/v4
     python -m scripts.plan_loadout --library data/skills/dyn_v4 \\
@@ -73,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deck", default="superconduct_aggro",
                         help="fallback for stages missing from --stage-decks")
     parser.add_argument("--max-skills", type=int, default=5)
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=1,
+        help="extra model calls per stage before falling back to BM25 (default 1)",
+    )
     parser.add_argument("--model", default=None)
     return parser
 
@@ -109,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             client,
             model=args.model,
             max_skills=args.max_skills,
+            retries=args.retries,
         )
         path = save_loadout(args.out, loadout)
         rows.append((name, deck, len(loadout.skills), loadout.fallback))

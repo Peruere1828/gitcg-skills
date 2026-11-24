@@ -15,7 +15,7 @@ Usage::
 
     python -m skillloop.run --group scripted --stages all --seeds 3 --workers 6
     python -m skillloop.run --group llm_empty --stages all --seeds 50   # rules_v1
-    python -m skillloop.run --group static --loadout reports/loadouts/v1 --seeds 50
+    python -m skillloop.run --group static --loadout reports/loadouts/v2 --seeds 50
     python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
         --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
         --seeds 50 --out data/runs/dynamic_loadout.jsonl
@@ -26,6 +26,12 @@ Group defaults (``--library`` may only override static/dynamic)::
     llm_empty -> data/skills/rules_v1   (17 rule; no strategy/stage_specific, no loadout)
     static    -> data/skills/static_v1  (17 rule + 10 strategy)
     dynamic   -> data/skills/dyn_v4     (17 rule + 23 strategy)
+
+Seeds are ``1..N`` (or an explicit comma list); **seed 0 is refused**. The engine's
+RNG is a minstd LCG (``A=48271, C=0``) and 0 is its absorbing state, so a game at
+seed 0 rolls the first round as all ``DICE_TYPE_CRYO`` (value 1) — see
+``_seed_list``. ``base_seed`` (the deck expert's tie-break seed) is unrelated and
+may stay 0.
 """
 
 from __future__ import annotations
@@ -93,9 +99,11 @@ class RunSpec:
     stage_decks_root: str | None = None
     # Frozen per-(stage, library version) skill loadouts.
     loadout_root: str | None = None
-    # Card pool to pin the game to (``CreateParam(version=...)``, e.g. "v3.3.0").
-    # ``None`` keeps the engine default, i.e. today's behaviour. A pinned pool
-    # rejects any deck whose characters/cards were released after it.
+    # Card pool to pin the game to (``CreateParam(version=...)``).
+    # ``None`` keeps the engine's built-in pool (``configs/engine.lock``), which
+    # is also what the cached asset catalog describes; pinning an older pool
+    # makes card text and effective costs disagree with the snapshot.
+    # A pinned pool rejects any deck whose characters/cards were released after it.
     card_version: str | None = None
     # Send the stage's adventure-challenge rules (initial supports / effects) to
     # the engine through ``ATTR_CREATEPARAM_STAGE_RULES``. The rule belongs to the
@@ -454,7 +462,16 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
             version=spec.card_version,
             record_decisions=True,
             record_events=True,
+            # Public per-decision snapshots feed the trace's "此后场上" effect
+            # suffixes (skillloop/replay.py). The snapshots are not written to the
+            # run row; they only exist while the trace is rendered.
+            record_views=True,
             record_final_state=True,
+            # The opponent's dice are public under the rules; the engine's own bot
+            # view masks them, so the renderer reads them from the unmasked state.
+            # Only the dice are taken from it -- hostile hand contents never enter
+            # a prompt (see ``RichStateRenderer.describe_state``).
+            full_state_for_agents=True,
             stage_rules=rules_json,
         )
     except Exception as exc:
@@ -539,7 +556,13 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         match_decisions = list(getattr(record, "decisions", None) or ())
         match_events = list(getattr(record, "events", None) or ())
         trace_meta: dict[str, Any] = {}
-        row["trace"] = compact_trace(row, match_decisions, match_events, meta=trace_meta)
+        row["trace"] = compact_trace(
+            row,
+            match_decisions,
+            match_events,
+            final_state=getattr(record, "final_state_json", None),
+            meta=trace_meta,
+        )
         row["trace_meta"] = {
             "n_decisions": len(match_decisions),
             "truncated": bool(trace_meta.get("truncated", False)),
@@ -548,6 +571,10 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
+    # Programmatic callers can build ``RunSpec(seeds=(0,))`` directly; refuse it at
+    # the entry point too, since the CLI only guards its own parser (seed 0 is the
+    # engine LCG's absorbing state, see ``_check_engine_seeds``).
+    _check_engine_seeds(tuple(spec.seeds))
     out = Path(spec.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     # Read the two per-stage configs once per invocation; workers get the resolved
@@ -739,7 +766,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--group", required=True, choices=GROUPS)
     parser.add_argument("--stages", default="all", help="'all' or comma-separated stage names")
-    parser.add_argument("--seeds", default="1,2,3", help="count (N -> 0..N-1) or comma-separated list")
+    parser.add_argument("--seeds", default="1,2,3",
+                        help="count (N -> 1..N) or comma-separated list; seed 0 is "
+                             "refused (it is the minstd LCG absorbing state, all-cryo "
+                             "first-round dice)")
     parser.add_argument("--deck", default="superconduct_aggro")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
@@ -755,7 +785,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--loadout", default=None,
                         help="frozen skill loadouts (reports/loadouts); static/dynamic only")
     parser.add_argument("--card-version", default=None,
-                        help="pin the engine card pool (e.g. v3.3.0); default: engine default pool")
+                        help="optional card-pool pin; default: engine built-in pool")
     parser.add_argument("--stage-rules", action="store_true",
                         help="send each stage's special rules (configs/npc/special_rules.json)")
     parser.add_argument("--trace", action="store_true",
@@ -792,10 +822,43 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+SEED_ZERO_ERROR = (
+    "seed 0 is the minstd LCG absorbing state (nextRandom(0) == 0), so every "
+    "first-round die becomes DICE_TYPE_CRYO; use seeds 1..N"
+)
+
+
+def _check_engine_seeds(seeds: tuple[int, ...]) -> None:
+    """Refuse engine seed 0 (the LCG's absorbing state).
+
+    ``envs.match`` forwards the seed as ``ATTR_STATE_CONFIG_RANDOM_SEED``; the
+    engine uses a minstd LCG (``A=48271, C=0``), whose zero state maps to itself,
+    so every subsequent draw is 0 and the first round's dice are all
+    ``DICE_TYPE_CRYO``. Such a game is not a valid sample.
+    """
+    if 0 in seeds:
+        raise SystemExit(SEED_ZERO_ERROR)
+
+
 def _seed_list(value: str) -> tuple[int, ...]:
-    if "," in value:
-        return tuple(int(item) for item in value.split(",") if item.strip())
-    return tuple(range(int(value)))
+    """Parse ``--seeds``: a count ``N`` means ``1..N``; a comma list is literal.
+
+    Seed 0 is rejected everywhere: the engine's minstd LCG never leaves the zero
+    state, so a seed-0 game degenerates into all-cryo first-round dice. The old
+    ``N -> 0..N-1`` count semantics is therefore gone -- ``--seeds 1`` is seed 1,
+    not seed 0.
+    """
+    text = value.strip()
+    if "," in text:
+        seeds = tuple(int(item) for item in text.split(",") if item.strip())
+        _check_engine_seeds(seeds)
+        return seeds
+    count = int(text)
+    if count == 0:
+        raise SystemExit(SEED_ZERO_ERROR)
+    if count < 0:
+        raise SystemExit(f"--seeds count must be a positive integer, got {count}")
+    return tuple(range(1, count + 1))
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -33,7 +33,9 @@
 | 删除 | 26 个上游遗留测试模块 + `tests/test_belief_root.py` 中 7 个 fork-search 用例 | 这些测试只覆盖已删除的 `train/`、`envs/fork_*`、`envs/cfr_search`、`scripts/*`；留着会让 `pytest -m "not slow"` 收集失败 |
 | `envs/match.py`、`npc/stage_rules.py`、`npc/eval.py` | 新增 `CreateParam` 字符串属性 `ATTR_CREATEPARAM_STAGE_RULES=2002`，按 `configs/npc/special_rules.json` 注入关卡初始支援 / 开局效果 | 让冒险挑战特殊规则真正进入引擎，而不只停留在配置/文档 |
 | `common/llm.py` | 可选 `GITCG_LLM_TRACE`：每次调用追加 JSONL（messages/content/reasoning_content/finish_reason/usage）；实例暴露 `last_reasoning` / `last_finish_reason` | 调试 prompt 与思考输出；不参与决策，密钥不落盘 |
+| `common/llm.py` | 收到响应即累计 `usage`（含空 content、`finish_reason=length` 截断、malformed body；无 `usage` 字段则跳过）；`chat` 返回 `LLMReply`（`str` 子类，带 `finish_reason` 属性，字符串行为不变） | 原先「HTTP 成功但 content 为空」的调用不记账，成本审计低估（实测一次 $0.0063 记为 0 calls/$0.0000，只有 trace 的 `list_cost` 能对账）；技能抽取需要从返回值判断截断后重试。2026-11-24 |
 | `web/ai_rpc_server.py`、`engine-overlay/.../AiDecisionPanel.tsx` | 决策行增加 `llm_called`/`llm_error`/`reasoning`/`finish_reason` | 区分 expert 步、解析失败、max_tokens 截断，并展示思考摘录 |
+| `reps/action_adapter.py` | `_action_specs` 把引擎 `Action.preview` 的 damage/apply_aura 投影写入 `spec.metadata["preview"]`，供渲染层显示结算后伤害 | 卡面基础值会误导斩杀判断；preview 是引擎自己的预测，避免复刻规则。2026-11-24 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 

@@ -21,6 +21,8 @@
 | D11 | 2026-11-01 | 运行器提供 `GITCG_LLM_BUDGET_USD` 硬上限：滑动窗口维持 `workers` 局在飞，每完成一局即检查累计 `cost_usd`，触顶后不再启动新局；已在飞的局跑完、已完成的行照常落盘，有预算时 summary 记 `budget_usd` / `spent_usd`，触顶时加 `aborted: "budget"`。上限只对**本次调用**生效：resume / 重跑时 `spent` 从 0 重计，不跨调用累计。`scripts/estimate_cost.py --rows <run>.jsonl` 加 `--games N` 或 `--per-stage-seeds N --stages 16`，从实测逐局成本外推全量 | t5 烧到额度耗尽才停（当日 $7.93）；成本约束必须是运行时门禁而非文档约定 |
 | D12 | 2026-11-12 | 引擎数据把「官方角色卡」与「NPC 变体」拆成两张牌：官方 2301/2202 保持版本卡面值（v3.3.0 下 2301=10；v7.1.0 下 11），新增 NPC 变体 9301/9202（13/12，独立技能/状态号段），`ENEMY_ENGINE_IDS` 指向变体 | 全局 `.gts` 血量补丁会污染玩家牌组里的角色卡；理论/实际都是两张牌，拆开后 PvE 难度与角色卡数据各归其位 |
 | D13 | 2026-11-12 | 网页调试必须严格复现 `skillloop.run` 评测协议：关卡 TaskSpec、未过滤库、era/expert base、cap16、原顺序、stage_decks/loadout/card_version/特殊规则/NPC policy；移除 web-only 战术/过滤/重排/cap24；新增只读 `/ai-decisions` 监控面板 | 网页只是 human 扮 NPC 的调试接口，必须能忠实观察自进化经验；web-only 行为会让调试点与实际评测不一致 |
+| D14 | 2026-11-24 | 决策/复盘 prompt 重构：规则改 wiki 原文并前置、关卡特殊规则与卡组信息进 system、需求/支付分离、候选保底（宣布结束 + 每张手牌）、回放改为公开状态差分；卡池改为引擎内置（不再 pin v3.3.0）；引擎 seed 固定 1..N（0 是 minstd 吸收态） | 旧 prompt 的费用/血量/候选截断会直接误导动作选择；资产 API 下线，pin 与唯一可用卡面文本错配 |
+| D15 | 2026-11-24 | `static_v1` 升 v2：修正「装备前两轮才回本」的错误启发；重生成 `reports/loadouts/v2`；旧实验全部作废 | 错误启发直接进入 prompt；库版本必须与 loadout 匹配 |
 
 ## 1. 任务定义
 
@@ -32,8 +34,8 @@ task = (stage, deck, seed)
 
 - 16 关，敌人由确定性 `NpcPolicy`（greedy + rotation）驱动，玩家恒为先手；
 - 失败判据：未三星（含未通关、目标未达成、超回合）；
-- 评测牌组由 `configs/stage_decks.json` / loadout 固定（时代牌组，卡池 `v3.3.0`）；
-  `configs/pools/` 的旧池仍用于历史实验/对照。
+- 评测牌组由 `configs/stage_decks.json` / loadout 固定；卡池 = 引擎内置（`configs/engine.lock`），
+  时代牌组只描述牌组来源，不再 pin 引擎版本。`configs/pools/` 的旧池仍用于历史实验/对照。
 
 ## 2. 难度标定（D4）
 
@@ -54,8 +56,8 @@ task = (stage, deck, seed)
 5. 验收区间：纯脚本组 **30–45%**、参照组 **35–50%**，且**未饱和**（留 ≥50pp 空间）。
 
 > 2026-11-12（D12）：血量只作用于 **NPC 变体**（9301/9202）；官方角色卡
-> 2301/2202 恢复版本卡面值（v3.3.0 下 2301=10；v7.1.0 下 11）。上表的
-> 「原 HP → 新 HP」读作「NPC 敌人原 HP → NPC 变体 HP」。
+> 2301/2202 使用引擎内置卡池的卡面值。上表的「原 HP → 新 HP」读作
+> 「NPC 敌人原 HP → NPC 变体 HP」。
 
 ## 3. 技能（Skill）
 
@@ -91,7 +93,7 @@ task = (stage, deck, seed)
 |---|---|---|---|
 | ① | `scripted` | 无 | `expert:<deck>`（无目标注入，无 LLM）；参照天花板：`npc/contestant.py`（历史 74.7%） |
 | ②′ | `llm_empty` | `data/skills/rules_v1`（17 条 rule） | LLM + **仅游戏规则**；不加载 strategy/stage_specific，不用 loadout |
-| ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v1` |
+| ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
 | ③ | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
 
 > `llm_empty` 不是「无提示词」：规则层始终注入，用于隔离「LLM + 规则」与

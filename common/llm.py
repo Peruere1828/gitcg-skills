@@ -168,6 +168,25 @@ def redact(text: str) -> str:
     return out
 
 
+class LLMReply(str):
+    """Assistant message text plus the provider's ``finish_reason``.
+
+    Subclasses :class:`str` so existing callers keep working unchanged (``==``,
+    slicing, ``strip``, ``json.loads``, ``isinstance(text, str)``); the metadata
+    lives on the attribute. ``finish_reason`` is ``"stop"`` on a complete answer,
+    ``"length"`` when ``max_tokens`` cut the message, or ``None`` when the
+    provider omitted it -- callers that retry on truncation should read it from
+    the returned object (or from ``LLMClient.last_finish_reason``).
+    """
+
+    finish_reason: str | None
+
+    def __new__(cls, text: str, *, finish_reason: str | None = None) -> "LLMReply":
+        self = super().__new__(cls, text)
+        self.finish_reason = finish_reason
+        return self
+
+
 class MockLLMClient:
     """Deterministic client for tests: returns queued responses in order."""
 
@@ -188,8 +207,12 @@ class MockLLMClient:
 class LLMClient:
     """OpenAI-compatible chat client.
 
-    ``chat`` returns the assistant message text, or ``None`` on any failure so
+    ``chat`` returns the assistant message text as an :class:`LLMReply` (a
+    ``str`` that also carries ``finish_reason``), or ``None`` on any failure so
     callers can fall back (the chain in PLAN.md §5 is enforced by callers).
+    Provider ``usage`` is accumulated for *every* response we receive -- empty
+    content and ``finish_reason="length"`` truncation included -- because those
+    calls are billed too.
     """
 
     def __init__(self, config: LLMConfig | None = None) -> None:
@@ -200,6 +223,34 @@ class LLMClient:
         # Last raw response pieces (debug/UI only; never used for decisions).
         self.last_reasoning: str = ""
         self.last_finish_reason: str | None = None
+
+    def _record_usage(self, body: dict[str, Any], seconds: float) -> None:
+        """Accumulate the provider ``usage`` of one received HTTP response.
+
+        Must run for every response that carries a ``usage`` block, before any
+        content/finish_reason classification: an empty content string and a
+        ``finish_reason="length"`` truncation are still billed by the provider,
+        so skipping them made cost audits under-report (only the trace's
+        ``list_cost`` reconciled). Responses without ``usage`` are skipped rather
+        than recorded as zeros -- nothing is invented.
+        """
+        usage = body.get("usage") if isinstance(body, dict) else None
+        if not isinstance(usage, dict) or not usage:
+            return
+        details = usage.get("prompt_tokens_details")
+        details = details if isinstance(details, dict) else {}
+        opencode = usage.get("opencode")
+        opencode = opencode if isinstance(opencode, dict) else {}
+        cost = usage.get("cost")
+        if not cost:
+            cost = opencode.get("list_cost") or 0.0
+        self.usage.record(
+            prompt=int(usage.get("prompt_tokens", 0) or 0),
+            completion=int(usage.get("completion_tokens", 0) or 0),
+            seconds=seconds,
+            cached=int(details.get("cached_tokens", 0) or 0),
+            cost=float(cost or 0.0),
+        )
 
     def chat(
         self,
@@ -271,6 +322,9 @@ class LLMClient:
         if body is None:
             self.usage.errors += 1
             return None
+        # Billing happens when the response arrives, not when its content parses:
+        # account for usage before the empty-content / truncation branches below.
+        self._record_usage(body, elapsed)
         try:
             choice = body["choices"][0]
             payload_message = choice["message"]
@@ -310,20 +364,10 @@ class LLMClient:
             # truncated by max_tokens (reasoning ate the budget) -> fall back
             self.usage.errors += 1
             return None
-        usage = body.get("usage") or {}
-        details = usage.get("prompt_tokens_details") or {}
-        opencode = usage.get("opencode") or {}
-        cost = usage.get("cost")
-        if not cost:
-            cost = opencode.get("list_cost") or 0.0
-        self.usage.record(
-            prompt=int(usage.get("prompt_tokens", 0)),
-            completion=int(usage.get("completion_tokens", 0)),
-            seconds=elapsed,
-            cached=int(details.get("cached_tokens", 0)),
-            cost=float(cost or 0.0),
-        )
-        return message
+        if not isinstance(message, str):
+            # non-text content: pass through unchanged, as before
+            return message
+        return LLMReply(message, finish_reason=self.last_finish_reason)
 
 
 def build_llm_client(

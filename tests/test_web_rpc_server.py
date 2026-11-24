@@ -1384,8 +1384,9 @@ def test_resolve_llm_library_choices():
 
     static = srv.resolve_llm_library("static")
     assert static["resolved"] == "static_v1"
-    assert static["kind"] == "rules"
-    assert static["version"] == 1 and static["skills"] == 27
+    # v2 = 2026-11-24 的 strat_equipment_timing 文本修订（技能集合不变）。
+    assert static["kind"] == "text-fix"
+    assert static["version"] == 2 and static["skills"] == 27
     assert static["path"] == os.path.join("data", "skills", "static_v1")
 
     # dynamic 固定优先 dyn_v4（与 skillloop.run 的默认库一致）；dyn_v4 的
@@ -1759,7 +1760,9 @@ def test_npc_decks_have_eval_protocol():
         ev = blanche["eval"]
         assert ev["stage"] == "blanche"
         assert ev["deck"] == "keqing_shuanghuo"
-        assert ev["card_version"] == "v3.3.0"
+        # No implicit era pin: the eval payload must leave card_version unset so
+        # the session follows the engine's built-in pool (configs/engine.lock).
+        assert ev["card_version"] is None
         assert ev["characters"] and ev["cards"]
         assert isinstance(ev["rules"], dict)
         assert ev["rules"]["effects"][0]["kind"] == "initial_energy"
@@ -1816,7 +1819,9 @@ def test_session_stage_sets_parity_and_ai_protocol(monkeypatch):
         assert ai["library_root"].endswith("dyn_v4")
         assert ai["library_resolved"] == "dyn_v4"
         assert ai["eval_deck"] == "keqing_shuanghuo"
-        assert ai["card_version"] == "v3.3.0"
+        # Default is "not pinned" (engine built-in pool); only an explicit
+        # --card-version / eval.card_version may set this field.
+        assert ai["card_version"] is None
 
         # 上报的 AI 牌组与 eval.deck 不一致 → 非评价协议。
         _, out = server.request(

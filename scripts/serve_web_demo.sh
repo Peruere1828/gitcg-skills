@@ -25,7 +25,7 @@
 #   CONDA_ENV     Python 环境（默认 gitcg-skill）
 #   STAGE_DECKS   关卡->牌组映射（默认 configs/stage_decks.json）
 #   LOADOUT_ROOT  冻结 loadout 根（默认 reports/loadouts/v4，匹配 v2_dynamic run）
-#   CARD_VERSION  卡池版本（默认 v3.3.0，匹配时代基准）
+#   CARD_VERSION  卡池版本（默认空 = 引擎内置池；显式设置才 pin）
 #   REASONING     AI 决策的 reasoning effort（默认 none；可选 low/medium/high，
 #                 开启后回复预算提高到 12288 token，仅用于调试观察）
 #   LLM_TRACE     模型调用 JSONL 落盘路径（完整 prompt + content +
@@ -56,10 +56,10 @@ AI_DECK="${AI_DECK:-}"
 SEED="${SEED:-20261112}"
 CONDA_ENV="${CONDA_ENV:-gitcg-skill}"
 # 严格对齐实际评测：默认值与 data/runs/v2_dynamic.jsonl.meta.json 一致。
-# 跑别的 run 时用环境变量覆盖（例如 LOADOUT_ROOT=reports/loadouts/v1）。
+# 跑别的 run 时用环境变量覆盖（例如 LOADOUT_ROOT=reports/loadouts/v2）。
 STAGE_DECKS="${STAGE_DECKS:-configs/stage_decks.json}"
 LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v4}"
-CARD_VERSION="${CARD_VERSION:-v3.3.0}"
+CARD_VERSION="${CARD_VERSION:-}"
 REASONING="${REASONING:-none}"
 RICH_RENDER="${RICH_RENDER:-1}"
 # 可选：把每次模型调用的完整 prompt / content / reasoning_content 落成 JSONL
@@ -85,15 +85,17 @@ trap cleanup EXIT INT TERM
 
 AI_DECK_ARG=()
 if [ -n "$AI_DECK" ]; then AI_DECK_ARG=(--ai-deck "$AI_DECK"); fi
+CARD_VERSION_ARG=()
+if [ -n "$CARD_VERSION" ]; then CARD_VERSION_ARG=(--card-version "$CARD_VERSION"); fi
 RICH_ARG=()
 if [ -z "$RICH_RENDER" ] || [ "$RICH_RENDER" = "0" ]; then RICH_ARG=(--compact-render); fi
-echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION}, reasoning=${REASONING}, rich_render=${RICH_RENDER})"
+echo "[web-demo] AI bridge → 127.0.0.1:${BRIDGE_PORT} (env=${CONDA_ENV}, policy=${POLICY}, ai_deck=${AI_DECK:-<评价协议自动>}, stage_decks=${STAGE_DECKS}, loadout=${LOADOUT_ROOT}, card_version=${CARD_VERSION:-<引擎内置>}, reasoning=${REASONING}, rich_render=${RICH_RENDER})"
 setsid conda run --no-capture-output -n "$CONDA_ENV" \
   python web/ai_rpc_server.py \
   --host 127.0.0.1 --port "$BRIDGE_PORT" \
   --policy "$POLICY" "${AI_DECK_ARG[@]}" --seed "$SEED" \
   --stage-decks "$STAGE_DECKS" --loadout-root "$LOADOUT_ROOT" \
-  --card-version "$CARD_VERSION" --reasoning "$REASONING" "${RICH_ARG[@]}" &
+  "${CARD_VERSION_ARG[@]}" --reasoning "$REASONING" "${RICH_ARG[@]}" &
 BRIDGE_PID=$!
 
 echo "[web-demo] standalone frontend → 0.0.0.0:${PORT} (反代 /bridge → 127.0.0.1:${BRIDGE_PORT})"

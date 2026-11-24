@@ -29,7 +29,7 @@
 |---|---|---|
 | ① 脚本 `scripted` | 无 | 手写规则/启发式（对照组，无 LLM） |
 | ②′ `llm_empty` | `data/skills/rules_v1`（17 条 rule） | 同一条 LLM 智能体 + **仅游戏规则**；不含任何 strategy/stage_specific，不用 loadout |
-| ② 静态 `static` | `data/skills/static_v1`（17 rule + 10 strategy） | 游戏规则 + 手写静态策略；可用 `reports/loadouts/v1` |
+| ② 静态 `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
 | ③ 动态 `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | 从 ② 起步，自主扩展/合并/淘汰；可用 `reports/loadouts/v4` |
 
 指标：**三星率**（主）、逐目标达成率、每局 LLM 调用数/token；按关配对比较，50 seeds/关。
@@ -48,11 +48,13 @@ python -m npc.eval --stages timmie --deck superconduct_aggro \
 python -m skillloop.run --group scripted --stages all --seeds 1 --workers 4
 python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
     --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
-    --card-version v3.3.0 --stages all --seeds 1 --workers 4
+    --stages all --seeds 1 --workers 4
 
 # 网页调试：人类扮 NPC、AI 跑实际评测协议 + 决策/技能监控
 bash scripts/serve_web_demo.sh   # http://<本机IP>:7001/
 ```
+
+卡池由 `configs/engine.lock` 固定，不传 `--card-version`。
 
 ## 4. 目录
 
