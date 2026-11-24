@@ -288,13 +288,43 @@ def test_opponent_dice_are_read_from_the_unmasked_full_state():
     # "masked", not "zero dice".
     context.player_view.players[1].dice = ()
     without = renderer.describe_state(context)
-    assert "骰子：引擎视图未提供" in without
+    assert "对方骰子：引擎视图未提供" in without
     assert "骰子0个" not in without
     assert "不公开" not in without          # the rules do make them public
-    # The unmasked full state carries the real dice: show the count *and* the types.
+    # The unmasked full state carries the real dice: a dedicated line, symmetric with
+    # "我方骰子：", shows the types and the count.
     visible = renderer.describe_state(_with_full_state(context, (1, 3, 8)))
-    assert "骰子3个：冰火万" in visible
+    assert "对方骰子：冰火万（3个）" in visible
     assert "引擎视图未提供" not in visible
+    # The opponent's status line no longer carries the dice (no duplicate, and the
+    # dice types are not lost mid-sentence).
+    status_line = next(line for line in visible.splitlines() if line.startswith("对方："))
+    assert status_line.endswith("手牌2张，牌堆 0 张")
+    assert "骰子" not in status_line
+
+
+def test_pre_roll_phase_reports_dice_as_not_thrown_yet():
+    renderer = RichStateRenderer(_assets())
+    context = _context()
+    context.player_view.round_number = 0
+    context.player_view.phase = "init_hands"
+    # Even if a (stale/placeholder) dice list is present, before the first roll the
+    # board genuinely has no dice: "无（0个）" would read like a spent pool.
+    _with_full_state(context, (1, 2, 3))
+    text = renderer.describe_state(context)
+    assert "我方骰子：尚未投掷" in text
+    assert "对方骰子：尚未投掷" in text
+    assert "引擎视图未提供" not in text
+
+    # "init_hands" alone (round already 1) is still the mulligan phase.
+    context.player_view.round_number = 1
+    assert "对方骰子：尚未投掷" in renderer.describe_state(context)
+    # The action phase keeps the real lists.
+    context.player_view.phase = "action"
+    context.player_view.round_number = 2
+    text = renderer.describe_state(context)
+    assert "我方骰子：冰水（2个）" in text
+    assert "对方骰子：冰水火（3个）" in text
 
 
 def test_full_state_never_reveals_opponent_hand_contents():
@@ -812,9 +842,53 @@ def test_effective_requirement_uses_engine_metadata_not_asset_list_price():
         metadata={"required_cost": ((3, 1), (0, 1))},
     )
     line = renderer.describe_candidate(_context(), spec, 0)
-    assert "需求［1火+1任意］" in line
+    assert "需求［1火+1任意］（已计折扣）" in line
     assert "需求［3火］" not in line
     assert "支付［1火］" in line
+
+
+def test_discounted_requirement_is_marked_and_matches_by_multiset():
+    renderer = RichStateRenderer(_assets())
+    # 14032 星斗归位 lists 3 electro; with an artifact discount the engine charges
+    # 1 electro + 1 any. The annotation says why the number is below the card text.
+    discounted = _action_spec(
+        OptionKind.ACTION_USE_SKILL,
+        subject=14032,
+        used=(4,),
+        metadata={"required_cost": ((4, 1), (0, 1))},
+    )
+    line = renderer.describe_candidate(_context(), discounted, 0)
+    assert "需求［1雷+1任意］（已计折扣）" in line
+
+    # Same multiset, different order / vocabulary (万 vs 任意): not a discount.
+    same = _action_spec(
+        OptionKind.ACTION_USE_SKILL,
+        subject=14032,
+        used=(4, 4, 4),
+        metadata={"required_cost": ((4, 3),)},
+    )
+    unchanged = renderer.describe_candidate(_context(), same, 0)
+    assert "需求［3雷］" in unchanged
+    assert "已计折扣" not in unchanged
+
+    # No asset list price (switch / tuning) -> nothing to compare, no annotation.
+    switch = _action_spec(
+        OptionKind.ACTION_SWITCH_ACTIVE,
+        subject=1101,
+        used=(2,),
+        targets=(PublicSlotTarget(owner="self", zone="character", index=0),),
+        metadata={"required_cost": ((0, 1),)},
+    )
+    switched = renderer.describe_candidate(_context(), switch, 0)
+    assert "需求［1任意］" in switched
+    assert "已计折扣" not in switched
+
+
+def test_output_contract_asks_for_ids_not_skill_names():
+    from skillloop.render import OUTPUT_CONTRACT
+
+    assert "本决策引用的技能 id（技能块方括号里的 id）" in OUTPUT_CONTRACT
+    assert "影响本决策的技能 id" not in OUTPUT_CONTRACT
 
 
 def test_free_card_requirement_is_omitted_and_payment_kept():
@@ -917,7 +991,10 @@ def test_opponent_line_uses_player_relative_label():
     assert "对方·布兰琪：" in text
     assert "NPC(布兰琪)" not in text
     assert "对方支援：" in text and "对方召唤物：" in text and "对方状态：" in text
-    assert "骰子：引擎视图未提供" in text
+    # Dice live on their own line now, right below the opponent's status line.
+    lines = text.splitlines()
+    status = next(index for index, line in enumerate(lines) if line.startswith("对方·布兰琪："))
+    assert lines[status + 1] == "对方骰子：引擎视图未提供"
 
 
 # -- M12: one card, several targets → description printed once -------------
@@ -1073,9 +1150,9 @@ def test_preview_damage_is_used_instead_of_the_static_reaction_hint():
     line = renderer.describe_candidate(_id_context(opp_aura=2), spec, 0)
     # The settled number (4, melt) is stated once, with the target's name.
     assert "；预计：对火斧丘丘暴徒造成4点火元素伤害（融化）" in line
-    # The static description is kept, but the static reaction hint is not (two sets
-    # of numbers would be contradictory).
-    assert "造成1点火元素伤害" in line
+    # The static description is kept but labelled as the card face: its "造成1点"
+    # must not read as the outcome.
+    assert "（卡面：造成1点火元素伤害" in line
     assert "将对附着水的出战角色触发蒸发" not in line
     assert line.count("预计") == 1
 
@@ -1165,6 +1242,9 @@ def test_preview_heal_is_rendered_and_zero_heal_is_dropped():
         0,
     )
     assert "预计：对甘雨治疗2" in heal
+    # A play card's description is labelled the same way ("卡面：") because the heal
+    # entry is a preview; the action-type note follows it inside the same parens.
+    assert "（卡面：抓2张牌；" in heal
     # A heal entry on a full-HP character carries value=0: "治疗0" is noise.
     noop = renderer.describe_candidate(
         _id_context(),
@@ -1245,6 +1325,9 @@ def test_preview_absent_keeps_the_old_static_behaviour():
     )
     assert "预计" not in line
     assert "将对附着水的出战角色触发蒸发" in line
+    # Without a forecast the description is not a "card face" caveat: no prefix.
+    assert "（造成1点火元素伤害" in line
+    assert "卡面" not in line
 
 
 def test_preview_aura_only_entries_add_no_line():
@@ -1267,6 +1350,10 @@ def test_preview_aura_only_entries_add_no_line():
         0,
     )
     assert "预计" not in line
+    # A non-damage preview (aura attachment / summon) is not a damage forecast, so the
+    # card text keeps its plain parens.
+    assert "（造成1点火元素伤害" in line
+    assert "卡面" not in line
 
 
 def test_preview_entries_are_extracted_from_the_engine_message():

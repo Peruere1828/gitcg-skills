@@ -671,6 +671,13 @@ class RichStateRenderer(StateRenderer):
 
         dice = "".join(_dice_symbol(d) for d in me.dice) or "无"
         hand = self._hand(me.hand_cards)
+        # Before the first roll (mulligan / choose-active) there are no dice at all, so
+        # "无（0个）" would read like a spent pool. Both sides say "尚未投掷".
+        before_roll = (
+            int(getattr(state, "round_number", 0) or 0) == 0
+            or str(getattr(state, "phase", "")) == "init_hands"
+        )
+        my_dice_text = "尚未投掷" if before_roll else f"{dice}（{len(me.dice)}个）"
         # The engine masks our *view* of the opponent's dice (``players[1].dice == ()``),
         # but the dice themselves are public, so the unmasked ``full_state`` is read
         # first. Nothing else of the opponent is taken from it: their hand stays a
@@ -686,12 +693,14 @@ class RichStateRenderer(StateRenderer):
                 real_dice = tuple(getattr(unmasked, "dice", ()) or ())
                 if real_dice:
                     opp_dice = real_dice
-        if opp_dice:
+        if before_roll:
+            opp_dice_text = "尚未投掷"
+        elif opp_dice:
             symbols = "".join(_dice_symbol(d) for d in opp_dice)
-            opp_dice_text = f"骰子{len(opp_dice)}个：{symbols}"
+            opp_dice_text = f"{symbols}（{len(opp_dice)}个）"
         else:
             # Not "hidden by the rules": the renderer simply has no unmasked source.
-            opp_dice_text = "骰子：引擎视图未提供"
+            opp_dice_text = "引擎视图未提供"
         # Remaining deck counts are public on both sides (the masked view keeps the
         # list length while hiding each opponent card's definition_id).
         me_pile = len(getattr(me, "pile_cards", ()) or ())
@@ -699,13 +708,16 @@ class RichStateRenderer(StateRenderer):
         return "\n".join([
             f"第{state.round_number}轮 {_phase_label(state.phase)} 行动方={'我方' if state.current_turn == context.acting_player else '对方'}",
             f"我方：{side(me)}",
-            f"我方骰子：{dice}（{len(me.dice)}个）",
+            f"我方骰子：{my_dice_text}",
             f"我方手牌（{len(me.hand_cards)}/10）：{hand}",
             f"我方牌堆：{me_pile} 张",
             f"我方支援：{self._entities(getattr(me, 'supports', ()), detail=True)}",
             f"我方召唤物：{self._entities(getattr(me, 'summons', ()), detail=True)}",
             f"我方状态：{self._entities(getattr(me, 'combat_statuses', ()), detail=True)}",
-            f"{opponent_status_label(self.opponent_name)}：{side(opp)}；手牌{len(opp.hand_cards)}张，{opp_dice_text}，牌堆 {opp_pile} 张",
+            f"{opponent_status_label(self.opponent_name)}：{side(opp)}；手牌{len(opp.hand_cards)}张，牌堆 {opp_pile} 张",
+            # Own line, symmetric with "我方骰子：": the opponent's dice are public,
+            # and burying them mid-sentence hid the types behind a count.
+            f"对方骰子：{opp_dice_text}",
             f"对方支援：{self._entities(getattr(opp, 'supports', ()), detail=True)}",
             f"对方召唤物：{self._entities(getattr(opp, 'summons', ()), detail=True)}",
             f"对方状态：{self._entities(getattr(opp, 'combat_statuses', ()), detail=True)}",
@@ -951,7 +963,12 @@ class RichStateRenderer(StateRenderer):
         requirement = self._requirement_items(spec)
         suffix: list[str] = []
         if requirement:
-            suffix.append(f"需求{_format_cost(requirement)}")
+            head = f"需求{_format_cost(requirement)}"
+            if self._cost_is_discounted(spec, requirement):
+                # The engine's effective cost is lower than the card's list price;
+                # saying so once explains why 需求 ≠ the number in the card text.
+                head += "（已计折扣）"
+            suffix.append(head)
             if payment and _cost_signature(payment) != _cost_signature(requirement):
                 suffix.append(f"支付{_format_cost(payment)}")
                 energy = sum(count for label, count in requirement if label == "能量")
@@ -963,6 +980,24 @@ class RichStateRenderer(StateRenderer):
             # No effective cost (switch/tuning) or a genuinely free card.
             suffix.append(f"支付{_format_cost(payment)}")
         return line + "".join(f" {part}" for part in suffix)
+
+    def _cost_is_discounted(self, spec: Any, requirement: Any) -> bool:
+        """True when the **effective** requirement differs from the asset list price.
+
+        ``metadata["required_cost"]`` is what the engine charges *now* (artifact
+        discounts, talent effects, stage rules); ``play_cost`` is the card's printed
+        price. Both sides are compared as label/count multisets with the existing
+        ``_cost_signature`` normalisation (``万`` == ``任意`` == VOID), so vocab
+        differences alone never count as a discount. An action with no asset entry
+        (switch / tuning) has no list price and is never annotated.
+        """
+        subject = self._cost_subject(spec)
+        if subject is None:
+            return False
+        base = self._cost_items(subject)
+        if not base or not requirement:
+            return False
+        return _cost_signature(base) != _cost_signature(requirement)
 
     def _skill_name_map(self, character_ids: Any) -> dict[str, int]:
         """Skill **name → id** for our own characters.
@@ -1039,6 +1074,10 @@ class RichStateRenderer(StateRenderer):
         preview_parts = self._preview_parts(context, spec)
         has_preview_damage = bool(preview_parts)
         extras: list[str] = []
+        # True when ``extras[0]`` is the skill/card text: with a preview damage entry
+        # that text is only the *card face* value, so the paren block is labelled
+        # "卡面：" instead of reading as a second, contradictory damage claim.
+        card_face = False
         if kind == OptionKind.ACTION_USE_SKILL:
             info = self._skill_info(int(spec.subject_definition_id or 0))
             label = _SKILL_TYPE_LABELS.get(str(getattr(info, "skill_type", "")), "")
@@ -1048,6 +1087,7 @@ class RichStateRenderer(StateRenderer):
             summary = _no_period(_one_line(description))
             if summary:
                 extras.append(summary)
+                card_face = True
             damage = _parse_damage(description)
             if damage is not None and not has_preview_damage:
                 hint = self._damage_hint(context, damage[0])
@@ -1066,6 +1106,7 @@ class RichStateRenderer(StateRenderer):
                 summary = _no_period(_one_line(raw))
                 if summary:
                     extras.append(summary)
+                    card_face = True
                 followup = self._talent_followup(
                     context, raw, include_hint=not has_preview_damage
                 )
@@ -1086,7 +1127,12 @@ class RichStateRenderer(StateRenderer):
             line = self._switch_line(context, spec, index, line)
             extras.append("切换出战角色")
         if extras:
-            line = f"{line}（{'；'.join(extras)}）"
+            body = "；".join(extras)
+            if has_preview_damage and card_face:
+                # The text is the card face, not the outcome: "（卡面：造成2点物理伤害）"
+                # followed by "；预计：…0点…" reads as base value vs settled value.
+                body = f"卡面：{body}"
+            line = f"{line}（{body}）"
         if preview_parts:
             line = f"{line}；预计：{'；'.join(preview_parts)}"
         return line

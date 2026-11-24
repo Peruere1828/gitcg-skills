@@ -257,7 +257,7 @@ def test_effect_suffix_reports_hp_aura_status_dice_and_end():
     assert "此后场上" in line
     assert "对方·火深渊法师 10→7" in line
     assert "附着 无→火" in line
-    assert "我方 获得「火元素护罩」(2)" in line
+    assert "我方 获得「火元素护罩」(2次)" in line
     assert "我方骰 8→5" in line
     assert "对方手牌" not in line
     assert "我方 宣布结束" in line
@@ -302,7 +302,7 @@ def test_status_value_change_reads_as_transition():
         _player((_char(3301),)),
     )
     suffix = _effect_suffix(before, after)
-    assert "「奥兹」2→1" in suffix
+    assert "「奥兹」2次→1次" in suffix
     assert "获得" not in suffix and "消失" not in suffix
 
 
@@ -323,7 +323,7 @@ def test_status_names_without_a_known_definition_never_leak_ids():
         _player((_char(3301),), statuses=(unknown_after,)),
     )
     suffix = _effect_suffix(before, after)
-    assert "「未知状态」2→1" in suffix
+    assert "「未知状态」2次→1次" in suffix
     assert "#" not in suffix and "193011" not in suffix and "999999" not in suffix
 
 
@@ -368,8 +368,8 @@ def test_npc_variant_definition_ids_resolve_via_the_70000_offset():
         ),
     )
     suffix = _effect_suffix(before, after)
-    assert "「潜行」2→1" in suffix
-    assert "「水光破镜」2→1" in suffix
+    assert "「潜行」2次→1次" in suffix
+    assert "「水光破镜」2回合→1回合" in suffix
     assert "未知状态" not in suffix
     assert "#" not in suffix and "193011" not in suffix and "192021" not in suffix
 
@@ -689,3 +689,41 @@ def test_effect_suffix_is_capped_with_long_names(monkeypatch):
     suffix = _effect_suffix(before, after).strip()
     assert len(suffix) <= 120
     assert suffix.endswith("…")
+
+
+def test_entity_counters_carry_the_variable_unit():
+    """A bare ``(2)`` next to HP/damage numbers reads like more damage."""
+    before = _view(_player((_char(1401),)), _player((_char(3301),)))
+    after = _view(
+        _player((_char(1401),)),
+        _player(
+            (_char(3301),),
+            statuses=(
+                dict(_entity(133021, usage=2), id=-500070),     # 流焰磨刃: 可用次数
+                dict(_entity(192021, duration=2), id=-500069),  # 水光破镜: 持续回合
+                dict(_entity(121011, layer=3), id=-500071),     # 层数
+                dict(_entity(126011, shield=1), id=-500072),    # 护盾值: 无单位
+            ),
+        ),
+    )
+    suffix = _effect_suffix(before, after)
+    assert "获得「流焰磨刃」(2次)" in suffix
+    assert "获得「水光破镜」(2回合)" in suffix
+    assert "获得「冰萤」(3层)" in suffix
+    assert "获得「岩盔」(1)" in suffix
+    assert "获得「流焰磨刃」(2)" not in suffix
+
+
+def test_entity_counter_units_follow_the_variable_key():
+    from skillloop.replay import _entity_key
+
+    entity = {"definition_id": 133021, "variables": {}}
+    assert _entity_key(dict(entity, variables={"usages": 2}))[1] == "2次"
+    assert _entity_key(dict(entity, variables={"level": 2}))[1] == "2层"
+    assert _entity_key(dict(entity, variables={"stack": 2}))[1] == "2层"
+    assert _entity_key(dict(entity, variables={"count": 2}))[1] == "2"
+    assert _entity_key(dict(entity, variables={"shield": 2}))[1] == "2"
+    # Priority follows the documented key order: usage wins over duration.
+    both = {"usage": 2, "duration": 5}
+    assert _entity_key(dict(entity, variables=both))[1] == "2次"
+    assert _entity_key(dict(entity, variables={}))[1] is None

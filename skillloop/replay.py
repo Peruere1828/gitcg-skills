@@ -88,7 +88,24 @@ _MAX_FINAL = 160
 #: Entity variables that count as "remaining uses / stacks / duration" for the
 #: suffix. ``duration`` is included because NPC-only statuses (e.g. 水光破镜)
 #: expose their remaining rounds there instead of ``usage``.
-_STATUS_VALUE_KEYS = ("usage", "level", "stack", "layer", "count", "shield", "duration")
+_STATUS_VALUE_KEYS = (
+    "usage", "usages",
+    "level", "stack", "layer",
+    "count", "shield",
+    "duration",
+)
+#: Unit printed with the counter, so ``(2)`` cannot be mistaken for damage. A bare
+#: ``(2)`` stays for the keys whose meaning is already the number itself.
+_STATUS_VALUE_UNITS = {
+    "usage": "次",
+    "usages": "次",
+    "level": "层",
+    "stack": "层",
+    "layer": "层",
+    "duration": "回合",
+    "count": "",
+    "shield": "",
+}
 
 
 @lru_cache(maxsize=1)
@@ -469,31 +486,41 @@ def _clean_status_name(name: str) -> str:
     return cleaned or str(name)
 
 
-def _entity_key(entity: Any) -> tuple[str, int | None]:
-    """``(display name, uses/layers)`` for one support/summon/status/entity."""
+def _entity_key(entity: Any) -> tuple[str, str | None]:
+    """``(display name, counter text)`` for one support/summon/status/entity.
+
+    The counter carries the unit of the variable it came from (``2次`` / ``2回合`` /
+    ``3层``), because a bare ``(2)`` next to health and damage numbers reads like
+    more damage.
+    """
     if not isinstance(entity, dict):
         return ("未知状态", None)
     name = _entity_name(entity)
-    value: int | None = None
+    value: str | None = None
     variables = entity.get("variables")
     if isinstance(variables, dict):
         for key in _STATUS_VALUE_KEYS:
-            if key in variables:
-                value = _as_int(variables.get(key))
-                break
+            if key not in variables:
+                continue
+            number = _as_int(variables.get(key))
+            if number is None:
+                continue
+            value = f"{number}{_STATUS_VALUE_UNITS.get(key, '')}"
+            break
     return (name, value)
 
 
 def _side_entity_counter(
     players: Sequence[dict[str, Any]],
-) -> Counter[tuple[int, str, int | None]]:
+) -> Counter[tuple[int, str, str | None]]:
     """Multiset of public supports/summons/statuses/attachments, both sides.
 
-    Counting by ``(side, name, value)`` implements the requested "same name with
+    Counting by ``(side, name, counter)`` implements the requested "same name with
     different numbers are different stacks, identical ones are counted together".
-    Only names and use/layer numbers are kept -- never hand-card identities.
+    Only names and use/layer/duration counters are kept -- never hand-card
+    identities.
     """
-    counter: Counter[tuple[int, str, int | None]] = Counter()
+    counter: Counter[tuple[int, str, str | None]] = Counter()
     for side, player in enumerate(players):
         if side not in _SIDE_TEXT:
             continue
@@ -562,14 +589,29 @@ def _character_changes(
     return items
 
 
-def _value_multiset(values: Counter[int | None]) -> str:
-    """``{2: 1}`` -> ``2``; ``{1: 2}`` -> ``1×2``; empty -> ``无``."""
+def _counter_sort_key(value: str | None) -> tuple[int, int, str]:
+    """Order counters by their number, not the whole ``"2次"`` string.
+
+    ``None`` (a status without a counter) sorts first; the trailing text keeps the
+    order deterministic when two counters share a number but differ in unit.
+    """
+    if value is None:
+        return (-1, 0, "")
+    text = str(value)
+    digits = ""
+    for character in text:
+        if not character.isdigit():
+            break
+        digits += character
+    return (int(digits) if digits else 0, 0, text)
+
+
+def _value_multiset(values: Counter[str | None]) -> str:
+    """``{"2次": 1}`` -> ``2次``; ``{"2": 2}`` -> ``2×2``; empty -> ``无``."""
     if not values:
         return "无"
     parts: list[str] = []
-    for value, count in sorted(
-        values.items(), key=lambda item: (-1 if item[0] is None else item[0])
-    ):
+    for value, count in sorted(values.items(), key=lambda item: _counter_sort_key(item[0])):
         text = "无" if value is None else str(value)
         if count > 1:
             text += f"×{count}"
@@ -583,15 +625,15 @@ def _status_changes(
 ) -> list[str]:
     """Added/removed/changed public supports/summons/statuses/attachments, per side.
 
-    Same-name entities are compared as a multiset of ``uses/layers`` values: a new
-    name reads ``获得「X」(2)``, a vanished one ``消失「X」(2)``, and a value change
-    (e.g. a summon ticking 2 -> 1) reads ``「X」2→1`` instead of a misleading
+    Same-name entities are compared as a multiset of counters: a new name reads
+    ``获得「X」(2次)``, a vanished one ``消失「X」(2次)``, and a value change (e.g. a
+    summon ticking 2 -> 1) reads ``「X」2次→1次`` instead of a misleading
     simultaneous gain+loss.
     """
     before = _side_entity_counter(before_players)
     after = _side_entity_counter(after_players)
-    before_grouped: dict[tuple[int, str], Counter[int | None]] = {}
-    after_grouped: dict[tuple[int, str], Counter[int | None]] = {}
+    before_grouped: dict[tuple[int, str], Counter[str | None]] = {}
+    after_grouped: dict[tuple[int, str], Counter[str | None]] = {}
     for (side, name, value), count in before.items():
         before_grouped.setdefault((side, name), Counter())[value] += count
     for (side, name, value), count in after.items():
@@ -606,7 +648,7 @@ def _status_changes(
             continue
         if not old_values:
             for value, count in sorted(
-                new_values.items(), key=lambda item: (-1 if item[0] is None else item[0])
+                new_values.items(), key=lambda item: _counter_sort_key(item[0])
             ):
                 suffix = "" if value is None else f"({value})"
                 item = f"{_SIDE_TEXT[side]} 获得「{name}」{suffix}"
@@ -615,7 +657,7 @@ def _status_changes(
                 items.append(item)
         elif not new_values:
             for value, count in sorted(
-                old_values.items(), key=lambda item: (-1 if item[0] is None else item[0])
+                old_values.items(), key=lambda item: _counter_sort_key(item[0])
             ):
                 suffix = "" if value is None else f"({value})"
                 item = f"{_SIDE_TEXT[side]} 消失「{name}」{suffix}"
