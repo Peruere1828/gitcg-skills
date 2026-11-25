@@ -56,11 +56,23 @@
 
 ### 4.1 当前基线（2026-11-25）
 
-**训练块 seeds 1–5**（`dyn_v4` 的抽取输入）：
+**当前 prompt（无 rule 层 + 对局历史），seeds 1–5**：
 
 | 组 | 三星 | 三星率 | 成本 |
 |---|---|---|---|
 | `scripted` | 51/80 | 63.75% | $0 |
+| `llm_empty`（无库） | 44/80 | 55.00% | $0.370 |
+| `static`（每关 5 条策略） | 38/80 | 47.50% | $0.398 |
+
+`v12` 相对旧 prompt（`v10`）：`llm_empty` −1 局（p=1.00，历史段没拖累）；
+`static` **−9 局（p=0.035）**——loadout 修好后每关从 1–3 条策略变成 5 条，
+手写策略的负作用第一次可测。见
+[`failures/strategy-pins-hurt.md`](./failures/strategy-pins-hurt.md)。
+
+**旧 prompt（v10，`rules_v1`、无历史）seeds 1–5**，仅作对照：
+
+| 组 | 三星 | 三星率 | 成本 |
+|---|---|---|---|
 | `llm_empty` | 45/80 | 56.25% | $0.389 |
 | `static` | 47/80 | 58.75% | $0.306 |
 
@@ -77,10 +89,10 @@
 两块难度差异很大（scripted 63.75% → 51.25%），**跨块不可比，只做组内配对**。
 动态两轮都没有可测收益：r2 vs static 净 −2（p=0.81）、r2 vs r1 净 0（p=1.00）；
 r1 在训练块 +4 局、评测块 −2 局（样本内乐观）。
-完整口径、逐关表、两轮协议与成本见
-[`../reports/baseline_20261125_pve_prompt_v1.md`](../reports/baseline_20261125_pve_prompt_v1.md)
-与 [`../reports/dynamic_rounds_20261125.md`](../reports/dynamic_rounds_20261125.md)。
-原始数据 `data/runs/v10_*` / `data/runs/v11_*`（未入库，勿删）。
+完整口径、逐关表、验证证据（样本逐字节、泄漏审计）与成本见
+[`../reports/prompt_overhaul_20261125.md`](../reports/prompt_overhaul_20261125.md)；
+动态两轮见 [`../reports/dynamic_rounds_20261125.md`](../reports/dynamic_rounds_20261125.md)。
+原始数据 `data/runs/v10_*` / `v11_*` / `v12_*`（未入库，勿删）。
 **早于本基线的一切胜率/门控结论作废**，包括 NPC 随机掷骰时期的全部 replay 与报告。
 
 ## 5. 运行命令（当前有效）
