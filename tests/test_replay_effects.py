@@ -215,7 +215,7 @@ def test_no_views_keeps_legacy_lines_and_never_adds_a_suffix():
         "R1 P1(NPC) 打牌 最好的伙伴！",
         "R1 P0 结束",
     ]
-    assert trace[3] == "R1 反应 superconduct P0"
+    assert trace[3] == "R1 反应 超导 P0"
     assert trace[4].startswith("结局 winner=0（我方胜），2 回合；目标 ")
     assert all("此后场上" not in line for line in trace)
     assert all("→" not in line for line in trace)
@@ -255,7 +255,10 @@ def test_effect_suffix_reports_hp_aura_status_dice_and_end():
                   view=after),
     ]
 
-    line = compact_trace(_row(), decisions, [])[0]
+    trace = compact_trace(_row(), decisions, [])
+    # R1 P0 dice row comes before the first view-bearing action line.
+    assert trace[0] == "R1 我方骰子：[冰,水,火,雷,风,岩,草,万]（8个）"
+    line = trace[1]
     assert "此后场上" in line
     assert "对方·火深渊法师 10→7" in line
     assert "附着 无→火" in line
@@ -264,7 +267,7 @@ def test_effect_suffix_reports_hp_aura_status_dice_and_end():
     assert "对方手牌" not in line
     assert "我方 宣布结束" in line
     # The next decision is the *after* view, so its own line has no successor.
-    assert "此后场上" not in compact_trace(_row(), decisions, [])[1]
+    assert "此后场上" not in compact_trace(_row(), decisions, [])[2]
 
 
 def test_effect_suffix_marks_defeated_and_energy():
@@ -467,12 +470,13 @@ def test_final_state_adds_board_and_completes_the_last_action_delta():
     )
     trace = compact_trace(_row(), [decision], [], final_state=final)
 
+    assert trace[0] == "R1 我方骰子：（无）"
     # The last decision has no successor view, so the delta is filled from the
     # final snapshot (HP/击倒 in the example) ...
-    assert "此后场上" in trace[0] and "我方·菲谢尔 10→0 击倒" in trace[0]
+    assert "此后场上" in trace[1] and "我方·菲谢尔 10→0 击倒" in trace[1]
     # ... and one board line precedes the scoreboard.
-    assert trace[1] == "最终：我方 菲谢尔 0/10；对方 火深渊法师 10/10"
-    assert trace[2].startswith("结局 ")
+    assert trace[2] == "最终：我方 菲谢尔 0/10；对方 火深渊法师 10/10"
+    assert trace[3].startswith("结局 ")
 
 
 def test_final_state_line_falls_back_to_the_last_recorded_view():
@@ -525,9 +529,9 @@ def test_final_state_does_not_rewrite_an_action_that_already_has_a_delta():
         ),
     ]
     trace = compact_trace(_row(), decisions, [], final_state=final)
-    assert trace[0].count("此后场上") == 1
-    assert "10→8" in trace[0]
-    assert "8→1" not in trace[0]          # the final delta was not appended twice
+    assert trace[1].count("此后场上") == 1
+    assert "10→8" in trace[1]
+    assert "8→1" not in trace[1]          # the final delta was not appended twice
 
 
 def test_truncated_trace_marks_the_cut_after_the_first_line():
@@ -633,9 +637,9 @@ def test_effect_uses_last_previous_view_and_skips_without_after_view():
                   view=second, subject=32031),  # last view: no successor
     ]
     trace = compact_trace(_row(), decisions, [])
-    assert "我方·菲谢尔 10→8" in trace[0]      # first view -> next available view
-    assert "我方·菲谢尔 10→8" in trace[1]      # no own view: reuse the previous one
-    assert "此后场上" not in trace[2]
+    assert "我方·菲谢尔 10→8" in trace[1]      # first view -> next available view
+    assert "我方·菲谢尔 10→8" in trace[2]      # no own view: reuse the previous one
+    assert "此后场上" not in trace[3]
 
 
 def test_effect_never_pairs_without_a_before_view():
@@ -784,3 +788,82 @@ def test_preview_lists_at_most_four_entries():
     )
     line = compact_trace(_row(), [decision], [])[0]
     assert line.count("手牌：获得「雷楔」") == 4
+
+
+# --------------------------------------------------------------------------- #
+# (f) per-round roll rows + cross-round drawn-card content
+# --------------------------------------------------------------------------- #
+def test_roll_rows_per_round_and_cross_round_hand_additions():
+    a = _entity(332001)  # 最好的伙伴！
+    b = _entity(332004)  # 运筹帷幄
+
+    # A masked view: only the viewing seat's dice are visible.
+    p0_r1 = _view(
+        _player((_char(1401),), dice=(3, 4), hand=(a,)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    p1_r1 = _view(
+        _player((_char(1401),)),
+        _player((_char(3301),), dice=(5, 6)),
+        round_number=1,
+    )
+    p0_r2 = _view(
+        _player((_char(1401),), dice=(7, 8), hand=(a, b)),
+        _player((_char(3301),)),
+        round_number=2,
+    )
+    p1_r2 = _view(
+        _player((_char(1401),)),
+        _player((_char(3301),), dice=(1, 2)),
+        round_number=2,
+    )
+    decisions = [
+        _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r1, subject=14031),
+        _decision(1, 1, label="use_skill:0:none", kind="action_use_skill",
+                  view=p1_r1, subject=37031),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r2, subject=14031),
+        _decision(1, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=p1_r2, subject=37031),
+    ]
+
+    trace = compact_trace(_row(), decisions, [])
+
+    assert "R1 我方骰子：[火,雷]（2个）" in trace
+    assert "R1 对方骰子：[风,岩]（2个）" in trace
+    assert "R2 我方骰子：[草,万]（2个）" in trace
+    assert "R2 对方骰子：[冰,水]（2个）" in trace
+    # Each seat's pool is its own view, not the (masked) opponent's.
+    assert sum("R1 我方骰子：" in line for line in trace) == 1
+    assert sum("R1 对方骰子：" in line for line in trace) == 1
+
+    add = trace.index("R2 手牌新增：「运筹帷幄」")
+    assert trace[add - 1] == "R2 我方骰子：[草,万]（2个）"
+    assert trace[add + 1].startswith("R2 P0 技能 ")
+    # No whole-hand dump: only the newly drawn card is named.
+    assert "最好的伙伴" not in trace[add]
+
+
+def test_hand_add_line_omits_unresolvable_cards_and_caps_names():
+    hand = tuple(_entity(999999) for _ in range(6)) + (
+        _entity(332001), _entity(332004),
+    )
+    p0_r1 = _view(_player((_char(1401),), hand=()), _player((_char(3301),)),
+                  round_number=1)
+    p0_r2 = _view(_player((_char(1401),), hand=hand), _player((_char(3301),)),
+                  round_number=2)
+    decisions = [
+        _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r1, subject=14031),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r2, subject=14031),
+    ]
+    trace = compact_trace(_row(), decisions, [])
+    assert "R2 手牌新增：「最好的伙伴！」、「运筹帷幄」" in trace
+    assert "#999999" not in "\n".join(trace)
+    # No new cards -> no line at all.
+    decisions[1] = _decision(0, 2, label="use_skill:0:none",
+                             kind="action_use_skill", view=p0_r1, subject=14031)
+    assert all("手牌新增" not in line for line in compact_trace(_row(), decisions, []))

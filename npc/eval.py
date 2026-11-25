@@ -164,6 +164,8 @@ def run_npc_match(
         record_events=True,
         record_final_state=True,
         stage_rules=stage_rules_json(stage.name) if stage_rules else None,
+        # The in-game NPC starts every round with 8 omni dice.
+        player1_always_omni=True,
     )
     stars = evaluate_stage(stage, record)
     objective_keys = _objective_keys(stars.objectives)

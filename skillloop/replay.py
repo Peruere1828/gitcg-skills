@@ -65,6 +65,35 @@ _IGNORED_REQUESTS = frozenset({"select_card", "terminal"})
 
 _MAX_LABEL = 28
 _MAX_DICE = 8
+#: A roll line may list at most this many symbols before ``（N个）``.
+_MAX_DICE_LINE = 16
+#: At most this many newly drawn card names per round-boundary line.
+_MAX_HAND_ADD = 4
+
+#: Engine ``ReactionType`` enum names (lowercased) -> readable Chinese. Unknown
+#: values keep their raw name with a trailing ``?`` so a new enum cannot crash the
+#: trace and is still greppable.
+_REACTION_TEXT = {
+    "melt": "融化",
+    "vaporize": "蒸发",
+    "overloaded": "超载",
+    "superconduct": "超导",
+    "electro_charged": "感电",
+    "frozen": "冻结",
+    "swirl_cryo": "扩散（冰）",
+    "swirl_hydro": "扩散（水）",
+    "swirl_pyro": "扩散（火）",
+    "swirl_electro": "扩散（雷）",
+    "crystallize_cryo": "结晶（冰）",
+    "crystallize_hydro": "结晶（水）",
+    "crystallize_pyro": "结晶（火）",
+    "crystallize_electro": "结晶（雷）",
+    "burning": "燃烧",
+    "bloom": "绽放",
+    "quicken": "原激化",
+    "lunar_electro_charged": "月感电",
+    "lunar_bloom": "月绽放",
+}
 #: Upper bound for one skill description appended to an action line.
 _MAX_DESCRIPTION = 40
 #: Asset names for "statuses" sometimes carry a transient phase marker; the
@@ -345,6 +374,113 @@ def _dice_text(decision: Any) -> str:
 
 def _dice_symbol(value: Any) -> str:
     return _DICE_SYMBOL.get(_as_int(value), str(value))
+
+
+def _view_round(decision: Any) -> int | None:
+    """The explicitly recorded view round (``0`` is the pre-game init phase)."""
+    view = _field(decision, "player_view")
+    if not isinstance(view, dict):
+        return None
+    raw = view.get("round_number")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _view_dice(decision: Any) -> list[int] | None:
+    """The acting player's own dice pool from this decision's view.
+
+    Only a real snapshot (``players`` present) counts: test/legacy views may carry
+    just ``round_number``, in which case the dice are unknown and no row is added.
+    Each seat's view shows its own dice, so P1's pool is read from P1's view (the
+    contestant's view masks it).
+    """
+    view = _field(decision, "player_view")
+    if not isinstance(view, dict):
+        return None
+    players = _view_players(view)
+    if len(players) < 2:
+        return None
+    player = _as_int(_field(decision, "player", 0))
+    if player < 0 or player >= len(players):
+        return None
+    dice = players[player].get("dice")
+    if not isinstance(dice, (list, tuple)):
+        return []
+    values: list[int] = []
+    for value in dice:
+        number = _as_int(value)
+        if number:
+            values.append(number)
+    return values
+
+
+def _dice_pool_line(round_number: int, player: int, dice: Sequence[int]) -> str:
+    """``R1 我方骰子：[火,雷]（2个）`` / ``R1 对方骰子：（无）``."""
+    side = _SIDE_TEXT.get(player, f"P{player}")
+    shown = [_dice_symbol(value) for value in dice[:_MAX_DICE_LINE]]
+    body = (
+        "[" + ",".join(shown) + f"]（{len(dice)}个）" if shown else "（无）"
+    )
+    return f"R{round_number} {side}骰子：{body}"
+
+
+def _view_hand_ids(decision: Any) -> list[int] | None:
+    """P0's hand definition ids from a real view (``None`` when unavailable).
+
+    The contestant's view is the only one whose hand-card ids are trustworthy;
+    the NPC's hand is masked, so it is never read into a drawn-card line.
+    """
+    view = _field(decision, "player_view")
+    if not isinstance(view, dict):
+        return None
+    players = _view_players(view)
+    if len(players) < 2:
+        return None
+    hand = players[0].get("hand_cards")
+    if not isinstance(hand, (list, tuple)):
+        return None
+    ids: list[int] = []
+    for card in hand:
+        if isinstance(card, dict):
+            definition_id = _as_int(
+                card.get("definition_id") or card.get("card_definition_id")
+            )
+        else:
+            definition_id = _as_int(card)
+        if definition_id:
+            ids.append(definition_id)
+    return ids
+
+
+def _hand_additions(previous: Sequence[int], current: Sequence[int]) -> list[int]:
+    """Multiset difference ``current - previous`` in current-hand order."""
+    remaining = Counter(previous)
+    added: list[int] = []
+    for definition_id in current:
+        if remaining[definition_id] > 0:
+            remaining[definition_id] -= 1
+        else:
+            added.append(definition_id)
+    return added
+
+
+def _hand_add_line(round_number: int, definition_ids: Sequence[int]) -> str:
+    """``R2 手牌新增：「X」、「Y」``; unresolvable ids are omitted, max 4 names."""
+    names: list[str] = []
+    for definition_id in definition_ids:
+        name = _card_name(int(definition_id))
+        if name.startswith("#"):
+            continue
+        names.append(name)
+        if len(names) >= _MAX_HAND_ADD:
+            break
+    if not names:
+        return ""
+    return f"R{round_number} 手牌新增：" + "、".join(f"「{name}」" for name in names)
 
 
 def _label_head(label: str) -> str:
@@ -893,6 +1029,14 @@ def _nearest_view_indices(
     return previous, following
 
 
+def _reaction_text(value: Any) -> str:
+    """Localize a lowercased engine reaction enum name; unknown -> ``name?``."""
+    raw = str(value or "").strip()
+    if not raw:
+        return "?"
+    return _REACTION_TEXT.get(raw.lower(), raw + "?")
+
+
 def _reaction_lines(events: Iterable[Any]) -> list[str]:
     """Reaction events in recorder order, coalescing consecutive duplicates."""
     lines: list[str] = []
@@ -901,7 +1045,7 @@ def _reaction_lines(events: Iterable[Any]) -> list[str]:
     for event in events:
         if str(_field(event, "kind", "reaction") or "") != "reaction":
             continue
-        name = str(_field(event, "reaction_type") or "?").strip() or "?"
+        name = _reaction_text(_field(event, "reaction_type"))
         round_number = _as_int(_field(event, "round_number", 0))
         player = _field(event, "player")
         prefix = f"R{round_number if round_number > 0 else '?'} 反应 {name}"
@@ -1015,7 +1159,7 @@ def compact_trace(
     decisions: Sequence[Any] | None,
     events: Sequence[Any] | None,
     *,
-    max_actions: int = 40,
+    max_actions: int = 60,
     meta: dict[str, Any] | None = None,
     final_state: Any = None,
 ) -> list[str]:
@@ -1027,7 +1171,12 @@ def compact_trace(
       ``reroll_dice`` line per player *per round* (the dice they rerolled);
       these rows are executed by the script policy, so each carries
       ``（脚本策略，非 LLM 决策）`` (H10);
-    * reaction events, coalesced when consecutive;
+    * one ``R{n} 我方/对方骰子：[...]（N个）`` row per player per round, taken from
+      that player's own view (a real snapshot only; masked/absent views add
+      nothing). It shows the *pool* the engine paid from;
+    * when P0's view enters a new round with more hand cards than its previous
+      view, one ``R{n} 手牌新增：「X」...`` row (at most four resolvable names);
+    * reaction events (localized Chinese names), coalesced when consecutive;
     * one closing line with winner, rounds and objective marks (always kept).
 
     Action lines carry an ``→ 此后场上：...`` suffix only when the recorder stored
@@ -1058,6 +1207,9 @@ def compact_trace(
 
     action_entries: list[tuple[str, bool, int | None]] = []
     seen_mechanical: set[tuple[Any, ...]] = set()
+    seen_rolls: set[tuple[int, int]] = set()
+    p0_round: int | None = None
+    p0_hand: list[int] = []
     ended: set[int] = set()
     round_number = 1
 
@@ -1066,6 +1218,34 @@ def compact_trace(
         round_number = max(1, _round_of(decision, round_number))
         request = str(_field(decision, "request_type", "") or "")
         kind = str(_field(decision, "chosen_kind", "") or "")
+
+        # One roll row per (player, round), before that decision's own line. Each
+        # seat's dice are read from that seat's view (the opponent's pool is
+        # masked), so "why did it pay [万,岩,风]" can be checked against the pool.
+        # Init-phase views (round 0: mulligan/choose-active) are skipped because
+        # the dice have not been rolled yet.
+        view_round = _view_round(decision)
+        if view_round is not None and view_round > 0:
+            dice = _view_dice(decision)
+            roll_key = (player, round_number)
+            if dice is not None and roll_key not in seen_rolls:
+                seen_rolls.add(roll_key)
+                action_entries.append(
+                    (_dice_pool_line(round_number, player, dice), False, None)
+                )
+            # Cross-round draws: the contestant's view is the only trustworthy
+            # hand, so a round change is compared against the previous P0 view.
+            if player == 0:
+                hand_ids = _view_hand_ids(decision)
+                if hand_ids is not None:
+                    if p0_round is not None and round_number > p0_round:
+                        line = _hand_add_line(
+                            round_number, _hand_additions(p0_hand, hand_ids)
+                        )
+                        if line:
+                            action_entries.append((line, False, None))
+                    p0_round = round_number
+                    p0_hand = hand_ids
 
         if request == "action" or kind.startswith("action_"):
             line = _action_line(round_number, player, decision)
@@ -1119,7 +1299,7 @@ def compact_trace(
     body: list[tuple[str, bool, int | None]] = action_entries + [
         (line, False, None) for line in reaction_lines
     ]
-    cap = max(1, _as_int(max_actions, 40))
+    cap = max(1, _as_int(max_actions, 60))
     limit = cap - 1
     truncated = len(body) > limit
     if truncated:

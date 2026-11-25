@@ -88,8 +88,8 @@ def test_compact_trace_orders_actions_reactions_and_scoreboard():
     assert trace[2] == "R1 P1(NPC) 打牌 最好的伙伴！ (事件) 自动支付[火]"
     assert trace[3] == "R1 P0 选人（脚本策略，非 LLM 决策）"   # second choose_active dropped
     assert trace[4] == "R2 P1(NPC) 结束"
-    assert trace[5] == "R1 反应 superconduct P0"
-    assert trace[6] == "R2 反应 vaporize P1(NPC) x2"
+    assert trace[5] == "R1 反应 超导 P0"
+    assert trace[6] == "R2 反应 蒸发 P1(NPC) x2"
     assert trace[7].startswith("结局 winner=0（我方胜），2 回合；目标 ")
     assert "win✔" in trace[7] and "win_within_rounds✘" in trace[7]
     assert compact_trace(_row(), decisions, events) == trace   # deterministic
@@ -191,6 +191,30 @@ def test_payment_and_reroll_labels_are_distinct():
     assert trace[0] == "R1 P0 重掷 [水,火]（脚本策略，非 LLM 决策）"
     assert "自动支付[雷,雷]" in trace[1]
     assert all("骰[" not in line for line in trace)
+
+
+def test_reaction_names_are_localized_and_unknown_kept():
+    events = [
+        _reaction(1, "overloaded", 0),
+        _reaction(1, "vaporize", 1),
+        _reaction(2, "weird_new", None),
+    ]
+    trace = compact_trace(_row(), [], events)
+    assert trace[0] == "R1 反应 超载 P0"
+    assert trace[1] == "R1 反应 蒸发 P1(NPC)"
+    assert trace[2] == "R2 反应 weird_new?"
+    assert trace[-1].startswith("结局 ")
+
+
+def test_no_view_never_adds_roll_or_hand_rows():
+    decision = _decision(0, 1, "action", "action_use_skill", "use_skill:0:none",
+                         subject=14031)
+    # A view without ``players`` is not a real snapshot: no dice are invented.
+    shallow = _decision(0, 1, "action", "action_use_skill", "use_skill:0:none",
+                        subject=14031, round_number=1)
+    for item in (decision, shallow):
+        trace = compact_trace(_row(), [item], [])
+        assert all("骰子" not in line and "手牌新增" not in line for line in trace)
 
 
 def test_truncation_drops_early_mechanical_rows_before_actions():

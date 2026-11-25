@@ -270,6 +270,9 @@ def test_unparsable_answer_falls_back_to_expert_without_double_counting():
         record_decisions=True,
         record_events=True,
         record_final_state=True,
+        # ParkedRunner is a PvE path: its NPC seat uses the in-game always-omni
+        # dice rule, so the reference match must do the same.
+        player1_always_omni=True,
     )
     assert _decision_key(record.decisions) == _decision_key(task.decisions)
     assert _event_key(record.events) == _event_key(task.events)

@@ -63,7 +63,7 @@ from typing import Any, Callable
 
 from gitcg import Game, State
 
-from envs.match import MatchEvent, PolicyPlayer, _build_create_param
+from envs.match import MatchEvent, PolicyPlayer, _build_create_param, set_player_always_omni
 from npc.objectives import evaluate_stage
 from npc.policy import npc_policy_for_stage
 from npc.spec import NpcStage
@@ -460,6 +460,8 @@ class ParkedRunner:
             ))
         else:
             game = Game(state=State(json=task.snapshot))
+        # PvE: the in-game NPC starts every round with 8 omni dice.
+        set_player_always_omni(game, player1=True)
         game.set_player(0, PolicyPlayer(0, policy, recorder=task.decisions, event_sink=task.events))
         game.set_player(1, PolicyPlayer(1, npc_policy_for_stage(task.stage, rotation=self.spec.rotation)))
         policy.snapshot_fn = lambda: game.state().json()

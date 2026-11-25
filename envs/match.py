@@ -587,6 +587,24 @@ def _build_create_param(
     return create_param
 
 
+def set_player_always_omni(game: Game, *, player1: bool = False) -> None:
+    """Mark seat 1 (the PvE NPC) as rolling only omni dice.
+
+    ``alwaysOmni`` is a *game-level* per-player config: the engine's
+    ``CreateParam.setAttribute`` only accepts the global config keys (and rejects
+    3011), so it must be set on the created ``Game`` before ``start()``. When
+    enabled, every round's initial roll is ``initialDiceCount`` omni dice,
+    matching the in-game NPC rule (see ``web/npc_decks.py``).
+
+    Note: the engine's reroll path (``mutator.reroll``) uses ``randomDice(n)``
+    **without** ``alwaysOmni``. The NPC policy never rerolls (it always chooses
+    the empty reroll subset), so the rule holds; see
+    ``tests/test_npc_policy.py::test_reroll_keeps_all_dice``.
+    """
+    if player1:
+        game.set_attr(low_level.ATTR_PLAYER_ALWAYS_OMNI_1, 1)
+
+
 def _seeded_pile(spec: DeckSpec, seed: int, *, who: int) -> list[int]:
     from common.seeding import derive_seed
 
@@ -612,6 +630,7 @@ def run_match(
     deterministic_shuffle: bool = True,
     full_state_for_agents: bool = False,
     stage_rules: str | None = None,
+    player1_always_omni: bool = False,
 ) -> MatchRecord:
     """Play one full game synchronously in the current thread.
 
@@ -628,6 +647,10 @@ def run_match(
     ``stage_rules`` is the JSON payload built by :mod:`npc.stage_rules`; it is
     forwarded to the engine's ``ATTR_CREATEPARAM_STAGE_RULES`` string attribute.
     ``None`` (the default) sends nothing and keeps the old game setup.
+
+    ``player1_always_omni`` marks seat 1 (the NPC in PvE) as rolling only omni
+    dice, matching the in-game NPC rule. It defaults to ``False`` so generic
+    self-play is unchanged.
     """
     from reps.action_hierarchy import reset_default_hierarchical_action_codebook
 
@@ -641,6 +664,7 @@ def run_match(
         stage_rules=stage_rules,
     )
     game = Game(create_param=create_param)
+    set_player_always_omni(game, player1=player1_always_omni)
     decisions: list[DecisionRecord] = [] if record_decisions else []
     events: list[MatchEvent] = [] if record_events else []
     error: str | None = None

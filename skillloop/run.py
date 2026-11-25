@@ -473,6 +473,8 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
             # a prompt (see ``RichStateRenderer.describe_state``).
             full_state_for_agents=True,
             stage_rules=rules_json,
+            # The in-game NPC starts every round with 8 omni dice.
+            player1_always_omni=True,
         )
     except Exception as exc:
         # The engine validates the pinned pool while it builds the initial state,

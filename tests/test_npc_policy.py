@@ -260,3 +260,64 @@ def test_npc_policy_same_seed_reproducible():
 
     rotated = [play("cycle_a_e_q"), play("cycle_a_e_q")]
     assert trace(rotated[0]) == trace(rotated[1])
+
+
+def test_run_match_player1_always_omni_rolls_eight_omni():
+    """The PvE NPC seat rolls 8 omni dice; seat 0 is unaffected.
+
+    ``alwaysOmni`` is a game-level per-player config (``CreateParam.set_attr``
+    rejects key 3011), so this also guards the ``game.set_attr`` wiring. The NPC
+    policy never rerolls (empty subset), which is what keeps the rule intact
+    across the engine's reroll step (that step rolls plain random dice).
+    """
+    from envs.decks import deck_spec
+    from envs.match import run_match
+    from envs.policy import legal_random_policy
+    from reps.schema import DeckSpec as _DeckSpec
+
+    base = deck_spec("superconduct_aggro")
+    stage = get_stage("chefmao")
+    npc_deck = _DeckSpec(
+        name="npc_chefmao", characters=stage.deck_characters, cards=base.cards
+    )
+
+    def play(*, always_omni: bool):
+        first_dice: dict[int, tuple[int, ...]] = {}
+        npc_rerolls: list[tuple[int, ...]] = []
+
+        def wrap(policy, who):
+            class _Recorder:
+                name = policy.name
+
+                def choose(self, built):
+                    code = policy.choose(built)
+                    if built.context.request_type == DecisionType.REROLL_DICE:
+                        if who not in first_dice:
+                            first_dice[who] = tuple(
+                                int(d) for d in built.context.player_view.players[who].dice
+                            )
+                        if who == 1:
+                            payload = built.payload_by_low_level_code.get(int(code), {})
+                            npc_rerolls.append(
+                                tuple(int(d) for d in payload.get("dice_to_reroll", ()))
+                            )
+                    return code
+
+            return _Recorder()
+
+        run_match(
+            base,
+            npc_deck,
+            wrap(legal_random_policy(3), 0),
+            wrap(npc_policy_for_stage(stage), 1),
+            seed=1,
+            player1_always_omni=always_omni,
+        )
+        return first_dice, npc_rerolls
+
+    on, npc_rerolls = play(always_omni=True)
+    off, _ = play(always_omni=False)
+
+    assert on[1] == (8,) * 8
+    assert on[0] == off[0]  # seat 0 keeps its seeded random roll
+    assert npc_rerolls and all(not dice for dice in npc_rerolls)

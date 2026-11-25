@@ -38,6 +38,7 @@
 | `reps/action_adapter.py` | `_action_specs` 把引擎 `Action.preview` 的 damage/apply_aura 投影写入 `spec.metadata["preview"]`，供渲染层显示结算后伤害 | 卡面基础值会误导斩杀判断；preview 是引擎自己的预测，避免复刻规则。2026-11-24 |
 | `reps/action_adapter.py` | `_action_preview` 增抓 `create_entity`（HAND→`hand_add`，CHARACTER→`attach`）与 `remove_entity`（HAND→`hand_remove`，带 `reason`），上限 12→24 | 手牌操作（星斗归位弃雷楔换附魔）此前被截掉，回放无法解释手牌 7→6。2026-11-24 |
 | `envs/match.py` | `DecisionRecord` 增 `preview` 字段，recorder 从所选动作 `spec.metadata["preview"]` 写入，`asdict_decision` 一并输出 | 回放需要逐动作的引擎预测来解释手牌/附属变化。2026-11-24 |
+| `envs/match.py`、`skillloop/parked.py` | `run_match` / `_make_game` 新增 `player1_always_omni`（经 `game.set_attr(ATTR_PLAYER_ALWAYS_OMNI_1)`；`CreateParam.set_attr` 会拒绝 3011）；`skillloop/run.py`、`npc/eval.py`、`ParkedRunner` 的 PvE 路径开启 | 游戏内 NPC 每轮初始掷骰为 8 个万能骰；NPC policy 不重掷，避免引擎 `reroll` 用普通随机骰破坏该规则。2026-11-24 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 
