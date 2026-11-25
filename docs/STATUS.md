@@ -45,6 +45,23 @@
 
 `contestant` 仅作参照，不在四组内。
 
+`static` 的 loadout pin 从 `de0bf9d` 起只保留 strategy 层（每关 1–3 条），
+rule/目标类条目被过滤；`static` 与 `llm_empty` 的差异只剩 `static_v1` 里的 10 条策略。
+
+### 4.1 当前基线（seeds 1–5，2026-11-25）
+
+| 组 | 三星 | 三星率 | 成本 |
+|---|---|---|---|
+| `scripted` | 51/80 | 63.75% | $0 |
+| `llm_empty` | 45/80 | 56.25% | $0.389 |
+| `static` | 47/80 | 58.75% | $0.306 |
+
+三组差异均不显著（配对 n=80，McNemar p>0.3）；`static` vs `llm_empty` 净 +2 局。
+完整口径、逐关表与 50-seed 成本估算见
+[`../reports/baseline_20261125_pve_prompt_v1.md`](../reports/baseline_20261125_pve_prompt_v1.md)。
+原始数据 `data/runs/v10_{scripted,llm_empty,static}_s1_5.jsonl`（未入库）。
+**早于本基线的一切胜率/门控结论作废**，包括 NPC 随机掷骰时期的全部 replay 与报告。
+
 ## 5. 运行命令（当前有效）
 
 ```sh
@@ -107,13 +124,16 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
 
 ## 8. 下一步
 
-1. seeds 1–5 冒烟：`scripted` / `llm_empty` / `static`（`static_v1` v2 + `loadouts/v2`），先标定成本。
+1. ~~seeds 1–5 冒烟：`scripted` / `llm_empty` / `static`~~ 已完成，见 §4.1。
 2. `reasoning=none` vs `low` 对照（旧结论作废，必须重测）。
-3. 冒烟通过后按 50 seeds/关、6 workers 跑配对；门控按 `EVAL_PROTOCOL.md §4`。
+3. 按 50 seeds/关、4–6 workers 跑配对；门控按 `EVAL_PROTOCOL.md §4`。
 4. dynamic 线从 `static_v1` v2 重建后再进 gate。
 5. 任何 prompt 改动：重采两份样本，并记录 system sha / prompt hash。
 
 ## 9. 历史
 
-- 2026-11-13 及以前的胜率与门控结论**全部作废**（卡池 pin 与资产文本错配、seed 0 退化、prompt 含错误费用/血量与候选截断）。
+- 2026-11-25：建立新基线（seeds 1–5，三组，$0.695）。此前所有胜率与门控结论**全部作废**：
+  NPC 座位未按游戏规则置 `alwaysOmni`（掷随机骰）、prompt 含错误费用/血量与候选截断、
+  卡池 pin 与资产文本错配、seed 0 退化。
+- 2026-11-13 及以前的胜率与门控结论**全部作废**。
 - 留档见 [`../reports/`](../reports/) 与 [`failures/`](./failures/)。
