@@ -54,7 +54,7 @@ cd "$REPO"
   LLM 技能智能体走 `--policy llm:<none|llm_empty|static|dynamic>`：
   `none`/`llm_empty` = LLM + **仅游戏规则**（`data/skills/rules_v1`，17 rule），
   `static` = 规则 + 静态策略（`data/skills/static_v1`，17+10），
-  `dynamic` = 规则 + 动态策略（`data/skills/dyn_v4`，17+23）。
+  `dynamic` = 规则 + 动态策略（`data/skills/dyn_v4`，round 0 = `static_v1` v2 的副本，之后按轮次演进）。
   `--library` 只能覆盖 static/dynamic；`--loadout` 只对 static/dynamic 生效。
 - 网页调试：`bash scripts/serve_web_demo.sh`；人类执 NPC、AI 执参赛者，策略/提示词/库/候选必须与 `skillloop.run.build_policy` 完全一致；监控用 `GET /ai-decisions`。
 - 关卡/敌人数据权威在 `configs/npc/`；血量补丁用 `scripts/patch_npc_hp.py`（规则与审计见 `configs/npc/hp_table.json`）。

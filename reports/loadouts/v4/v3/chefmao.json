@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_chefmao",
+    "skill_chefmao_2",
+    "strat_focus_fire",
+    "strat_reaction",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "优先选关卡专属两条：附火先保刻晴、集火藏镜仕女；配合集火残血、先附着再补元素，并强调5回合内速胜节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "bdf7fb05ffee",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

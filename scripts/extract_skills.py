@@ -14,9 +14,11 @@ Pipeline (the "dynamic" arm's first half):
    are kept (B5);
 4. ask the model to write at most 2 injected prompts per failing stage
    (``skillloop.extract``). A candidate whose valid ``replaces`` id points at a
-   skill of the same layer (and, for ``stage_specific``, the same stage) rewrites
-   that skill in place (description/conditions) instead of adding a contradictory
-   twin; any other id is ignored and the candidate is added;
+   ``stage_specific`` skill of the same stage rewrites that skill in place
+   (description/conditions) instead of adding a contradictory twin; any other
+   id is ignored and the candidate is added. Global ``strategy`` rules are
+   hand-maintained and are never rewritten by extraction (a single stage's
+   lesson must not become/overwrite a cross-stage rule);
 5. write a **new library version** = current library + the candidates, snapshot it, and
    print the candidates so the gate can be run on unseen seeds.
 
@@ -432,7 +434,11 @@ def replacement_target(skill: Any, library: Any) -> str:
     ``strategy`` rule (e.g. ``strat_burst_timing``) and overwrite universal
     advice with stage-local text. A rewrite is therefore accepted only when
 
-    * the target exists and has the same ``layer`` as the candidate, and
+    * the target exists and has the same ``layer`` as the candidate,
+    * the candidate is **not** ``strategy`` — global strategy rules are
+      maintained by hand; extraction only sees one stage's failures, so it must
+      never rewrite them (v10 wrote ``blanche``/``irontonguetian``/``liusu``
+      single-stage text into ``strat_burst_timing``), and
     * for ``stage_specific``, the target belongs to the candidate's own stage —
       ``stage in target.conditions.stages`` or the id suffix ``_<stage>``.
 
@@ -455,6 +461,17 @@ def replacement_target(skill: Any, library: Any) -> str:
             f"[extract] {skill.skill_id}: replaces {target_id!r} of layer "
             f"{target.layer!r} but candidate layer is {skill.layer!r}; "
             "keeping it as a new skill",
+            file=sys.stderr,
+        )
+        return ""
+    if target.layer == "strategy":
+        # Same layer is not enough for global strategy: those rules are
+        # hand-maintained, stage-independent and injected everywhere. A candidate
+        # extracted from one stage's failures must not overwrite them.
+        print(
+            f"[extract] {skill.skill_id}: replaces global strategy {target_id!r}, "
+            "which is maintained by hand; extraction must not rewrite it, keeping "
+            "the candidate as a new skill",
             file=sys.stderr,
         )
         return ""
@@ -518,9 +535,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-failure-rate", type=float, default=0.15)
     ap.add_argument("--effort", default="high", help="thinking effort for extraction (default high)")
     ap.add_argument(
-        "--max-tokens", type=int, default=24576,
+        "--max-tokens", type=int, default=32768,
         help="completion budget; hidden reasoning and the JSON body share it "
-             "(default 24576; one truncation retry doubles it, capped at 49152)",
+             "(default 32768; one truncation retry doubles it, capped at 65536)",
     )
     ap.add_argument("--max-replays", type=int, default=2,
                     help="representative game traces per stage (max 2: one loss + one 3★)")

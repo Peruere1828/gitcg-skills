@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "1_timaeus",
+    "skill_timaeus",
+    "规则_目标_回合上限",
+    "规则_目标_装备牌",
+    "strat_focus_fire"
+  ],
+  "rationale": "蒂玛乌斯关卡专属铺场与刻晴保命清场为核心，配合5回合上限节奏、圣遗物目标及集火残血，确保速胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "b42423252a1f",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

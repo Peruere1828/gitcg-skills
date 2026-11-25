@@ -349,8 +349,25 @@ def _read_rows(raw_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _code_meta() -> dict[str, Any]:
+    """Code/prompt provenance for the sidecar (lazy import: ``skillloop`` is heavy)."""
+    from skillloop.prompt_v2 import PROMPT_VERSION
+    from skillloop.run import _code_dirty, _code_hash, _code_sha
+
+    return {
+        "prompt_version": PROMPT_VERSION,
+        "code_sha": _code_sha(),
+        "code_dirty": _code_dirty(),
+        "code_hash": _code_hash(),
+    }
+
+
+def _meta_path_for(raw_path: Path) -> Path:
+    return raw_path.with_name(raw_path.name.removesuffix(".jsonl") + ".meta.json")
+
+
 def _stream_state(spec: NpcEvalSpec, raw_path: Path):
-    meta_path = raw_path.with_name(raw_path.name.removesuffix(".jsonl") + ".meta.json")
+    meta_path = _meta_path_for(raw_path)
     fingerprint = _spec_fingerprint(spec)
     done: list[dict[str, Any]] = []
     if raw_path.exists():
@@ -369,11 +386,44 @@ def _stream_state(spec: NpcEvalSpec, raw_path: Path):
     else:
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         meta_path.write_text(
-            json.dumps({"fingerprint": fingerprint, "tag": spec.tag}, ensure_ascii=False),
+            json.dumps(
+                {"fingerprint": fingerprint, "tag": spec.tag, **_code_meta()},
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
     ensure_trailing_newline(raw_path)
     return done
+
+
+def _finish_meta(
+    spec: NpcEvalSpec, raw_path: Path, rows: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Rewrite the sidecar after the grid, keeping ``fingerprint`` unchanged."""
+    system_hashes: dict[str, set[str]] = {}
+    for row in rows:
+        stage = str(row.get("stage") or "")
+        value = str(row.get("system_hash") or "")
+        if stage and value:
+            system_hashes.setdefault(stage, set()).update(
+                item for item in value.split(",") if item
+            )
+    payload = {
+        "fingerprint": _spec_fingerprint(spec),
+        "tag": spec.tag,
+        "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        **_code_meta(),
+        "system_hashes": {
+            stage: ",".join(sorted(values)[:3])
+            for stage, values in sorted(system_hashes.items())
+        },
+        "n_games": len(rows),
+        "out": str(raw_path),
+    }
+    _meta_path_for(raw_path).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return payload
 
 
 # --------------------------------------------------------------------------- #
@@ -483,6 +533,8 @@ def run_npc_eval(
     if handle is not None:
         # Re-read the (resumed + freshly streamed) rows from disk.
         rows = sorted(_read_rows(raw_path), key=lambda row: int(row.get("task_index", -1)))
+        # Closing write: same file, fingerprint preserved, provenance added.
+        _finish_meta(spec, raw_path, rows)
     else:
         rows = sorted(done + fresh, key=lambda row: int(row.get("task_index", -1)))
     metadata = {

@@ -21,7 +21,8 @@
 | `--seeds` 从 1 起，禁用 0 | 引擎 minstd LCG 的 0 是吸收态，首轮 8 骰恒为 CRYO |
 | 卡池 = 引擎内置（`configs/engine.lock`），不 pin 旧版本 | 唯一可用资产目录是 latest，pin 会造成卡面/费用/血量错配 |
 | prompt 样本必须来自 `GITCG_LLM_TRACE` 的 `messages` | 二次渲染会与真实调用漂移，无法审计 |
-| 抽取 `max_tokens≥24576`，length 时翻倍重试一次 | reasoning 与正文共享预算，8192 会稳定截断到 0 候选 |
+| 抽取 `max_tokens≥32768`，length 时翻倍重试一次 | reasoning 与正文共享预算，8192 会稳定截断到 0 候选 |
+| 抽取候选不得改写全局 strategy（单关归纳 → stage_specific） | 全局策略手工维护且无 `conditions.stages` pin；单关建议一旦覆盖会注入所有关卡（见 `docs/failures/extract-overwrote-global-strategy.md`） |
 
 ## 3. 候选方法（未验证）
 

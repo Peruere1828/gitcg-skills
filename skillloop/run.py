@@ -41,10 +41,12 @@ import hashlib
 import json
 import multiprocessing as mp
 import os
+import subprocess
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -65,8 +67,15 @@ from skillloop.loadout import (
     loadout_matches,
     stage_task,
 )
+from skillloop.prompt_v2 import PROMPT_VERSION
 from skillloop.render import StateRenderer, TaskSpec
 from skillloop.replay import compact_trace
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# Source trees whose content defines a run's behaviour. ``tests/``, ``docs/`` and
+# ``reports/`` are deliberately excluded so writing a report does not invalidate
+# resume (``_code_hash`` feeds the fingerprint).
+CODE_TREES = ("skillloop", "envs", "reps", "npc", "common")
 
 GROUPS = ("scripted", "contestant", "llm_empty", "static", "dynamic")
 # Groups that load a skill library. ``llm_empty`` is **not** an empty prompt: it is
@@ -78,7 +87,7 @@ LOADOUT_GROUPS = ("static", "dynamic")
 DEFAULT_LIBRARY_ROOTS = {
     "llm_empty": "data/skills/rules_v1",   # 17 rule skills, no strategy/stage_specific
     "static": "data/skills/static_v1",     # 17 rule + 10 strategy
-    "dynamic": "data/skills/dyn_v4",       # 17 rule + 23 strategy
+    "dynamic": "data/skills/dyn_v4",       # 17 rule + evolving strategy layer
 }
 
 
@@ -198,6 +207,14 @@ class RunSpec:
             "loadout_hash": (
                 _dir_hash(Path(loadout_root)) if loadout_root else "none"
             ),
+            # Provenance: which code and which prompt generation produced the rows.
+            # ``code_hash`` covers the run-defining sources, so two runs that share an
+            # ``engine_lock`` but differ in NPC dice/prompt code are distinguishable.
+            # Only the *content* hash gates resume: ``code_sha`` (HEAD) and
+            # ``code_dirty`` stay in the meta sidecar as provenance, because a commit
+            # or ``git add`` alone must not invalidate an in-flight grid.
+            "prompt_version": PROMPT_VERSION,
+            "code_hash": _code_hash(),
         }
 
 
@@ -218,6 +235,58 @@ def _sha1(path: Path) -> str:
     if not path.exists():
         return "missing"
     return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+
+
+def _code_sha() -> str:
+    """``git rev-parse HEAD`` (``"unknown"`` when git is unavailable)."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if result.returncode != 0:
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def _code_dirty() -> bool:
+    """True when the run-defining source trees have uncommitted changes."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "--", *CODE_TREES],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    return bool(result.stdout.strip())
+
+
+def _code_hash() -> str:
+    """12-hex content hash of the run-defining Python sources.
+
+    Sorted per-file ``path\\0content`` hashing makes the value stable across
+    machines and independent of mtimes; only files under ``CODE_TREES`` are read,
+    so notes, tests and reports never invalidate a resumed run.
+    """
+    files: list[Path] = []
+    for tree in CODE_TREES:
+        root = REPO_ROOT / tree
+        if root.is_dir():
+            files.extend(item for item in root.rglob("*.py") if item.is_file())
+    digest = hashlib.sha1()
+    for file in sorted(files, key=lambda item: item.relative_to(REPO_ROOT).as_posix()):
+        digest.update(file.relative_to(REPO_ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def _dir_hash(path: Path) -> str:
@@ -392,6 +461,18 @@ def build_policy(
     )
 
 
+def _row_system_hash(decisions: Any) -> str:
+    """The system-prefix hash(es) seen in one game (``""`` without LLM decisions).
+
+    The prompt is built once per game, so normally there is exactly one hash; if a
+    mid-game library/objective change produced several, the first three sorted
+    values are joined with commas so the row stays short and JSON-safe.
+    """
+    hashes = sorted({str(getattr(d, "system_hash", "") or "") for d in decisions or ()})
+    hashes = [item for item in hashes if item]
+    return ",".join(hashes[:3])
+
+
 def _loadout_from_payload(payload: dict[str, Any]) -> Loadout | None:
     raw = payload.get("loadout")
     if isinstance(raw, Loadout):
@@ -553,6 +634,11 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
         "cached_tokens": int(getattr(usage, "cached_tokens", 0) or 0),
         "cost_usd": round(float(getattr(usage, "cost_usd", 0.0) or 0.0), 6),
+        # Prompt provenance: the version constant plus the actual system-prefix
+        # hashes seen in this game (empty for scripted/contestant games, which make
+        # no LLM decision).
+        "prompt_version": PROMPT_VERSION,
+        "system_hash": _row_system_hash(decisions),
     }
     if spec.trace:
         match_decisions = list(getattr(record, "decisions", None) or ())
@@ -570,6 +656,63 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
             "truncated": bool(trace_meta.get("truncated", False)),
         }
     return row
+
+
+def _read_rows(path: Path) -> list[dict[str, Any]]:
+    """Parse a run JSONL file, skipping blank and torn trailing lines."""
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
+def _write_meta(
+    meta_path: Path,
+    fingerprint: dict[str, Any],
+    rows: list[dict[str, Any]],
+    out: Path,
+) -> dict[str, Any]:
+    """Rewrite the sidecar after a run, keeping ``fingerprint`` byte-identical.
+
+    The opening write only carries ``fingerprint`` (that is all resume compares);
+    the closing rewrite adds provenance that is only known at the end: when the run
+    finished, which code/prompt generation played it, and the actual system-prefix
+    hash per stage. ``rows`` are every row in the output file, so resuming a
+    finished grid keeps the previous run's hashes instead of blanking them.
+    """
+    system_hashes: dict[str, set[str]] = {}
+    for row in rows:
+        stage = str(row.get("stage") or "")
+        value = str(row.get("system_hash") or "")
+        if stage and value:
+            system_hashes.setdefault(stage, set()).update(
+                item for item in value.split(",") if item
+            )
+    payload = {
+        "fingerprint": fingerprint,
+        "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "prompt_version": PROMPT_VERSION,
+        "code_sha": _code_sha(),
+        "code_dirty": _code_dirty(),
+        "code_hash": _code_hash(),
+        "system_hashes": {
+            stage: ",".join(sorted(values)[:3])
+            for stage, values in sorted(system_hashes.items())
+        },
+        "n_games": len(rows),
+        "out": str(out),
+    }
+    meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+    return payload
 
 
 def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
@@ -712,6 +855,9 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
     if aborted and progress:
         print(f"[run] budget ${budget:.4f} reached (${round(spent, 6):.4f}); "
               f"stopped launching new games", flush=True)
+
+    # Same closing write on a completed and on a budget-aborted grid.
+    _write_meta(meta_path, fingerprint, _read_rows(out), out)
 
     summary = summarize(rows)
     summary["seconds"] = round(time.perf_counter() - started, 1)

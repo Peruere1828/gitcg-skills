@@ -193,13 +193,22 @@ def test_group_library_defaults():
     }
     assert run_module.LIBRARY_GROUPS == ("llm_empty", "static", "dynamic")
     assert run_module.LOADOUT_GROUPS == ("static", "dynamic")
-    expected_versions = {"llm_empty": 1, "static": 2, "dynamic": 2}
+    # Frozen libraries pin their version; ``dynamic`` evolves, so compare against
+    # the library file instead of hard-coding its current round.
+    expected_versions = {"llm_empty": 1, "static": 2}
     for group, version in expected_versions.items():
         fp = RunSpec(
             group=group, stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
         ).fingerprint()
         assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS[group]
         assert fp["library_version"] == version
+    dynamic = RunSpec(
+        group="dynamic", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
+    ).fingerprint()
+    assert dynamic["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["dynamic"]
+    assert dynamic["library_version"] == SkillLibrary.load(
+        run_module.DEFAULT_LIBRARY_ROOTS["dynamic"]
+    ).version
     scripted = RunSpec(
         group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     ).fingerprint()
@@ -216,7 +225,7 @@ def test_scripted_group_is_not_a_skill_agent():
 
 @pytest.mark.parametrize(
     ("group", "strategies"),
-    [("llm_empty", 0), ("static", 10), ("dynamic", 23)],
+    [("llm_empty", 0), ("static", 10), ("dynamic", None)],
 )
 def test_group_policies_load_expected_library_layers(tmp_path, group, strategies):
     spec = RunSpec(
@@ -231,9 +240,16 @@ def test_group_policies_load_expected_library_layers(tmp_path, group, strategies
     policy = run_module.build_policy(spec, get_stage("wagner"), client=client)
     assert isinstance(policy, SkillAgentPolicy)
     assert policy.library is not None
-    assert policy.library.by_layer() == {
-        "rule": 17, "strategy": strategies, "stage_specific": 0,
-    }
+    layers = policy.library.by_layer()
+    if group == "dynamic":
+        # The dynamic library grows with every evolution round, so its strategy
+        # count is not hard-coded; only the fixed rule layer and the floor are.
+        assert layers["rule"] == 17
+        assert layers["strategy"] >= 10
+        # Proves the default resolves to the evolving root, not static_v1.
+        assert policy.library.meta.get("library_root") == "data/skills/dyn_v4"
+    else:
+        assert layers == {"rule": 17, "strategy": strategies, "stage_specific": 0}
     system = policy._system_message(SimpleNamespace(player_view=None))["content"]
     # v2: the rules are one fixed text, so the library's 17 rule skills stay in the
     # library (gate/reproducibility) but no longer print as prompt lines.
@@ -727,6 +743,10 @@ def test_budget_guard_stops_runner_and_marks_summary(tmp_path, monkeypatch):
     rows = [json.loads(line) for line in
             (tmp_path / "run.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 2
+    # The budget-abort path runs the same closing meta write.
+    meta = json.loads((tmp_path / "run.jsonl.meta.json").read_text(encoding="utf-8"))
+    assert meta["fingerprint"] == spec.fingerprint()
+    assert "finished_at" in meta and meta["n_games"] == 2
 
 
 class _ThreadExecutor:
@@ -893,3 +913,175 @@ def test_play_one_records_scratchpad_flag(monkeypatch):
         {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
     )
     assert row["scratchpad"] is True
+
+
+# -- code/prompt provenance --------------------------------------------------
+def test_fingerprint_records_code_and_prompt_provenance():
+    fp = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
+    ).fingerprint()
+    for key in ("prompt_version", "code_hash"):
+        assert key in fp
+    # HEAD sha / dirty flag are meta-only provenance: a commit or ``git add`` must
+    # not make the same code look like a different spec on resume.
+    assert "code_sha" not in fp and "code_dirty" not in fp
+    assert fp["prompt_version"] == run_module.PROMPT_VERSION
+    code_hash = fp["code_hash"]
+    assert len(code_hash) == 12 and all(char in "0123456789abcdef" for char in code_hash)
+    assert run_module._code_hash() == code_hash      # stable within a checkout
+
+
+def test_fingerprint_ignores_git_head_and_dirty(monkeypatch):
+    spec = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
+    )
+    before = spec.fingerprint()
+    monkeypatch.setattr(run_module, "_code_sha", lambda: "f" * 40)
+    monkeypatch.setattr(run_module, "_code_dirty", lambda: True)
+    assert spec.fingerprint() == before
+
+
+def test_code_hash_tracks_source_content(tmp_path, monkeypatch):
+    """The content hash (unlike HEAD) changes when a run-defining source does."""
+    root = tmp_path / "repo"
+    source = root / "skillloop" / "run.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(run_module, "REPO_ROOT", root)
+    monkeypatch.setattr(run_module, "CODE_TREES", ("skillloop",))
+
+    first = run_module._code_hash()
+    assert len(first) == 12
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    second = run_module._code_hash()
+    assert second != first
+    # Files outside ``CODE_TREES`` never move the hash.
+    (root / "docs").mkdir()
+    (root / "docs" / "note.md").write_text("notes\n", encoding="utf-8")
+    assert run_module._code_hash() == second
+
+
+def test_code_hash_ignores_tests_and_docs():
+    """Only the run-defining trees are hashed, so writing docs keeps resume valid."""
+    tracked = [Path("skillloop/run.py"), Path("envs/match.py"), Path("npc/spec.py")]
+    for path in tracked:
+        assert path.parts[0] in run_module.CODE_TREES
+    assert "tests" not in run_module.CODE_TREES
+    assert "docs" not in run_module.CODE_TREES
+    assert "reports" not in run_module.CODE_TREES
+
+
+def test_play_one_records_prompt_version_and_system_hash(monkeypatch):
+    class _DummyPolicy:
+        decisions = [
+            SimpleNamespace(error=None, latency=0.0, used=(), system_hash="abc123abc123"),
+            SimpleNamespace(error=None, latency=0.0, used=(), system_hash="abc123abc123"),
+        ]
+
+    monkeypatch.setattr(run_module, "build_policy", lambda *a, **k: _DummyPolicy())
+    monkeypatch.setattr(
+        run_module, "run_match",
+        lambda *args, **kwargs: SimpleNamespace(
+            winner=0, rounds=3, error=None, truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    spec = RunSpec(
+        group="scripted", stages=("timmie",), seeds=(1,), deck="superconduct_aggro",
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
+    )
+    assert row["prompt_version"] == run_module.PROMPT_VERSION
+    assert row["system_hash"] == "abc123abc123"
+    json.dumps(row, ensure_ascii=False)
+
+
+def test_play_one_records_empty_system_hash_without_llm_decisions(monkeypatch):
+    monkeypatch.setattr(
+        run_module, "run_match",
+        lambda *args, **kwargs: SimpleNamespace(
+            winner=0, rounds=3, error=None, truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    spec = RunSpec(
+        group="scripted", stages=("timmie",), seeds=(1,), deck="superconduct_aggro",
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "timmie", "seed": 1, "task_index": 0}
+    )
+    assert row["system_hash"] == ""
+    assert row["prompt_version"] == run_module.PROMPT_VERSION
+
+
+def test_run_meta_gets_finished_provenance_and_keeps_fingerprint(tmp_path, monkeypatch):
+    def fake_play_one(item):
+        return _row(
+            item["stage"], item["seed"], True, cost_usd=0.0,
+            prompt_version=run_module.PROMPT_VERSION,
+            system_hash="deadbeef0001",
+        )
+
+    monkeypatch.setattr(run_module, "play_one", fake_play_one)
+    monkeypatch.delenv("GITCG_LLM_BUDGET_USD", raising=False)
+    out = tmp_path / "run.jsonl"
+    spec = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(1, 2),
+        deck="superconduct_aggro", out=str(out),
+    )
+    run(spec, progress=False)
+
+    meta_path = tmp_path / "run.jsonl.meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["fingerprint"] == spec.fingerprint()
+    assert meta["finished_at"].endswith("+00:00")
+    assert meta["system_hashes"] == {"wagner": "deadbeef0001"}
+    assert meta["n_games"] == 2 and meta["out"] == str(out)
+    assert meta["prompt_version"] == run_module.PROMPT_VERSION
+    for key in ("code_sha", "code_dirty", "code_hash"):
+        assert key in meta
+
+    # Resuming the finished grid must not raise and must keep the provenance.
+    run(spec, progress=False)
+    again = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert again["fingerprint"] == meta["fingerprint"]
+    assert again["system_hashes"] == {"wagner": "deadbeef0001"}
+
+
+def test_resume_repeats_zero_pending_and_rejects_real_spec_changes(tmp_path, monkeypatch, capsys):
+    played: list[tuple[str, int]] = []
+
+    def fake_play_one(item):
+        played.append((item["stage"], item["seed"]))
+        return _row(item["stage"], item["seed"], True)
+
+    monkeypatch.setattr(run_module, "play_one", fake_play_one)
+    monkeypatch.delenv("GITCG_LLM_BUDGET_USD", raising=False)
+    out = tmp_path / "run.jsonl"
+    spec = RunSpec(
+        group="scripted", stages=("wagner",), seeds=(1, 2),
+        deck="superconduct_aggro", out=str(out),
+    )
+    run(spec)
+    assert "2 pending / 0 done" in capsys.readouterr().out
+    # Same spec, same code: nothing replays.
+    run(spec)
+    assert "0 pending / 2 done" in capsys.readouterr().out
+    # A commit / dirty tree only changes provenance, not the fingerprint: still a
+    # clean resume.
+    monkeypatch.setattr(run_module, "_code_sha", lambda: "0" * 40)
+    monkeypatch.setattr(run_module, "_code_dirty", lambda: True)
+    run(spec)
+    assert "0 pending / 2 done" in capsys.readouterr().out
+    assert played == [("wagner", 1), ("wagner", 2)]
+
+    # A real spec change still refuses to reuse the same --out.
+    with pytest.raises(SystemExit, match="different spec"):
+        run(RunSpec(**{**spec.__dict__, "deck": "dvalin_bonk"}))

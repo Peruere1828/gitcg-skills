@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "skill_uncletian_2",
+    "规则_目标_事件牌",
+    "规则_目标_回合上限",
+    "strat_focus_fire"
+  ],
+  "rationale": "优先刻晴破盾充能节奏与残血保护，兼顾事件牌目标和5回合速胜，集火残血减少敌方行动。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "8e1c80edbae7",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

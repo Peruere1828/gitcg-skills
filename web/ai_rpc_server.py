@@ -49,7 +49,7 @@
 #       引擎原候选顺序。`none` / `llm_empty` 都映射到 runner 的 `llm_empty`
 #       （LLM + **仅游戏规则** `data/skills/rules_v1`，17 条 rule；不含策略/关卡特化）；
 #       `static` 用 `data/skills/static_v1`（17 rule + 10 strategy）；`dynamic`
-#       用 `data/skills/dyn_v4`（17 rule + 23 strategy）。loadout 只对
+#       用 `data/skills/dyn_v4`（round 0 = static_v1 v2，之后按轮次演进）。loadout 只对
 #       static/dynamic 生效。
 #       牌组优先级：loadout > `--stage-decks` > 网页上报的 AI deck。
 #       LLM 需要仓库根 `.env` 里的 key/base_url/model；不可用时 AI 座位退回
@@ -151,7 +151,7 @@ _END_PHASES = {"PHASE_TYPE_GAME_END", "GAME_END", "gameEnd", 5}
 
 # LLM 策略的四个技能库选项（`llm:<library>`）。none / llm_empty 都表示
 # 「LLM + 仅游戏规则」（`data/skills/rules_v1`，17 条 rule）；static 是规则 +
-# 手写静态策略（static_v1）；dynamic 是规则 + 动态策略（dyn_v4）。
+# 手写静态策略（static_v1）；dynamic 是规则 + 动态策略（dyn_v4，从 static_v1 v2 起步）。
 LLM_LIBRARY_CHOICES = ("none", "llm_empty", "static", "dynamic")
 _SKILLS_ROOT = os.path.join(_REPO_ROOT, "data", "skills")
 _LLM_LIBRARY_LABELS = {
@@ -2717,7 +2717,7 @@ def main() -> None:
             " LLM 技能智能体：llm:<library>，library ∈ "
             "none / llm_empty（data/skills/rules_v1，仅游戏规则，17 条 rule）"
             " | static（data/skills/static_v1，17 rule + 10 strategy）"
-            " | dynamic（data/skills/dyn_v4，17 rule + 23 strategy）。"
+            " | dynamic（data/skills/dyn_v4，round 0 = static_v1 v2）。"
             " loadout 只对 static/dynamic 生效。"
             " 例：--policy llm:dynamic。LLM 不可用时 AI 座位自动退回脚本策略；"
             " 需要仓库根 .env 里的 LLM key/base_url/model。"

@@ -1,0 +1,17 @@
+{
+  "stage": "lan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "规则_目标_元素反应",
+    "规则_目标_回合上限",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利并触发2次元素反应；优先装载元素反应规则与先附着后补元素的策略，配合回合上限与集火残血，确保节奏与反应目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "d26648aa26cd",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

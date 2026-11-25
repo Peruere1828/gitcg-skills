@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "1_marjorie",
+    "skill_marjorie",
+    "strat_focus_fire",
+    "strat_burst_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡专属保命与绫华霜灭速杀为核心，配合集火残血、爆发斩杀窗口和5回合上限节奏，确保速胜且阵亡≤1。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "dfc3c62140a2",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

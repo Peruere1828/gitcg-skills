@@ -17,7 +17,7 @@ Usage::
     python -m scripts.prompt_samples reflection \\
         --trace /tmp/opencode/trace_extract.jsonl \\
         --rows /tmp/opencode/reflection_rows.jsonl \\
-        --base data/skills/dyn_v6 \\
+        --base data/skills/dyn_v4 \\
         --command 'GITCG_LLM_TRACE=... python -m scripts.extract_skills ...' \\
         --out reports/prompts/reflection_prompt.md
 """
@@ -348,7 +348,7 @@ def render_reflection(
         f"- 该关目标：{'；'.join(objectives)}",
         f"- 失败分布：`{json.dumps(by_stage[chosen].failed_objectives, ensure_ascii=False)}`"
         f"（全部关最大失败条目数 {worst_failures}）",
-        f"- {_settings(record)}（`scripts.extract_skills` 默认 `--effort high --max-tokens 24576`）",
+        f"- {_settings(record)}（`scripts.extract_skills` 默认 `--effort high --max-tokens 32768`）",
         f"- 调用次数 **{totals['calls']}**（{calls_note}{truncated_note}；"
         f"cost ${totals['cost_usd']:.6f}）",
         f"- usage 汇总：prompt {totals['prompt_tokens']} · completion "

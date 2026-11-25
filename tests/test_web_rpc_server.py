@@ -1389,13 +1389,19 @@ def test_resolve_llm_library_choices():
     assert static["version"] == 2 and static["skills"] == 27
     assert static["path"] == os.path.join("data", "skills", "static_v1")
 
-    # dynamic 固定优先 dyn_v4（与 skillloop.run 的默认库一致）；dyn_v4 的
-    # version 是 2，若按目录/version 猜会选错。
+    # dynamic 固定优先 dyn_v4（与 skillloop.run 的默认库一致）；dyn_v4 从
+    # static_v1 v2 起步，每轮演化都会改 version/条数，所以按库文件取值而不是
+    # 硬编码（若按目录/version 猜会选错）。
     dynamic = srv.resolve_llm_library("dynamic")
     assert dynamic["resolved"] == "dyn_v4"
     assert dynamic["kind"] == "evolved"
-    assert dynamic["version"] == 2 and dynamic["skills"] == 40
-    assert dynamic["built_at"] == "2026-11-02T11:44:13Z"
+    dyn_lib = json.loads(
+        (Path(srv._REPO_ROOT) / "data/skills/dyn_v4/library.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert dynamic["version"] == dyn_lib["library_version"]
+    assert dynamic["skills"] == len(dyn_lib["skills"])
 
 
 def test_llm_library_options_always_list_four():
@@ -1405,7 +1411,8 @@ def test_llm_library_options_always_list_four():
     assert "仅游戏规则" in labels["none"]
     assert "仅游戏规则" in labels["llm_empty"]
     assert "static_v1" in labels["static"] and "27" in labels["static"]
-    assert "dyn_v4" in labels["dynamic"] and "40" in labels["dynamic"]
+    dyn_count = srv.resolve_llm_library("dynamic")["skills"]
+    assert "dyn_v4" in labels["dynamic"] and str(dyn_count) in labels["dynamic"]
 
 
 def _llm_server(monkeypatch, *, available: bool, base: str = "llm:dynamic",
@@ -1677,11 +1684,17 @@ def test_llm_policy_matches_runner_build_policy():
     assert agent.task.stage == "blanche"
     assert agent.task.objectives == expected.objectives
     assert agent.task.deck == "keqing_shuanghuo"
-    # 技能库不再过滤：动态库原样 40 条，含关卡特化技能。
+    # 技能库不过滤：动态库原样加载（dyn_v4 从 static_v1 v2 起步，随轮次演化，
+    # 所以条数按库文件取，不硬编码）。
     assert agent.library is not None
-    assert len(agent.library) == 40
-    assert "skill_timmie" in agent.library.skills
+    dyn_lib = json.loads(
+        (Path(srv._REPO_ROOT) / "data/skills/dyn_v4/library.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert len(agent.library) == len(dyn_lib["skills"])
     assert "strat_mulligan" in agent.library.skills
+    assert "rule_burst" in agent.library.skills
     # base 是 era/expert（blanche 的 keqing_shuanghuo 是 era 牌组）。
     assert agent.base.name == "expert:keqing_shuanghuo"
     assert agent.config.candidate_cap == 16
@@ -1714,19 +1727,24 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
     agent = policy._ensure_policy()
     assert policy.eval_deck == "keqing_shuanghuo"
     assert policy.loadout_path and policy.loadout_path.endswith("blanche.json")
-    assert agent.config.pinned_skills == (
-        "skill_liusu",
-        "skill_irontonguetian",
-        "rule_burst",
-        "strat_burst_timing",
-        "strat_focus_fire",
-    )
+    # loadout 内容随库版本演化，按文件取值而不是硬编码 id。
+    loadout_skills = json.loads(Path(policy.loadout_path).read_text(encoding="utf-8"))[
+        "skills"
+    ]
+    assert agent.config.pinned_skills == tuple(loadout_skills)
     # rule 层 pin 被过滤（system 前缀已含完整规则），strategy 层仍作为可引用技能注入。
     system = agent._system_message(SimpleNamespace(player_view=None))["content"]
     skills_block = system.split("可参考的技能（来自历史经验，优先级低于关卡目标）：")[-1]
-    assert "- [rule_burst]" not in skills_block
-    assert skills_block.count("- [strat_burst_timing]") == 1
-    assert skills_block.count("- [strat_focus_fire]") == 1
+    injected = [skill.skill_id for skill in agent._skills]
+    for skill_id in loadout_skills:
+        skill = agent.library.get(skill_id)
+        if skill is not None and skill.layer == "rule":
+            # 规则层 pin（含「规则_目标_*」这类中文 id）被过滤掉。
+            assert skill_id not in injected
+            assert f"- [{skill_id}]" not in skills_block
+        elif skill is not None:
+            assert skill_id in injected
+            assert skills_block.count(f"- [{skill_id}]") == 1
 
 
 def test_none_and_llm_empty_map_to_llm_empty_group():

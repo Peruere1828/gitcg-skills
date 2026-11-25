@@ -1,0 +1,1089 @@
+{
+  "library_version": 3,
+  "meta": {
+    "kind": "evolved",
+    "note": "lineage reset: round 0 is an exact copy of static_v1 v2",
+    "built_at": "2026-11-25T12:32:31Z",
+    "objective_types": [
+      "defeated_less_than",
+      "play_equipment_card",
+      "play_event_cards",
+      "trigger_elemental_reactions",
+      "use_elemental_burst",
+      "win",
+      "win_within_rounds"
+    ],
+    "source_sha1": "da3ad153e409",
+    "builder": "scripts/build_rules_library.py",
+    "reason": "strat_equipment_timing: original text claimed equipment only pays off in the first two rounds; equipment is a permanent buff, so the text now says to play it after the round's skill/kill dice are paid",
+    "updated_at": "2026-11-25",
+    "history": [
+      {
+        "version": 2,
+        "note": "lineage reset: round 0 = static_v1 v2 (dyn_v1-v3, v5-v6 removed as invalid)",
+        "at": "2026-11-25T11:48:23Z"
+      },
+      {
+        "version": 3,
+        "note": "discarded: extraction had rewritten global strategies with single-stage text",
+        "at": "2026-11-25T11:48:23Z"
+      },
+      {
+        "version": 3,
+        "note": "+24 candidates from v10_static_s1_5.jsonl",
+        "at": "2026-11-25T12:32:31Z"
+      }
+    ],
+    "parent": "data/skills/dyn_v4",
+    "library_root": "data/skills/dyn_v4",
+    "source_rows": "data/runs/v10_static_s1_5.jsonl",
+    "n_candidates": 24
+  },
+  "skills": [
+    {
+      "skill_id": "1_marjorie",
+      "skill_name": "残血角色在满能量丘丘人行动前必先保命（阵亡≤1）",
+      "description": "我方每次行动前先看对方出战丘丘人的能量：满 2 点时射手丘丘人「几支一起」5 伤、冰箭丘丘人 4 伤，若我方出战角色血量 ≤4 必须先保命再谈输出——用「莲花酥」(-3 伤)、切到满血行秋并先用「画雨笼山」挂「雨帘剑」，或用「交给我吧！」「凯瑟琳」「换班时间」把换人做成快速或省骰后继续输出。三星只允许阵亡 1 次：一旦已经倒下 1 人（通常是神里绫华），之后每回合都把血量 ≤5 的角色换下，宁可少打一次普通攻击也不要再送第二个；残血时不打普通攻击、不勉强站场。",
+      "conditions": {
+        "stages": [
+          "marjorie"
+        ],
+        "objective_types": [
+          "defeated_less_than"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "marjorie:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "1_timaeus",
+      "skill_name": "第1回合零费圣遗物+雷楔附魔铺场",
+      "description": "第1回合出战刻晴且有圣遗物手牌时，先用蒂玛乌斯的免费装备名额打出焦灼的魔女帽（同时完成「打出1张圣遗物」目标），随后用抵天雷罚或星斗归位并立刻打出雷楔拿到雷元素附魔，剩余骰全部投入云来剑法/普攻，绝不留3个以上骰子空过宣布结束。同一角色身上不要再打第二张圣遗物（流放者头冠会顶掉魔女帽），流放者头冠改给班尼特或火之债务处理人。",
+      "conditions": {
+        "stages": [
+          "timaeus"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "play_equipment_card"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "timaeus:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "2_timmie",
+      "skill_name": "面对充能满2的丘丘暴徒先保命再收尾：莲花酥/切菲谢尔，柯莱不死站",
+      "description": "当任一火斧丘丘暴徒能量达到2、而我方出战角色血量≤5（典型是吃两次Upa后的刻晴4血）时，严禁留场过回合：本回合内优先用雷楔/星斗归位/柯莱「拂花偈叶」(3伤)击倒该敌人；伤害或骰不足就立刻改用「莲花酥」减3伤或切换到满血菲谢尔吸收，把被击倒数压在1次以内。柯莱上场只打「飞叶迴斜」+拂花偈叶的爆发回合，打完立刻换下，不要让她连续两轮站场承受Upa与Oto Tiga。",
+      "conditions": {
+        "stages": [
+          "timmie"
+        ],
+        "objective_types": [
+          "defeated_less_than",
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "timmie:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "7_lan",
+      "skill_name": "破火罩与防7点爆发：低血不结束回合",
+      "description": "对火深渊法师时，先确认「火元素护罩」还剩几次火元素附着：护罩未破时它免疫伤害，就用雷元素技能或奥兹去消耗附着，别用普通攻击或低伤动作浪费骰子；护罩破除后，再用「罪灭之矢」「星斗归位」把伤害打进去。宣布结束回合前先自查：若对方火深渊法师充能满3点（下一发「熔焰地涌之仪」造成7点伤害），或我方出战角色生命值≤7，就先使用「莲花酥」「蒙德土豆饼」减伤回血，或切换满生命值角色顶上，绝不在这种局面结束回合。",
+      "conditions": {
+        "stages": [
+          "lan"
+        ],
+        "objective_types": [
+          "win",
+          "win_within_rounds"
+        ],
+        "enemies": [
+          "fatuipyroagent"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "lan:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "buyun_five_round_all_in_tempo_buyun",
+      "skill_name": "buyun_five_round_all_in_tempo",
+      "description": "第1轮除最多一次过牌/铺场外，必须把骰子花在伤害技能上，禁止连打「运筹帷幄」「元素共鸣：交织之岩」这类纯资源牌把8个骰耗光却只打1点伤害（失败局正是这样在R2被5点爆发击倒凝光、R4/R5空过回合）。对方冰深渊法师一旦充能2点（爆发5点），我方出战角色血量≤5时先用「莲花酥」「元素共鸣：坚定之岩」或切人挡伤害再输出；只要对方还有2名以上角色存活且手上有付得起的伤害手段（含诺艾尔装「狼的末路」后的普攻、凝光「天权崩玉」），就不要宣布结束回合，要压到第5轮结束前打完三人。",
+      "conditions": {
+        "stages": [
+          "buyun"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "buyun:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "buyun_geo_reaction_two_hits_buyun",
+      "skill_name": "buyun_geo_reaction_two_hits",
+      "description": "风丘丘萨满身上做不出反应（风元素不附着），前两轮别为凑反应浪费行动，直接用诺艾尔「西风剑术·女仆」(2物理)与凝光「璇玑屏」(2岩)把它打掉。它倒下后，冰深渊法师自带冰附着、雷史莱姆永久雷附着：凝光的岩元素伤害每次命中它们都会触发「结晶」（打在冰元素护罩上也照样触发并消耗护罩层数），行秋「画雨笼山」打冰深渊法师则触发「冻结」并封住它一回合。因此2次元素反应目标优先用这两条最便宜的路径在1–2个行动内凑齐，凑齐后立刻转回斩杀，不要为凑反应放弃当轮击杀。",
+      "conditions": {
+        "stages": [
+          "buyun"
+        ],
+        "objective_types": [
+          "trigger_elemental_reactions"
+        ]
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "buyun:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "r1_blanche",
+      "skill_name": "R1火债爆发与首杀节奏",
+      "description": "第1回合火债处理人因关卡规则初始能量已满，先用焚毁之锋（3火）打对方出战火斧丘丘暴徒，再用突刺补刀；若手牌有元素共鸣：交织之火，先打它（0费生成1火骰）凑出第9个骰，争取R1打出爆发+两次突刺（约10点）击倒第一个火斧。R1不要打群玉阁、焦灼的魔女帽、旅行剑等延后收益牌，除非剩余骰子仍够完成当回合第二次突刺。",
+      "conditions": {
+        "stages": [
+          "blanche"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "blanche:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "r1_r2_timmie",
+      "skill_name": "R1打满抵天雷罚三连后立即结束抢R2先手，先手斩杀满能量丘丘人",
+      "description": "第1轮先用「抵天雷罚」(3雷，附赠1次星斗归位并给刻晴+1雷伤附魔)再打「雷楔」(3任意)把附魔补到3回合，此三连后若剩余骰不足3个、无法再打出技能，立刻宣布回合结束——先结束才是下轮先手。R2我方先手时，在充能已满2的火斧丘丘暴徒使用Oto Tiga(5伤)之前，用星斗归位/雷楔击杀血量≤4的那个丘丘人（附魔在场时星斗归位打4点正好收掉），不要先去普攻另一个满血敌人。",
+      "conditions": {
+        "stages": [
+          "timmie"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "defeated_less_than"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "timmie:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "rule_burst",
+      "skill_name": "元素爆发",
+      "description": "元素爆发需要角色能量充满（普通攻击/元素战技后+1，受到伤害不充能）；爆发需要支付全部充能并清空，通常是最强的一击，但需要预留骰子。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_dice",
+      "skill_name": "骰子与费用",
+      "description": "每轮开始投掷 8 个骰子；打出牌/使用技能要求支付对应元素或万能骰。元素调和可以弃 1 张手牌换 1 个当前出战角色元素的骰子。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_draw",
+      "skill_name": "抽牌与手牌上限",
+      "description": "结束阶段双方各抓 2 张牌；手牌上限为 10 张，超出会弃牌。手牌少时优先考虑过牌手段。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_end_round",
+      "skill_name": "结束回合",
+      "description": "宣布结束后本回合不再行动；双方都宣布后进入结束阶段并结算。先宣布的一方在下一轮先手。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_equipment",
+      "skill_name": "装备牌",
+      "description": "装备牌属于行动牌；打出手牌（包括装备）默认是快速行动，不结束行动权，但仍需支付费用。卡面写「战斗行动」的行动牌（如天赋装备）除外。装备后永久增益对应角色；每个角色最多装备1张武器、1张圣遗物、1张特技。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_food",
+      "skill_name": "食物牌",
+      "description": "料理牌让角色进入「饱腹」，该角色本回合不能再成为其他料理目标；复苏类料理本回合限一次。治疗对存活与「角色被击倒次数」类目标有帮助。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_mulligan",
+      "skill_name": "起手换牌",
+      "description": "起手可以替换任意张手牌；换牌不消耗骰子，换掉的牌会洗回牌堆、之后仍可能抽到。优先保留与关卡目标相关的牌。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_reaction",
+      "skill_name": "元素反应",
+      "description": "给角色附着元素后再用另一种元素攻击会触发反应（蒸发/融化/超载/感电/冻结/扩散/结晶/绽放等），反应通常带来额外伤害或控制。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_support",
+      "skill_name": "支援牌",
+      "description": "支援牌放入支援区，在后续回合持续提供效果；支援区有数量上限，满了需要替换。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "rule_switch",
+      "skill_name": "切换角色",
+      "description": "切换出战角色通常花费 1 个任意骰；出战角色被击倒时，免费选择一名后台角色成为新出战角色。切换是战斗行动，会换对方行动。",
+      "conditions": {},
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "skill_blanche",
+      "skill_name": "斩杀窗口与元素反应优先",
+      "description": "每次行动前检查对方出战角色剩余血量：若≤2（突刺/云来剑法可杀）或≤3（星斗归位/热情过载可杀），立即用攻击补刀击倒，不要先治疗、打支援/装备或宣布结束。目标带火附着时优先切刻晴用星斗归位/天街巡游触发超载+2；目标为冰盾丘丘暴徒时优先用火债焚毁之锋或班尼特热情过载触发融化+2，不要用无反应的物理普攻硬打。",
+      "conditions": {
+        "stages": [
+          "blanche"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "blanche:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_chefmao",
+      "skill_name": "附火回合先保刻晴再输出",
+      "description": "行动阶段开始时我方出战角色必附火，只要藏镜仕女存活，第一动作先打「莲花酥」给当前出战角色（在第一次受伤前），或打「交给我吧！」/「换班时间」后切换角色，把附火角色换到后台再让无火角色打技能；绝不让附火刻晴直接吃潋波绽破（水打火蒸发+2，再叠水光破镜会连续掉血至倒）。若无莲花酥也无快速切换，则宁可本回合少打一次技能，也要先支付1骰切走附火角色。",
+      "conditions": {
+        "stages": [
+          "chefmao"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "defeated_less_than"
+        ],
+        "enemies": [
+          "mirrormaiden"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "chefmao:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_chefmao_2",
+      "skill_name": "先杀藏镜仕女并锁死第二次击倒",
+      "description": "藏镜仕女存活时，伤害优先打她：用刻晴星斗归位/菲谢尔夜巡影翼触发感电，或用柯莱拂花偈叶触发绽放，不要先打带潜行减伤的火债；一旦我方已有一名角色被击倒，剩余角色血量≤6时立刻用蒙德土豆饼/莲花酥或切换下场，整局最多只接受一次击倒，不能为了输出再倒第二人。",
+      "conditions": {
+        "stages": [
+          "chefmao"
+        ],
+        "objective_types": [
+          "defeated_less_than",
+          "win_within_rounds"
+        ],
+        "enemies": [
+          "mirrormaiden",
+          "fatuipyroagent"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "chefmao:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_irontonguetian",
+      "skill_name": "刻晴雷楔附魔链与焚毁之锋前的爆发",
+      "description": "第1轮出战刻晴且有3雷时，先打星斗归位再用雷楔，让云来剑法变成雷附魔普攻；如果本回合骰子不够再打雷楔，就只打星斗归位，不要单独打抵天雷罚（没有雷楔附魔时这张装备牌等于白亏3骰）。火之债务处理人充能到2且刻晴血量≤5时，先打出天街巡游(4雷+穿透)抢伤害，再用莲花酥或切柯莱（11血）挡焚毁之锋，不要既没打出爆发又被击倒。",
+      "conditions": {
+        "stages": [
+          "irontonguetian"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "use_elemental_burst"
+        ],
+        "enemies": [
+          "fatuipyroagent"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "irontonguetian:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_irontonguetian_2",
+      "skill_name": "水铳重卫士：按附着选伤害与爆发收尾",
+      "description": "水铳重卫士附属元素武装·水时不要用祈颂射艺、云来剑法这类物理普通攻击（受伤-1后实际只剩1点伤害）；改用柯莱·拂花偈叶(3草)吃它的水附着触发绽放+1并铺草原核，或用雷伤打水附着触发感电(+1并对后台1穿透)。它剩余血量≤4且我方菲谢尔或柯莱能量满时，直接用至夜幻现或猫猫秘宝收掉，确保第5轮结束前完成击杀。",
+      "conditions": {
+        "stages": [
+          "irontonguetian"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "enemies": [
+          "fatuiskirmisherhydrogunnerlegionnaire"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "irontonguetian:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_lan",
+      "skill_name": "刻晴速攻开局：星斗归位点杀草丘丘萨满",
+      "description": "第1回合让刻晴出战，用「星斗归位」（3雷）起手；若能用生成的雷楔再补一发3点雷伤凑满6点，就直接收掉6血的草丘丘萨满，形成以多打少的局面。不要用「飞叶迴斜」先让柯莱出战，因为柯莱接火深渊法师「灼面的祭法」和「熔焰地涌之仪」会被直接打倒；刻晴是雷元素角色，才有雷楔附魔和超载的后续爆发。",
+      "conditions": {
+        "stages": [
+          "lan"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "trigger_elemental_reactions"
+        ],
+        "enemies": [
+          "fatuipyroagent",
+          "hilichurlshaman"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "lan:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_liusu",
+      "skill_name": "刻晴星斗后接雷楔开局",
+      "description": "当刻晴出战且本回合已用星斗归位（含抵天雷罚触发）后手牌有「雷楔」、剩余骰≥3时，立刻打出雷楔（3雷伤+雷元素附魔），不要改用云来剑法；附魔期间刻晴的雷伤配合关卡每回合开始敌方出战的水附着触发感电+1，优先打火债务处理人。若骰子不足3个，先用元素调和/交织之雷凑够再打，雷楔的3点雷伤和附魔窗口比一次云来剑法更值。",
+      "conditions": {
+        "stages": [
+          "liusu"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "enemies": [
+          "fatuipyroagent"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "liusu:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_liusu_2",
+      "skill_name": "菲谢尔充能爆发收尾",
+      "description": "当菲谢尔能量≤2且已到第3-4回合（距5回合上限只剩1-2轮），或敌方火债务处理人残血≤4时，把资源转为给菲谢尔充能：菲谢尔0充能时切换她上场触发「刘苏」+1，再用「强能之雷」「星天之兆」「白垩之术」补满3能量，能量满后立即用「至夜幻现」收割火债务并穿透风拳。刻晴被焚毁之锋击倒后不要用柯莱普攻拖节奏，优先执行此流程。",
+      "conditions": {
+        "stages": [
+          "liusu"
+        ],
+        "objective_types": [
+          "win_within_rounds",
+          "use_elemental_burst"
+        ],
+        "enemies": [
+          "fatuipyroagent"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "liusu:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_marjorie",
+      "skill_name": "五回合速杀：优先霜灭，粉碎之冰只绑冰华或霜灭",
+      "description": "神里绫华攒满 3 能量后（最早第 2 回合）第一时间打「神里流·霜灭」，4 点冰伤加「霜见雪关扉」每回合结束 2 点，是本牌组单位骰子总伤害最高的动作，不要为了省骰一直用普通攻击拖到第 5 回合。「元素共鸣：粉碎之冰」只绑在霜灭（6 伤）或「神里流·冰华」（5 伤）那一击上，别贴在只能打 2 伤的普通攻击上。算击杀线时把召唤物结束阶段那 2 点冰伤算进去，优先把 6 血的当前出战丘丘人一次打穿：对方「躲起来」出招后会自动换人，伤害摊到多个角色等于白打。",
+      "conditions": {
+        "stages": [
+          "marjorie"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "marjorie:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_shitou",
+      "skill_name": "斧丘暴徒满能前留一骰保出战角色",
+      "description": "当对方出战角色为雷斧丘丘暴徒或火斧丘丘暴徒、其充能已达2（下一动作就是Oto Tiga的5点物理伤害，经流煌磨刃或流焰磨刃会变成元素伤害），或我方出战角色（刻晴或菲谢尔）生命≤5时：本回合务必预留1个元素骰，在宣布结束前切换柯莱（11血）承伤，或用莲花酥把这一击减3。绝不要把最后一个骰子打给璃月港口（2同色）这类只抽牌、当回合不影响场面的支援牌，以0骰结束回合——刻晴剩3血、0骰收场，下回合被对方爆发直接击倒并清空3点充能，是本关最常见的崩盘点。",
+      "conditions": {
+        "stages": [
+          "shitou"
+        ],
+        "objective_types": [
+          "win",
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "shitou:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_shitou_2",
+      "skill_name": "凑三同色打元素战技，物理普攻不占回合",
+      "description": "每个行动阶段先用手牌中的免费或低费资源（元素共鸣：交织之雷、最好的伙伴！、元素调和、雷楔）凑出3个同色骰再出手：3雷优先让刻晴打星斗归位，3草优先让柯莱打拂花偈叶，菲谢尔则优先夜巡影翼召出奥兹（结束阶段2次免费雷伤补刀）；这些元素战技打在环节开始时被规则附着水的敌方出战角色上必定触发感电或绽放（伤害+1，并溅射后台或生成草原核），顺带完成2次反应目标。骰子只有1本色+2任意时，宁可先调和或打交织之雷，也不要用云来剑法、祈颂射艺这类2点物理普攻占掉整个回合——物理伤害不触发反应，等于同时丢掉1点伤害和一次反应机会；5回合内要打掉26点血，每回合需要打出约2次带反应的战技。",
+      "conditions": {
+        "stages": [
+          "shitou"
+        ],
+        "objective_types": [
+          "win",
+          "win_within_rounds",
+          "trigger_elemental_reactions"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "shitou:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_timaeus",
+      "skill_name": "刻晴保命与天街巡游清场窗口",
+      "description": "冰盾丘丘暴徒充能达到2（Aba Movo 5点）而我方出战刻晴生命≤6时，先用莲花酥/蒙德土豆饼，或用「交给我吧！」「换班时间」把刻晴换到后台，不要原地结束回合硬吃这一发。刻晴充能3且手上有4个雷骰时，先用低费普攻/技能磨掉寒冰大盾的2次减伤，把对方两名以上角色压到≤4血后立刻天街巡游；冰箭丘丘人残血时优先用附魔后的云来剑法直接击倒，别让它靠「躲起来」反复撤回后台拖慢5回合上限。",
+      "conditions": {
+        "stages": [
+          "timaeus"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "timaeus:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_uncletian",
+      "skill_name": "刻晴破盾充能与天街巡游节奏",
+      "description": "当敌方火深渊法师或冰深渊法师仍有护罩、且刻晴可行动时，优先用刻晴的元素战技「星斗归位」（3雷）攻击带护罩的敌人（优先火法）以消耗护罩并给刻晴充能；手牌有「雷楔」时在星斗归位后打出，给刻晴附加雷元素附魔并继续充能。刻晴能量满3后立即用「天街巡游」打4点雷伤+后台3点穿透清场，不要先把骰子花在流放者头冠、群玉阁等与当回合输出无关的支援牌上。",
+      "conditions": {
+        "stages": [
+          "uncletian"
+        ],
+        "objective_types": [
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "uncletian:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_uncletian_2",
+      "skill_name": "刻晴残血保护与换人优先级",
+      "description": "当刻晴生命≤4且敌方火深渊法师能量≥2或冰深渊法师能量≥2时，优先打「莲花酥」减3伤或「蒙德土豆饼」治疗，必要时用「交给我吧！」把切换变为快速行动、切到柯莱或菲谢尔承受伤害；反例是让1血刻晴继续站场被火法「灼面的祭法」或冰法「霜寒迂旋之仪」直接击倒。若刻晴能量已满且「天街巡游」可击杀至少一名敌人，则先开大再处理保护。",
+      "conditions": {
+        "stages": [
+          "uncletian"
+        ],
+        "objective_types": [
+          "win"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "uncletian:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_wagner",
+      "skill_name": "瓦格纳免费武器：上手即装给诺艾尔",
+      "description": "行动阶段只要手牌出现「狼的末路」并且瓦格纳仍在支援区，就立刻在本次行动中打出，把它装备给诺艾尔（双手剑）：瓦格纳使武器免费装备，因此不消耗骰子，也是快速行动，不要把它留到「先打护心铠、普攻」之后。手牌出现「赌徒的耳环」时，也立刻用 1 个任意骰为诺艾尔装备（圣遗物）。这两张牌是全牌组仅有的武器、圣遗物牌；少打一次普攻不会输，少打装备会直接丢掉 play_equipment_card。",
+      "conditions": {
+        "stages": [
+          "wagner"
+        ],
+        "objective_types": [
+          "play_equipment_card",
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "wagner:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "skill_wagner_2",
+      "skill_name": "装备目标未完成前不空转骰子",
+      "description": "每次准备「宣布回合结束」前先自查：play_equipment_card 是否已完成？若尚未完成且手上没有「狼的末路」或「赌徒的耳环」，就不要把最后一个骰子花在打不死人的普攻上，改为打出「运筹帷幄」「璃月港口」或靠「常九爷」抽牌去找装备，并留至少 1 个任意骰给下回合装备。最迟第 4 回合结束前必须完成装备目标，之后再全力用诺艾尔的「大扫除」和普攻清理残血的水史莱姆和风丘丘萨满。",
+      "conditions": {
+        "stages": [
+          "wagner"
+        ],
+        "objective_types": [
+          "play_equipment_card",
+          "win_within_rounds"
+        ],
+        "round_max": 5
+      },
+      "layer": "stage_specific",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "source_games": [
+        "wagner:profile"
+      ],
+      "created_at": "2026-11-25T12:32:31Z",
+      "updated_at": "2026-11-25T12:32:31Z"
+    },
+    {
+      "skill_id": "strat_burst_timing",
+      "skill_name": "爆发留给斩杀窗口",
+      "description": "元素爆发伤害最高但需要能量与骰子：能量满后先确认对方角色血量是否进入斩杀线，不是斩杀窗口时优先用普通技能创造窗口。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_card_draw",
+      "skill_name": "手牌少时优先过牌",
+      "description": "手牌 ≤2 张时优先使用过牌/抽牌手段补充资源；手牌接近上限（10 张）时先打掉会溢出的牌，避免弃牌。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_dice_economy",
+      "skill_name": "骰子经济",
+      "description": "每轮先用最少的骰子完成本轮目标：优先支付关键技能/卡牌，避免为了低价值动作花掉最后一个骰子；同色骰不足时优先元素调和而不是放弃关键动作。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_end_round",
+      "skill_name": "没收益就结束回合",
+      "description": "当本轮已无收益动作（无法击杀、无法完成目标、没有需要保留的骰子）时，尽早宣布结束回合抢下一轮先手；但关卡目标未完成时不要提前结束。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_equipment_timing",
+      "skill_name": "装备时机",
+      "description": "当轮技能/击杀所需的骰子付清后仍有剩余骰、且不影响下轮关键动作时再打装备；为完成装备目标可以打，但不要因此放弃当轮的击杀或元素爆发窗口。装备收益是永久的，不存在『前两轮才回本』的限制。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-11-24T00:00:00Z"
+    },
+    {
+      "skill_id": "strat_focus_fire",
+      "skill_name": "集火残血角色",
+      "description": "优先攻击对方血量最低的角色以尽快减少对方行动数；对方有护盾/免疫时先用低费手段消耗或绕开，再打伤害。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_mulligan",
+      "skill_name": "起手保留低费与目标相关牌",
+      "description": "起手换牌保留 1-2 费的技能/事件/装备牌；换掉当前用不上的高费牌；若关卡目标是装备或事件牌，优先保留对应类别的牌。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_protect_low_hp",
+      "skill_name": "低血量角色保护",
+      "description": "出战角色血量偏低时优先治疗、换下或用减伤手段，而不是继续对拼；一次阵亡的节奏损失远大于一次换人。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_reaction",
+      "skill_name": "先附着再补元素",
+      "description": "需要触发元素反应时，先给目标附着一种元素，再用另一种元素攻击；注意不要给已附着同元素的角色重复附着，避免浪费一次行动。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "strat_switch_cost",
+      "skill_name": "换人只在必要时",
+      "description": "主动换人花费 1 个骰子，只在能规避被击倒或收掉残血人头时使用；被击倒时的强制换人不花骰子，不要提前浪费主动换人。",
+      "conditions": {},
+      "layer": "strategy",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_事件牌",
+      "skill_name": "play_event_cards",
+      "description": "目标「打出事件牌」：需要在局内打出指定数量的事件牌，事件牌是即时效果，注意留够骰子。",
+      "conditions": {
+        "objective_types": [
+          "play_event_cards"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_元素反应",
+      "skill_name": "trigger_elemental_reactions",
+      "description": "目标「触发元素反应」：需要造成指定次数的元素反应，先附着再补另一种元素；注意对方已有附着。",
+      "conditions": {
+        "objective_types": [
+          "trigger_elemental_reactions"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_元素爆发",
+      "skill_name": "use_elemental_burst",
+      "description": "目标「使用元素爆发」：需要实际释放指定次数的爆发，注意提前攒能量并预留骰子。",
+      "conditions": {
+        "objective_types": [
+          "use_elemental_burst"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_回合上限",
+      "skill_name": "win_within_rounds",
+      "description": "目标「N 回合内胜利」：必须在第 N 轮结束前击倒对方全部角色，拖延即失败；节奏优先于长期收益。",
+      "conditions": {
+        "objective_types": [
+          "win_within_rounds"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_少被击倒",
+      "skill_name": "defeated_less_than",
+      "description": "目标「角色被击倒次数小于 K」：我方阵亡次数受限，需要更保守地保护低血量角色（治疗、换人、减少无谓对拼）。",
+      "conditions": {
+        "objective_types": [
+          "defeated_less_than"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_胜利",
+      "skill_name": "win",
+      "description": "目标「赢得胜利」：把对方所有角色击倒。",
+      "conditions": {
+        "objective_types": [
+          "win"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    },
+    {
+      "skill_id": "规则_目标_装备牌",
+      "skill_name": "play_equipment_card",
+      "description": "目标「打出装备牌」：需要在局内实际打出指定数量的武器/圣遗物牌，装备牌要尽早打出才不挤占后期节奏。",
+      "conditions": {
+        "objective_types": [
+          "play_equipment_card"
+        ]
+      },
+      "layer": "rule",
+      "evidence": {
+        "games": 0
+      },
+      "version": 1,
+      "status": "active",
+      "created_at": "2026-10-30T07:59:31Z",
+      "updated_at": "2026-10-30T07:59:31Z"
+    }
+  ]
+}

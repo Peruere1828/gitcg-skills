@@ -17,7 +17,7 @@
 #   static      LLM + rules + hand-written static strategies
 #               (data/skills/static_v1, 17+10) + reports/loadouts/v2
 #   dynamic     LLM + rules + evolved strategies
-#               (data/skills/dyn_v4, 17+23) + reports/loadouts/v4
+#               (data/skills/dyn_v4, round 0 = static_v1 v2) + reports/loadouts/v4
 #
 # `contestant` is a reference arm, not one of the four groups.
 # static/dynamic may override their library with STATIC_LIB / DYNAMIC_LIB and

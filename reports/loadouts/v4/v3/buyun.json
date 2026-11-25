@@ -1,0 +1,17 @@
+{
+  "stage": "buyun",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "buyun_five_round_all_in_tempo_buyun",
+    "buyun_geo_reaction_two_hits_buyun",
+    "规则_目标_元素反应",
+    "规则_目标_回合上限",
+    "strat_focus_fire"
+  ],
+  "rationale": "5回合内胜利需抢节奏，选关卡专属节奏与岩反应指引；补元素反应目标规则、回合上限规则，并集火残血减少对方行动。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "dd0512f51785",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

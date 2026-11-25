@@ -56,8 +56,8 @@ AI_DECK="${AI_DECK:-}"
 SEED="${SEED:-20261112}"
 CONDA_ENV="${CONDA_ENV:-gitcg-skill}"
 # 严格对齐实际评测：默认值取当前基线 reports/baseline_20261125_pve_prompt_v1.md
-# （static_v1 v2 + reports/loadouts/v2）。dynamic 库（dyn_v4–v6）作废，
-# 需要演示旧 dynamic 组时显式覆盖 POLICY/LOADOUT_ROOT。
+# （static_v1 v2 + reports/loadouts/v2）。dynamic 库从 static_v1 v2 起步（dyn_v4），
+# 需要演示 dynamic 组时显式覆盖 POLICY/LOADOUT_ROOT。
 STAGE_DECKS="${STAGE_DECKS:-configs/stage_decks.json}"
 LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v2}"
 CARD_VERSION="${CARD_VERSION:-}"

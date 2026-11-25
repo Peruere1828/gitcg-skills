@@ -97,7 +97,7 @@ task = (stage, deck, seed)
 | ① | `scripted` | 无 | `expert:<deck>`（无目标注入，无 LLM）；参照天花板：`npc/contestant.py`（历史 74.7%） |
 | ②′ | `llm_empty` | `data/skills/rules_v1`（17 条 rule） | LLM + **仅游戏规则**；不加载 strategy/stage_specific，不用 loadout |
 | ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
-| ③ | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy）→ **重建中** | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
+| ③ | `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本，随轮次演进） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
 
 > `llm_empty` 不是「无提示词」：规则层始终注入，用于隔离「LLM + 规则」与
 > 「LLM + 规则 + 策略」的差别。`--library` 只能覆盖 static/dynamic；

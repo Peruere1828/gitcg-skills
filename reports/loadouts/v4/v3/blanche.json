@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "r1_blanche",
+    "skill_blanche",
+    "rule_burst",
+    "规则_目标_回合上限",
+    "strat_burst_timing"
+  ],
+  "rationale": "首回合火债爆发开局、斩杀窗口补刀、爆发目标与5回合限时节奏最关键，配合爆发时机确保5回合内取胜并使用爆发。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "d0b82466151f",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

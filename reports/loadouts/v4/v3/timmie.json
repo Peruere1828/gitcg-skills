@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "2_timmie",
+    "r1_r2_timmie",
+    "rule_burst",
+    "strat_focus_fire",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "针对5回合内速胜与少阵亡：选提米专属保命与R1三连抢节奏，配爆发时机、集火残血和回合上限规则。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "0208d1c4ec8c",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

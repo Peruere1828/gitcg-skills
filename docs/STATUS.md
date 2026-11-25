@@ -41,7 +41,7 @@
 | `scripted` | 固定脚本，无 LLM | — | — | 免费基线（expert/era base） |
 | `llm_empty` | LLM + **仅游戏规则** | `data/skills/rules_v1`（17 rule） | — | 不加载 strategy |
 | `static` | LLM + 规则 + 静态 skill | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2`（可选） | 规则 + 静态经验 |
-| `dynamic` | LLM + 规则 + 动态 skill | 重建中（`dyn_v4–v6` 作废） | — | 规则 + 进化经验；重建前不评测 |
+| `dynamic` | LLM + 规则 + 动态 skill | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本） | `reports/loadouts/v4`（重建后重生成） | 规则 + 进化经验；旧 dyn_v1–v3/v5–v6 已删 |
 
 `contestant` 仅作参照，不在四组内。
 
@@ -83,8 +83,8 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
   --library data/skills/static_v1 --loadout reports/loadouts/v2 \
   $COMMON --out data/runs/static.jsonl
 
-# dynamic：旧库 dyn_v4–v6 已作废。重建后按 static 的方式加载
-#   --library data/skills/dyn_vX --loadout reports/loadouts/vX
+# dynamic：round 0 从 static_v1 v2 起（dyn_v4），每轮抽取后再评测
+#   --library data/skills/dyn_v4 --loadout reports/loadouts/v4
 ```
 
 - `--seeds 50` 即 seeds 1–50（无逗号时计数从 1 起）。**seed 0 已禁用**：引擎随机数是
@@ -113,7 +113,7 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
   [`../reports/prompts/decision_prompt.md`](../reports/prompts/decision_prompt.md)、
   [`../reports/prompts/reflection_prompt.md`](../reports/prompts/reflection_prompt.md)。
   生成器 `scripts/prompt_samples.py`；禁止手写或二次渲染。
-- 抽取输出预算 `max_tokens=24576`；`finish_reason=length` 时同 messages 翻倍重试一次（上限 49152），仍截断则告警跳过。
+- 抽取输出预算 `max_tokens=32768`；`finish_reason=length` 时同 messages 翻倍重试一次（上限 65536），仍截断则告警跳过。
 
 ## 7. 已知限制
 

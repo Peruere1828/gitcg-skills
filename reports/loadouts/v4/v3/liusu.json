@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_burst",
+    "skill_liusu",
+    "skill_liusu_2",
+    "strat_focus_fire",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "刻晴雷楔开局与菲谢尔爆发收尾是关卡专属核心；爆发规则支撑三星爆发目标，集火残血加速5回合内取胜，回合上限提醒节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "ca1ed1958fb5",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

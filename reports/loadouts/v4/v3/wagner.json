@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "skill_wagner",
+    "skill_wagner_2",
+    "规则_目标_装备牌",
+    "strat_equipment_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "优先保证瓦格纳免费武器上手即装给诺艾尔完成装备目标，并提醒结束前自查不空转；装备时机与5回合上限约束节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "cfd5f0299bd2",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

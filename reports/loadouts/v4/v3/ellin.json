@@ -1,0 +1,17 @@
+{
+  "stage": "ellin",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_burst_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "5回合内速胜需靠元素反应与集火残血，爆发留斩杀；回合上限规则提醒节奏优先，避免拖延。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5d06919cab80",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

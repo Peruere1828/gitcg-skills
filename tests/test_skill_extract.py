@@ -154,8 +154,10 @@ def test_parse_skills_reads_array():
     skill = skills[0]
     assert skill.skill_id.endswith("_wagner")
     assert skill.status == "candidate"
-    assert skill.layer == "strategy"
-    assert skill.conditions.stages == ()
+    # extraction only sees wagner's failures: a declared global strategy is
+    # downgraded and pinned to this stage, never admitted as cross-stage advice.
+    assert skill.layer == "stage_specific"
+    assert skill.conditions.stages == ("wagner",)
     assert skill.conditions.objective_types == ("win_within_rounds",)
 
 
@@ -188,8 +190,39 @@ def test_parse_skills_pins_stage_specific_to_current_stage():
     assert stage_specific.conditions.stages == ("chefmao",)   # model's stages ignored
     assert stage_specific.conditions.objective_types == ("win",)
     assert stage_specific.conditions.round_max == 5
-    assert strategy.layer == "strategy"
-    assert strategy.conditions.stages == ("other",)            # strategy stays as-is
+    # a declared strategy is downgraded too: single-stage evidence cannot be global.
+    assert strategy.layer == "stage_specific"
+    assert strategy.conditions.stages == ("chefmao",)
+
+
+def test_parse_skills_downgrades_declared_strategy_and_never_rewrites_global(capsys):
+    """v10: one stage's text declared ``strategy`` must not become a global rule.
+
+    The reply also pointed ``replaces`` at ``strat_burst_timing``; the parser
+    keeps that id (it exists) but the writer must refuse the cross-layer rewrite.
+    """
+    from scripts.extract_skills import replacement_target
+    from skillloop.library import SkillLibrary
+    from skillloop.schema import Skill
+
+    raw = json.dumps([{
+        "skill_name": "限回合内的爆发节奏",
+        "description": "本关五回合内击杀火之债务处理人。",
+        "layer": "strategy",
+        "replaces": "strat_burst_timing",
+    }])
+    skill = parse_skills(
+        raw, stage="blanche", existing_ids=("strat_burst_timing",)
+    )[0]
+    assert skill.layer == "stage_specific"
+    assert skill.conditions.stages == ("blanche",)
+    assert skill.replaces == "strat_burst_timing"   # parser only checks existence
+    assert "layer strategy is human-maintained" in capsys.readouterr().err
+
+    library = SkillLibrary.from_skills([
+        Skill("strat_burst_timing", "爆发时机", "全局：留骰子给爆发。", layer="strategy"),
+    ])
+    assert replacement_target(skill, library) == ""
 
 
 def test_parse_skills_missing_layer_defaults_to_stage_specific(capsys):
@@ -217,9 +250,11 @@ def test_parse_skills_invalid_layer_falls_back_to_stage_specific(capsys):
     bad, good = skills
     assert bad.layer == "stage_specific"
     assert bad.conditions.stages == ("wagner",)
-    assert good.layer == "strategy" and good.conditions.stages == ()
+    # "strategy" is now also pinned to the current stage (see parse_skills docstring)
+    assert good.layer == "stage_specific" and good.conditions.stages == ("wagner",)
     err = capsys.readouterr().err
     assert "layer missing/invalid ('general' -> stage_specific)" in err
+    assert "layer strategy is human-maintained" in err
 
 
 def test_parse_skills_truncates_to_two_per_stage(capsys):
@@ -310,7 +345,8 @@ def test_output_schema_uses_real_values_and_replaces():
     assert '"round_max": 5' in OUTPUT_SCHEMA
     assert '"replaces"' in OUTPUT_SCHEMA
     assert "fatuipyroagent" in COACH_ROLE      # enemies: english id, mapping is a fallback
-    assert "非法或缺失 layer 一律按 stage_specific 处理" in COACH_ROLE
+    assert "layer 固定填 stage_specific" in COACH_ROLE
+    assert "跨关 strategy 由人工维护" in COACH_ROLE
     # the prompt no longer promises a drop, and no longer prints an illegal
     # ``"strategy" 或 "stage_specific"`` value, so a copy-paste reply parses.
     assert "整条丢弃" not in COACH_ROLE
@@ -503,7 +539,13 @@ def test_relevant_existing_skills_excludes_rules_and_keeps_stage_matches():
 
 
 def test_relevant_existing_skills_chefmao_keeps_generics_and_full_sentences():
-    """B5: chefmao must see generic advice, not other stages' strategy text."""
+    """B5: chefmao must see generic advice, not other stages' strategy text.
+
+    After the 2026-11-25 lineage reset the dynamic root is ``dyn_v4``
+    (round 0 = ``static_v1`` v2), which carries no stage-named strategy rows yet.
+    The no-blanche/shitou/buyun assertions therefore act as a guard: such text is
+    demoted and must never appear once extraction starts adding it again.
+    """
     from pathlib import Path
 
     from scripts.extract_skills import (
@@ -513,7 +555,7 @@ def test_relevant_existing_skills_chefmao_keeps_generics_and_full_sentences():
     )
     from skillloop.library import SkillLibrary
 
-    root = Path(__file__).resolve().parents[1] / "data/skills/dyn_v6"
+    root = Path(__file__).resolve().parents[1] / "data/skills/dyn_v4"
     library = SkillLibrary.load(root)
     objective_types, enemies = stage_context("chefmao")
     rendered = relevant_existing_skills(
@@ -690,14 +732,15 @@ def test_replacement_target_requires_same_layer_and_stage():
     assert replacement_target(wrong_layer, library) == ""
     assert replacement_target(other_stage, library) == ""
     assert replacement_target(same_stage, library) == "skill_wagner"
-    assert replacement_target(strategy, library) == "strat_burst_timing"
+    # Global strategy rules are hand-maintained: even same-layer strategy is refused.
+    assert replacement_target(strategy, library) == ""
     assert replacement_target(
         Skill("cand_e", "无引用", "没有 replaces。", layer="strategy"), library
     ) == ""
 
 
-def test_replacement_target_same_stage_suffix_and_strategy_rewrite():
-    """``stage_specific`` needs the same stage; ``strategy`` may rewrite same layer."""
+def test_replacement_target_same_stage_suffix_and_no_strategy_rewrite():
+    """``stage_specific`` needs the same stage; ``strategy`` is never rewritten."""
     from scripts.extract_skills import replacement_target
     from skillloop.library import SkillLibrary
     from skillloop.schema import Skill, SkillConditions
@@ -715,12 +758,19 @@ def test_replacement_target_same_stage_suffix_and_strategy_rewrite():
     )
     assert replacement_target(by_suffix, library) == "hydro_line_chefmao"
 
-    # strategy -> strategy is a same-layer rewrite even if the target carries a stage
+    # strategy -> strategy used to rewrite in place; global rules are off limits.
     strategy_rewrite = Skill(
         "cand_g", "回合预算", "三个回合内结束。", layer="strategy",
         replaces="strat_round_budget",
     )
-    assert replacement_target(strategy_rewrite, library) == "strat_round_budget"
+    assert replacement_target(strategy_rewrite, library) == ""
+
+    # even an empty-conditions strategy candidate cannot claim a global target
+    bare_strategy = Skill(
+        "cand_i", "回合预算", "三个回合内结束。", layer="strategy",
+        conditions=SkillConditions(), replaces="strat_round_budget",
+    )
+    assert replacement_target(bare_strategy, library) == ""
 
     # a stage_specific candidate with no known stage cannot claim any target
     unknown_stage = Skill(
@@ -1072,9 +1122,9 @@ def test_propose_candidates_caps_retry_budget_and_skips_still_truncated_stage(ca
     )
     skills = propose_candidates(client, profiles, max_tokens=40000)
 
-    # wagner: 40000 -> retry capped at 49152, still length -> skipped (logged, not 0-silent)
+    # wagner: 40000 -> retry capped at 65536, still length -> skipped (logged, not 0-silent)
     # timmie: first call is fine -> parsed
-    assert client.max_tokens == [40000, 49152, 40000]
+    assert client.max_tokens == [40000, 65536, 40000]
     assert [skill.skill_id.endswith("_timmie") for skill in skills] == [True]
     err = capsys.readouterr().err
     assert "still truncated after retry" in err and "skipping this stage" in err

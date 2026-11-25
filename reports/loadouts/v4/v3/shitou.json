@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_shitou",
+    "skill_shitou_2",
+    "strat_reaction",
+    "规则_目标_元素反应",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡需5回合内胜利并触发2次元素反应，选两条石头专属技能应对斧丘暴徒爆发与凑骰，再选元素反应策略及两个目标规则确保节奏与反应次数。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c0c3cc84243b",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

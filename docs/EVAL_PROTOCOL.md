@@ -18,7 +18,7 @@
 | `scripted` | 无（无 LLM） | 不适用 | 不适用 |
 | `llm_empty` | `data/skills/rules_v1`（17 rule，仅游戏规则） | 不加载 | 忽略 |
 | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2` | 允许 |
-| `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy）→ **重建中**（dyn_v4–v6 作废） | `reports/loadouts/v4`（随库重建） | 允许 |
+| `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本；旧 dyn_v1–v3/v5–v6 已删） | `reports/loadouts/v4`（随库重建） | 允许 |
 
 一局 **有效** 的条件：`error == 0` 且 `truncated == 0`；无效局不计入分母，但必须报数量。
 
@@ -75,7 +75,12 @@
 
 ## 5. 可复现
 
-- 每局记录 `stage / seed / deck / group / library_root / library_version / model / prompt_hash`；
+- 每局记录 `stage / seed / deck / group / library_root / library_version / model / prompt_version / system_hash`；
+  meta sidecar 现含 `code_sha / code_dirty / code_hash / prompt_version`（`code_hash` 覆盖
+  `skillloop envs reps npc common` 的源码，排除 tests/docs/reports），逐局含 `system_hash`
+  （该局实际 system 前缀哈希，非 LLM 组为空串）；`prompt_hash` 不再需要单独实现——`system_hash`
+  即真实前缀指纹；resume 只由 `prompt_version` + `code_hash`（内容哈希）把关，
+  `code_sha / code_dirty` 仅作 provenance 写入 meta，commit 或 `git add` 不会让同 `--out` 的续跑失效；
 - run 元数据指纹里 `stages` 是关卡列表，关卡文件哈希在 `stages_file_sha1`；
   指纹使用**实际解析后的库根**（`llm_empty` 也会记录 `data/skills/rules_v1`）；
 - 原始逐局 JSONL 落 `data/`（gitignore），聚合摘要落 `reports/`（入库）；

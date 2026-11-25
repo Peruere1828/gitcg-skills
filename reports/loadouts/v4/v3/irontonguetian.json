@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_irontonguetian",
+    "skill_irontonguetian_2",
+    "rule_burst",
+    "strat_burst_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "选刻晴专属起手链与水铳应对，配合爆发规则和斩杀时机，并强调5回合内速胜节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c6f2d0332544",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

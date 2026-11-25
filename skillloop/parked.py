@@ -78,6 +78,7 @@ from skillloop.cards import card_kind, skill_kind
 from skillloop.era import resolve_base_policy, resolve_deck
 from skillloop.library import SkillLibrary
 from skillloop.loadout import Loadout
+from skillloop.prompt_v2 import PROMPT_VERSION
 from skillloop.render import (
     ProgressSignals,
     StateRenderer,
@@ -730,6 +731,8 @@ class ParkedRunner:
             "model": self.spec.model,
             "library_root": self.library_root,
             "library_version": self.library_version,
+            "prompt_version": PROMPT_VERSION,
+            "system_hash": _decision_system_hash(task.decisions),
             "skill_loadout_hash": (
                 self.loadouts[task.stage.name].fingerprint()
                 if task.stage.name in self.loadouts else ""
@@ -753,6 +756,14 @@ class ParkedRunner:
             "cached_tokens": task.cached_tokens,
             "cost_usd": round(task.cost, 6),
         }
+
+
+def _decision_system_hash(decisions: list[Any]) -> str:
+    """Same shape as ``skillloop.run``: sorted unique hashes, at most three."""
+    hashes = sorted(
+        {str(h) for decision in decisions if (h := getattr(decision, "system_hash", ""))}
+    )
+    return ",".join(hashes[:3])
 
 
 class _ThreadUsage:

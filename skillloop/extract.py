@@ -53,8 +53,8 @@ COACH_ROLE = (
     "conditions 只填能从本关匹配的 objective_types/enemies/round_max；"
     "enemies 填敌人英文 id（如 fatuipyroagent），写中文名也会被映射；"
     "objective_types 只用本关真实存在的类型，其他类型会被剔除。"
-    "layer 只能填 stage_specific（本关专用）或 strategy（跨关通用）；"
-    "非法或缺失 layer 一律按 stage_specific 处理。"
+    "layer 固定填 stage_specific（本关专用）：抽取只写本关技能，跨关 strategy "
+    "由人工维护，写了也会被降级。"
     "回放只用于定位问题，不要编造数据。"
 )
 OUTPUT_SCHEMA = (
@@ -63,8 +63,8 @@ OUTPUT_SCHEMA = (
     '"conditions": {"objective_types": ["win_within_rounds"], "round_max": 5}, '
     '"layer": "stage_specific", '
     '"replaces": ""}'
-    "。示例只是格式示意：layer 只能填 stage_specific 或 strategy（非法或缺失按 "
-    "stage_specific 处理）；replaces 只在要替换库内同层、同关的 skill_id 时填写，"
+    "。示例只是格式示意：layer 固定 stage_specific（strategy 会被降级）；"
+    "replaces 只在要替换库内同层、同关的 skill_id 时填写，"
     "否则留空字符串。"
 )
 GAME_RULES_HEADER = "【游戏规则】"
@@ -132,9 +132,9 @@ SPECIAL_RULES_LIMIT = 400
 #: Extraction replies are JSON arrays written *after* hidden reasoning, and both
 #: share one completion budget. 8192 was routinely eaten entirely by reasoning
 #: (``finish_reason="length"``, empty/partial content, 0 candidates), so the
-#: default is 24576 and one truncation retry may double it up to this ceiling.
-DEFAULT_MAX_TOKENS = 24576
-MAX_TRUNCATION_RETRY_TOKENS = 49152
+#: default is 32768 and one truncation retry may double it up to this ceiling.
+DEFAULT_MAX_TOKENS = 32768
+MAX_TRUNCATION_RETRY_TOKENS = 65536
 
 
 @lru_cache(maxsize=1)
@@ -640,7 +640,10 @@ def parse_skills(
     rather than repaired (H13). A missing or unknown ``layer`` no longer silently
     becomes ``strategy`` — that produced cross-stage skills nobody meant to write;
     it now degrades to ``stage_specific`` (pinned to this stage) with a stderr
-    note. ``replaces`` is only kept when it names a skill in the current library
+    note. A declared ``strategy`` layer is treated the same way: extraction only
+    sees one stage's failures, so its advice cannot be a global rule (v10 rewrote
+    ``strat_burst_timing`` with ``blanche``/``irontonguetian``/``liusu`` text and
+    polluted every stage). ``replaces`` is only kept when it names a skill in the current library
     (B6), so a hallucinated id cannot make the writer touch the wrong entry. At
     most :data:`MAX_SKILLS_PER_STAGE` candidates survive (H14).
 
@@ -701,6 +704,17 @@ def parse_skills(
             print(
                 f"[extract] {stage}: {name!r}: layer missing/invalid "
                 f"({layer!r} -> stage_specific)",
+                file=sys.stderr,
+            )
+            layer = "stage_specific"
+        if layer == "strategy":
+            # Global strategy rules are maintained by hand (and have no stage pin,
+            # so they are injected into every stage). Extraction only sees one
+            # stage's failures; a "strategy" label here is one stage's lesson, not
+            # a cross-stage rule. Downgrade and pin instead of trusting the label.
+            print(
+                f"[extract] {stage}: {name!r}: layer strategy is human-maintained; "
+                "downgrading to stage_specific pinned to this stage",
                 file=sys.stderr,
             )
             layer = "stage_specific"
