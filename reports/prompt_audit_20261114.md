@@ -1,5 +1,9 @@
 # Prompt × 七圣召唤 wiki 审计与修复（2026-11-14）
 
+> **状态（2026-11-25）**：文中列的 15 条规则修复已进入代码并仍有效；但本文的
+> prompt 示例与任何数值都属旧口径（NPC 随机骰、pin 旧卡池），不可用于结论。
+> 当前 prompt 见 [`prompts/`](./prompts/)。
+
 ## 方法
 
 - 由 subagent 只读审计：本地 wiki 快照 `/tmp/gitcg_wiki.html`

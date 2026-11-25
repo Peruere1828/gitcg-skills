@@ -11,13 +11,13 @@
 
 | 实践 | 原因 |
 |---|---|
-| 同种子配对 + 按关聚合 | 关卡间三星率 20.8%–100%，pooled 方差被难度主导 |
+| 同种子配对 + 按关聚合 | 关卡间三星率 0–100%，pooled 方差被难度主导 |
 | 50 seeds/关做确认、24 seeds 做筛选 | 见 `EVAL_PROTOCOL.md` §3 功效估算 |
 | prompt「稳定前缀 + 动态尾」 | 缓存命中价 ¥0.02/M vs 不命中 ¥1/M（50×） |
 | 只输出动作 ID，不输出解释 | 输出 ¥4/M，是缓存输入的 200× |
 | 跳过只有一个合法选项的决策 | 减少 30–50% 调用 |
 | 每条技能带 `conditions` 元数据 | 检索与「激活」统计都需要，但不参与执行 |
-| 记录 `prompt_hash` / `library_version` | 事后归因与断点续跑 |
+| 记录 `prompt_hash` / `library_version` | 事后归因与断点续跑（**当前 runner 只落 `library_version` 与 loadout hash，未落 prompt_hash**） |
 | `--seeds` 从 1 起，禁用 0 | 引擎 minstd LCG 的 0 是吸收态，首轮 8 骰恒为 CRYO |
 | 卡池 = 引擎内置（`configs/engine.lock`），不 pin 旧版本 | 唯一可用资产目录是 latest，pin 会造成卡面/费用/血量错配 |
 | prompt 样本必须来自 `GITCG_LLM_TRACE` 的 `messages` | 二次渲染会与真实调用漂移，无法审计 |

@@ -23,6 +23,8 @@
 | D13 | 2026-11-12 | 网页调试必须严格复现 `skillloop.run` 评测协议：关卡 TaskSpec、未过滤库、era/expert base、cap16、原顺序、stage_decks/loadout/card_version/特殊规则/NPC policy；移除 web-only 战术/过滤/重排/cap24；新增只读 `/ai-decisions` 监控面板 | 网页只是 human 扮 NPC 的调试接口，必须能忠实观察自进化经验；web-only 行为会让调试点与实际评测不一致 |
 | D14 | 2026-11-24 | 决策/复盘 prompt 重构：规则改 wiki 原文并前置、关卡特殊规则与卡组信息进 system、需求/支付分离、候选保底（宣布结束 + 每张手牌）、回放改为公开状态差分；卡池改为引擎内置（不再 pin v3.3.0）；引擎 seed 固定 1..N（0 是 minstd 吸收态） | 旧 prompt 的费用/血量/候选截断会直接误导动作选择；资产 API 下线，pin 与唯一可用卡面文本错配 |
 | D15 | 2026-11-24 | `static_v1` 升 v2：修正「装备前两轮才回本」的错误启发；重生成 `reports/loadouts/v2`；旧实验全部作废 | 错误启发直接进入 prompt；库版本必须与 loadout 匹配 |
+| D16 | 2026-11-25 | PvE 路径（`skillloop.run` / `npc.eval` / `parked`）给 NPC 座位启用引擎 `alwaysOmni`：每轮初始 8 万能骰 | 游戏内 NPC 规则如此；此前 NPC 掷随机骰，所有历史对局与 prompt 样本失真 |
+| D17 | 2026-11-25 | 以 seeds 1–5 三组建立新基线；**旧验收区间（纯脚本 30–45%）作废**，待按新基线重标定 | 现状实测 scripted 63.75%（旧区间来自随机 NPC 骰 + 旧 prompt）；基线见 `reports/baseline_20261125_pve_prompt_v1.md` |
 
 ## 1. 任务定义
 
@@ -54,6 +56,7 @@ task = (stage, deck, seed)
    （`reports/calibration/thresholds.json`）：脚本/参照策略的胜局回合 P70 为 6–9，
    说明 5 回合本身就是一个需要**主动加速**的技能目标。
 5. 验收区间：纯脚本组 **30–45%**、参照组 **35–50%**，且**未饱和**（留 ≥50pp 空间）。
+   > 2026-11-25：该区间作废（D17）。新基线下 scripted 63.75%，需按新骰/新 prompt 重标定。
 
 > 2026-11-12（D12）：血量只作用于 **NPC 变体**（9301/9202）；官方角色卡
 > 2301/2202 使用引擎内置卡池的卡面值。上表的「原 HP → 新 HP」读作
@@ -94,7 +97,7 @@ task = (stage, deck, seed)
 | ① | `scripted` | 无 | `expert:<deck>`（无目标注入，无 LLM）；参照天花板：`npc/contestant.py`（历史 74.7%） |
 | ②′ | `llm_empty` | `data/skills/rules_v1`（17 条 rule） | LLM + **仅游戏规则**；不加载 strategy/stage_specific，不用 loadout |
 | ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
-| ③ | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
+| ③ | `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy）→ **重建中** | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
 
 > `llm_empty` 不是「无提示词」：规则层始终注入，用于隔离「LLM + 规则」与
 > 「LLM + 规则 + 策略」的差别。`--library` 只能覆盖 static/dynamic；

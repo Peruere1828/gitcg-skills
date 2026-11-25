@@ -16,15 +16,15 @@
 # 环境变量：
 #   PORT          前端端口（默认 7001）
 #   BRIDGE_PORT   Python 桥端口（默认 8770，仅本机监听，经前端反代）
-#   POLICY        AI 座位的策略 spec（默认 llm:dynamic：LLM 技能智能体 +
-#                 最新进化技能库；也可 llm:none / llm:llm_empty / llm:static，
-#                 或脚本 expert:<slug> / heuristic）
+#   POLICY        AI 座位的策略 spec（默认 llm:static：LLM 技能智能体 +
+#                 static_v1 静态库；也可 llm:none / llm:llm_empty / llm:dynamic
+#                 （dynamic 库待重建）/ 脚本 expert:<slug> / heuristic）
 #   AI_DECK       仅非评价调试用：桥声明的 AI 牌组 slug（默认空；评价协议下
 #                 由关卡 loadout/stage-decks 自动决定，不要设置）
 #   SEED          策略种子（默认 20261112）
 #   CONDA_ENV     Python 环境（默认 gitcg-skill）
 #   STAGE_DECKS   关卡->牌组映射（默认 configs/stage_decks.json）
-#   LOADOUT_ROOT  冻结 loadout 根（默认 reports/loadouts/v4，匹配 v2_dynamic run）
+#   LOADOUT_ROOT  冻结 loadout 根（默认 reports/loadouts/v2，匹配当前 static 基线）
 #   CARD_VERSION  卡池版本（默认空 = 引擎内置池；显式设置才 pin）
 #   REASONING     AI 决策的 reasoning effort（默认 none；可选 low/medium/high，
 #                 开启后回复预算提高到 12288 token，仅用于调试观察）
@@ -51,14 +51,15 @@ cd "$REPO_ROOT"
 
 PORT="${PORT:-7001}"
 BRIDGE_PORT="${BRIDGE_PORT:-8770}"
-POLICY="${POLICY:-llm:dynamic}"
+POLICY="${POLICY:-llm:static}"
 AI_DECK="${AI_DECK:-}"
 SEED="${SEED:-20261112}"
 CONDA_ENV="${CONDA_ENV:-gitcg-skill}"
-# 严格对齐实际评测：默认值与 data/runs/v2_dynamic.jsonl.meta.json 一致。
-# 跑别的 run 时用环境变量覆盖（例如 LOADOUT_ROOT=reports/loadouts/v2）。
+# 严格对齐实际评测：默认值取当前基线 reports/baseline_20261125_pve_prompt_v1.md
+# （static_v1 v2 + reports/loadouts/v2）。dynamic 库（dyn_v4–v6）作废，
+# 需要演示旧 dynamic 组时显式覆盖 POLICY/LOADOUT_ROOT。
 STAGE_DECKS="${STAGE_DECKS:-configs/stage_decks.json}"
-LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v4}"
+LOADOUT_ROOT="${LOADOUT_ROOT:-reports/loadouts/v2}"
 CARD_VERSION="${CARD_VERSION:-}"
 REASONING="${REASONING:-none}"
 RICH_RENDER="${RICH_RENDER:-1}"

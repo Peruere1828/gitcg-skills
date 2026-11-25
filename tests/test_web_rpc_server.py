@@ -1721,9 +1721,12 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
         "strat_burst_timing",
         "strat_focus_fire",
     )
-    # pinned rule_burst 仍在 pinned 块里，但规则说明不再重复注入。
+    # rule 层 pin 被过滤（system 前缀已含完整规则），strategy 层仍作为可引用技能注入。
     system = agent._system_message(SimpleNamespace(player_view=None))["content"]
-    assert system.count("- [rule_burst]") == 1
+    skills_block = system.split("可参考的技能（来自历史经验，优先级低于关卡目标）：")[-1]
+    assert "- [rule_burst]" not in skills_block
+    assert skills_block.count("- [strat_burst_timing]") == 1
+    assert skills_block.count("- [strat_focus_fire]") == 1
 
 
 def test_none_and_llm_empty_map_to_llm_empty_group():

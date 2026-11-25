@@ -18,7 +18,7 @@
 | `scripted` | 无（无 LLM） | 不适用 | 不适用 |
 | `llm_empty` | `data/skills/rules_v1`（17 rule，仅游戏规则） | 不加载 | 忽略 |
 | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2` | 允许 |
-| `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy） | `reports/loadouts/v4` | 允许 |
+| `dynamic` | `data/skills/dyn_v4`（17 rule + 23 strategy）→ **重建中**（dyn_v4–v6 作废） | `reports/loadouts/v4`（随库重建） | 允许 |
 
 一局 **有效** 的条件：`error == 0` 且 `truncated == 0`；无效局不计入分母，但必须报数量。
 
@@ -32,7 +32,9 @@
 
 ## 2.1 二维主指标：三星率 + 达成三星的回合数
 
-基准已饱和（16 关中 11 关是 5/5 三星），单看三星率无法区分强弱，因此主指标固定为**两维**，必须同时报告：
+基准已饱和时单看三星率无法区分强弱，因此主指标固定为**两维**，必须同时报告：
+（2026-11-25 新基线下 scripted 为 6/16 关 5/5、LLM 两组 4/16，已不再饱和；
+仍保留两维，因为关卡间难度差异依然很大。）
 
 | 指标 | 定义 | 口径 |
 |---|---|---|
@@ -58,7 +60,7 @@
 聚合：Δ̄ = mean_s(Δ_s)，SE = sd_s(Δ_s)/√16，CI = Δ̄ ± t(15)·SE
 ```
 
-理由：16 关的三星率从 ~0.2 到 ~1.0，pooled 方差被关卡难度主导；配对后关卡难度抵消。
+理由：16 关的三星率从 ~0.0 到 ~1.0（2026-11-25 基线：scripted 0/5–5/5），pooled 方差被关卡难度主导；配对后关卡难度抵消。
 （上游项目的 pooled Wilson / cluster CI 见 `docs/PROVENANCE.md` 链接；本仓库不采用 pooled 作主判据。）
 
 **功效（估算）**：每关 50 seeds 时，单关 Δ 的 SE ≈ 0.10；16 关聚合 SE ≈ 0.025 →
@@ -124,4 +126,5 @@
 | `--stage-profiles` | 按关卡覆盖 era expert 规则参数（如 `configs/stage_profiles.json` 的 lan `setup_rounds=0`）；进指纹，treatment/control 可用同一画像比较 |
 
 `--base-guard*` 只是**决策兜底**，不改变模型调用次数与 prompt；它用同一 LLM 选择做门控，
-因此不会破坏同种子配对。爬坡结论见 `reports/dynamic_improvements_20261113.md`。
+因此不会破坏同种子配对。该报告（`reports/dynamic_improvements_20261113.md`）里的
+爬坡数值已随旧 prompt / NPC 随机骰作废，只保留机制设计可参考。

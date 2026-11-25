@@ -66,8 +66,9 @@
 bash scripts/serve_web_demo.sh
 ```
 
-默认值对齐 `v2_dynamic`：前端 7001、桥 8770、
-`configs/stage_decks.json` + `reports/loadouts/v4` + 引擎内置池（不 pin）。
+默认值对齐当前 static 基线（`reports/baseline_20261125_pve_prompt_v1.md`）：
+前端 7001、桥 8770、`configs/stage_decks.json` + `reports/loadouts/v2` + 引擎内置池（不 pin）。
+dynamic 组（`dyn_v4–v6`）待重建，需要时显式覆盖 `POLICY=llm:dynamic LOADOUT_ROOT=reports/loadouts/v4`。
 后台常驻：
 
 ```sh
@@ -87,11 +88,11 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 |---|---|---|
 | `PORT` | `7001` | 前端端口 |
 | `BRIDGE_PORT` | `8770` | Python 桥端口（仅本机，经前端反代） |
-| `POLICY` | `llm:dynamic` | AI 座位策略 spec（也可 `llm:none`/`llm:llm_empty`/`llm:static`） |
+| `POLICY` | `llm:static` | AI 座位策略 spec（也可 `llm:none`/`llm:llm_empty`/`llm:dynamic`） |
 | `SEED` | `20261112` | 策略种子 |
 | `CONDA_ENV` | `gitcg-skill` | Python 环境 |
 | `STAGE_DECKS` | `configs/stage_decks.json` | 关卡 → 牌组映射 |
-| `LOADOUT_ROOT` | `reports/loadouts/v4` | 冻结 loadout 根 |
+| `LOADOUT_ROOT` | `reports/loadouts/v2` | 冻结 loadout 根 |
 | `CARD_VERSION` | 空 | 卡池版本；空 = 引擎内置池，设置才 pin |
 | `REASONING` | `none` | AI 决策的 reasoning effort（`none`/`low`/`medium`/`high`；非 `none` 时回复预算 12288 token，仅调试用） |
 | `LLM_TRACE` | `data/web/llm_trace.jsonl` | 模型调用 JSONL 路径（完整 prompt + content + reasoning_content；不含 key；设 `none` 关闭） |
