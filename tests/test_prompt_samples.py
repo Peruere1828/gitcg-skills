@@ -11,6 +11,7 @@ here instead of loosening the check to "no unexpected markdown".
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 PROMPTS = Path(__file__).resolve().parents[1] / "reports/prompts"
@@ -28,7 +29,16 @@ def test_samples_are_non_empty_and_have_step_sections() -> None:
     for name in sorted(EXPECTED):
         text = (PROMPTS / name).read_text(encoding="utf-8")
         assert len(text) > 2000, f"{name} looks truncated ({len(text)} chars)"
-        assert "### step 1 · user" in text, f"{name}: missing user block"
+        # The kept call may be any step (e.g. the stage with the most failures),
+        # so only require that a system/user pair is present.
+        # The decision sample hoists one shared SYSTEM section; the reflection
+        # sample keeps per-call system blocks.
+        assert "## SYSTEM（" in text or re.search(
+            r"^### step \d+ · system", text, re.M
+        ), f"{name}: missing system block"
+        assert re.search(r"^### step \d+ · user", text, re.M), (
+            f"{name}: missing user block"
+        )
         # every fence pair must be balanced, otherwise the "verbatim" claim is void
         assert text.count(f"\n{FENCE}\n") % 2 == 0, f"{name}: unbalanced {FENCE} fences"
 
