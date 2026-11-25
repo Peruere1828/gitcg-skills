@@ -1,0 +1,17 @@
+{
+  "stage": "buyun",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_burst_timing",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "三星需5回合内胜利并触发2次元素反应，优先选反应与集火策略；爆发时机助斩杀，骰子经济与及时结束回合保证节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "84b183ddf602",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

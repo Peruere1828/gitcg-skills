@@ -1373,20 +1373,17 @@ def test_parse_llm_spec():
 
 
 def test_resolve_llm_library_choices():
-    # none / llm_empty 都是「LLM + 仅游戏规则」，固定 rules_v1（17 rule）。
+    # none / llm_empty 都是「LLM + 仅游戏规则」：规则是 system 内置的
+    # GAME_RULES_V2，不加载任何技能库，所以解析结果为 None。
     for selection in ("none", "llm_empty"):
-        empty = srv.resolve_llm_library(selection)
-        assert empty["selection"] == selection
-        assert empty["resolved"] == "rules_v1"
-        assert empty["version"] == 1 and empty["skills"] == 17
-        assert empty["kind"] == "rules"
-        assert empty["path"] == os.path.join("data", "skills", "rules_v1")
+        assert srv.resolve_llm_library(selection) is None
+        assert srv.resolve_library_root(selection) is None
 
     static = srv.resolve_llm_library("static")
     assert static["resolved"] == "static_v1"
-    # v2 = 2026-11-24 的 strat_equipment_timing 文本修订（技能集合不变）。
+    # v3 = rule 层删除（规则改由 prompt_v2.GAME_RULES_V2 提供）。
     assert static["kind"] == "text-fix"
-    assert static["version"] == 2 and static["skills"] == 27
+    assert static["version"] == 3 and static["skills"] == 10
     assert static["path"] == os.path.join("data", "skills", "static_v1")
 
     # dynamic 固定优先 dyn_v4（与 skillloop.run 的默认库一致）；dyn_v4 从
@@ -1410,7 +1407,8 @@ def test_llm_library_options_always_list_four():
     labels = {o["value"]: o["label"] for o in options}
     assert "仅游戏规则" in labels["none"]
     assert "仅游戏规则" in labels["llm_empty"]
-    assert "static_v1" in labels["static"] and "27" in labels["static"]
+    assert "system 内置" in labels["none"] and "无库" in labels["llm_empty"]
+    assert "static_v1" in labels["static"] and "10" in labels["static"]
     dyn_count = srv.resolve_llm_library("dynamic")["skills"]
     assert "dyn_v4" in labels["dynamic"] and str(dyn_count) in labels["dynamic"]
 
@@ -1508,7 +1506,7 @@ def test_ai_endpoint_reports_llm_and_options(monkeypatch):
         server.close()
 
 
-def test_ai_endpoint_llm_empty_reports_17_rules(monkeypatch):
+def test_ai_endpoint_llm_empty_reports_no_library(monkeypatch):
     server = _llm_server(
         monkeypatch, available=True, base="llm:llm_empty", choice="llm_empty"
     )
@@ -1516,10 +1514,10 @@ def test_ai_endpoint_llm_empty_reports_17_rules(monkeypatch):
         status, out = server.request("GET", "/ai")
         assert status == 200
         assert out["group"] == "llm_empty"
-        assert out["library"]["resolved"] == "rules_v1"
-        assert out["library"]["skills"] == 17
-        assert out["library"]["version"] == 1
-        assert out["library_root"] and out["library_root"].endswith("rules_v1")
+        # Rules are the system's fixed text; there is no library to report.
+        assert out["library"] is None
+        assert out["library_resolved"] is None
+        assert out["library_root"] is None
     finally:
         server.close()
 
@@ -1694,11 +1692,9 @@ def test_llm_policy_matches_runner_build_policy():
     )
     assert len(agent.library) == len(dyn_lib["skills"])
     assert "strat_mulligan" in agent.library.skills
-    assert "rule_burst" in agent.library.skills
     # base 是 era/expert（blanche 的 keqing_shuanghuo 是 era 牌组）。
     assert agent.base.name == "expert:keqing_shuanghuo"
     assert agent.config.candidate_cap == 16
-    assert agent.rules_note == ""  # 没有网页战术
     assert policy.parity is True
     assert policy.group == "dynamic"
     assert policy.library_root.endswith("dyn_v4")
@@ -1709,10 +1705,11 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
     """loadout.deck > stage_decks > 网页上报牌组；pinned_skills 原样进策略。"""
     from common.llm import MockLLMClient
 
-    # 必须用 run-specific 的 v4 根：reports/loadouts 根下还有 v5/v1 等其它库版本，
+    # 必须用 run-specific 的根：reports/loadouts 根下还有 v1/v2/v4 等其它库版本，
     # load_loadouts 会按最高 library_version 选到与 dyn_v4 不匹配的文件。
+    # v6 里冻的是 dyn_v4 v5 的 loadout（rule 层删除后的当前版本）。
     config = srv.WebEvalConfig(
-        loadout_root=os.path.join(REPO_ROOT, "reports", "loadouts", "v4")
+        loadout_root=os.path.join(REPO_ROOT, "reports", "loadouts", "v6")
     )
     policy = srv.LLMPolicy(
         "dynamic",
@@ -1732,17 +1729,13 @@ def test_llm_policy_uses_runner_loadout_priority(captured):
         "skills"
     ]
     assert agent.config.pinned_skills == tuple(loadout_skills)
-    # rule 层 pin 被过滤（system 前缀已含完整规则），strategy 层仍作为可引用技能注入。
+    # 每个 pin 的技能在 system 前缀里只出现一次、并可作为引用技能注入。
     system = agent._system_message(SimpleNamespace(player_view=None))["content"]
     skills_block = system.split("可参考的技能（来自历史经验，优先级低于关卡目标）：")[-1]
     injected = [skill.skill_id for skill in agent._skills]
     for skill_id in loadout_skills:
         skill = agent.library.get(skill_id)
-        if skill is not None and skill.layer == "rule":
-            # 规则层 pin（含「规则_目标_*」这类中文 id）被过滤掉。
-            assert skill_id not in injected
-            assert f"- [{skill_id}]" not in skills_block
-        elif skill is not None:
+        if skill is not None:
             assert skill_id in injected
             assert skills_block.count(f"- [{skill_id}]") == 1
 
@@ -1762,14 +1755,11 @@ def test_none_and_llm_empty_map_to_llm_empty_group():
         )
         agent = policy._ensure_policy()
         assert policy.group == "llm_empty"
-        # 不再是无库：LLM + 仅游戏规则（rules_v1，17 rule）；不用 loadout。
-        assert agent.library is not None
-        assert agent.library.by_layer() == {
-            "rule": 17, "strategy": 0, "stage_specific": 0,
-        }
-        assert policy.library_root and policy.library_root.endswith("rules_v1")
+        # LLM + 仅游戏规则：规则在 system 的 GAME_RULES_V2 里，没有技能库。
+        assert agent.library is None
+        assert policy.library_root is None
+        assert policy.library_info is None
         assert agent.config.pinned_skills == ()
-        assert policy.library_info["resolved"] == "rules_v1"
 
 
 def test_npc_decks_have_eval_protocol():
@@ -1939,7 +1929,7 @@ def test_ai_decisions_filters_who_limit_and_maps_skill_names(tmp_path):
                 "gdec",
                 _decision_record(0, step, ["strat_reaction", "unknown_skill"]),
             )
-        log.append("gdec", _decision_record(1, 5, ["rule_reaction"]))
+        log.append("gdec", _decision_record(1, 5, ["strat_focus_fire"]))
 
         status, out = server.request(
             "GET", "/ai-decisions?session=gdec&who=0&limit=2"
@@ -1962,7 +1952,7 @@ def test_ai_decisions_filters_who_limit_and_maps_skill_names(tmp_path):
 
         _, other = server.request("GET", "/ai-decisions?session=gdec&who=1")
         assert [d["step"] for d in other["decisions"]] == [5]
-        assert other["decisions"][0]["used_skill_names"] == ["元素反应"]
+        assert other["decisions"][0]["used_skill_names"] == ["集火残血角色"]
     finally:
         server.close()
 

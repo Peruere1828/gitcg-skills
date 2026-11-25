@@ -377,10 +377,8 @@ class StateRenderer:
         """
         return ""
 
-    def system_message(self, *, task: TaskSpec, skills: Sequence[Skill], rules_note: str = "") -> dict[str, str]:
+    def system_message(self, *, task: TaskSpec, skills: Sequence[Skill]) -> dict[str, str]:
         parts = [SYSTEM_ROLE]
-        if rules_note:
-            parts.append(rules_note)
         parts.append(task.describe())
         knowledge = self.knowledge_message(task)
         if knowledge:
@@ -397,13 +395,21 @@ class StateRenderer:
         candidates: Sequence[tuple[int, LowLevelActionSpec]],
         *,
         progress: str | None = None,
+        history: str | None = None,
     ) -> dict[str, str]:
         lines: list[str] = []
         if progress:
             # Dynamic, per-decision text. It must stay in the *user* message so the
             # system prefix (and therefore the provider cache key) is unchanged.
             lines.append(progress)
-        lines.extend([self.describe_state(context), "", "合法动作："])
+        lines.append(self.describe_state(context))
+        if history:
+            # Public "what both sides did" log, between the board and the legal
+            # actions: state says where we are, history says how we got here.
+            lines.extend([history, ""])
+        else:
+            lines.append("")
+        lines.append("合法动作：")
         lines.extend(
             self.describe_candidate(context, spec, index)
             for index, (_code, spec) in enumerate(candidates)

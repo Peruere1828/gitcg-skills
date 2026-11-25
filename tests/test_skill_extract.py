@@ -418,11 +418,10 @@ def test_propose_candidates_skips_perfect_and_rare_failures():
     assert len(skills) == 1 and skills[0].skill_id.endswith("_bad")
 
 
-def test_build_prompt_includes_rules_and_profile():
+def test_build_prompt_includes_profile_and_schema():
     profile = StageProfile("wagner", 10, 0.3, 6.0, {"win_within_rounds": 7}, ("5回合内胜利",))
-    messages = build_prompt(profile, rules_note="rule_dice: 骰子规则")
+    messages = build_prompt(profile)
     assert messages[0]["role"] == "system" and "JSON" in messages[0]["content"]
-    assert "rule_dice" in messages[1]["content"]
     assert "wagner" in messages[1]["content"]
 
 
@@ -471,7 +470,7 @@ def test_build_prompt_includes_deck_rules_and_existing_skills_in_order():
         special_rules="开局我方支援区有「卯师傅」；行动阶段开始为双方出战角色附着火元素",
         existing_skills=("[use_fire_support_chefmao] 火支援先手: 行动阶段开始先切火角色",),
     )
-    messages = build_prompt(profile, rules_note="rule_dice: 骰子规则")
+    messages = build_prompt(profile)
     user = messages[1]["content"]
 
     assert "固定牌组：keqing_jihua；角色/卡牌：刻晴(雷)" in user
@@ -479,12 +478,8 @@ def test_build_prompt_includes_deck_rules_and_existing_skills_in_order():
     assert "当前技能库中与本关相关/通用的技能（可批判、可替换；不要重复）：" in user
     assert "- [use_fire_support_chefmao] 火支援先手: 行动阶段开始先切火角色" in user
 
-    # replay -> existing skills -> rules note, so the model critiques the library
-    # after seeing the evidence but before the always-on rules.
-    replay_at = user.index("代表局 A")
-    existing_at = user.index("当前技能库中")
-    rules_at = user.index("已知规则：")
-    assert replay_at < existing_at < rules_at
+    # replay evidence comes before the library block the model is asked to critique.
+    assert user.index("代表局 A") < user.index("当前技能库中")
 
 
 def test_build_prompt_omits_empty_fact_blocks():
@@ -506,14 +501,12 @@ def test_system_prompt_contract_is_specific_and_structured():
     assert '"skill_name"' in SYSTEM and "只输出 JSON 数组" in SYSTEM
 
 
-def test_relevant_existing_skills_excludes_rules_and_keeps_stage_matches():
+def test_relevant_existing_skills_excludes_legacy_rules_and_keeps_stage_matches(tmp_path):
     from scripts.extract_skills import relevant_existing_skills
     from skillloop.library import SkillLibrary
     from skillloop.schema import Skill, SkillConditions
 
     library = SkillLibrary.from_skills([
-        Skill("rule_dice", "骰子", "规则层不应重复注入",
-              conditions=SkillConditions(), layer="rule"),
         Skill("stage_specific_wagner", "瓦格纳速攻", "本关专用：先打武器",
               conditions=SkillConditions(), layer="stage_specific"),
         Skill("strategy_round_cap", "回合预算", "五回合内结束",
@@ -525,6 +518,18 @@ def test_relevant_existing_skills_excludes_rules_and_keeps_stage_matches():
         Skill("strategy_other_stage", "别的关卡", "只适用于 timmie",
               conditions=SkillConditions(stages=("timmie",)), layer="strategy"),
     ])
+    # A legacy snapshot still carries a rule entry; loading strips it, so extraction
+    # can never spend a slot re-injecting the system's rules text.
+    library.save(tmp_path)
+    payload = json.loads((tmp_path / "library.json").read_text(encoding="utf-8"))
+    payload["skills"].append(
+        {"skill_id": "rule_dice", "skill_name": "骰子",
+         "description": "规则层不应重复注入", "layer": "rule", "conditions": {}}
+    )
+    (tmp_path / "library.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+    library = SkillLibrary.load(tmp_path)
     rendered = relevant_existing_skills(
         library, stage="wagner",
         objective_types=("win_within_rounds", "win"),
@@ -592,13 +597,13 @@ def test_relevant_existing_skills_reserves_generic_slots_and_dedupes():
         "不要在击杀轮连打不产生伤害的牌。" + "补充说明。" * 60
     )
     library = SkillLibrary.from_skills([
-        Skill("stage_rule_chefmao", "本关规则", "本关专用：开局先上支援。",
+        Skill("stage_skill_chefmao", "本关打法", "本关专用：开局先上支援。",
               conditions=SkillConditions(stages=("chefmao",)), layer="stage_specific"),
         # Same opening sentence = same advice; only the higher-ranked one is kept.
         Skill("dup_one", "同义一", long_description, layer="strategy"),
         Skill("dup_two", "同义二", long_description, layer="strategy"),
         # Names another stage -> demoted behind every generic row.
-        Skill("other_rule_shitou", "别的关", "别的关专属：先打反应。", layer="strategy"),
+        Skill("other_stage_shitou", "别的关", "别的关专属：先打反应。", layer="strategy"),
         Skill("skill_wagner", "装备目标前置化", "装备牌前两轮打。", layer="strategy"),
         *[
             Skill(f"strat_{name}", f"通用{name}", f"通用策略：{name}。", layer="strategy")
@@ -612,8 +617,8 @@ def test_relevant_existing_skills_reserves_generic_slots_and_dedupes():
         all_stages=("chefmao", "wagner", "shitou"),
     )
     joined = "\n".join(rendered)
-    assert rendered[0].startswith("[stage_rule_chefmao]")
-    assert "other_rule_shitou" not in joined and "skill_wagner" not in joined
+    assert rendered[0].startswith("[stage_skill_chefmao]")
+    assert "other_stage_shitou" not in joined and "skill_wagner" not in joined
     assert "dup_one" in joined and "dup_two" not in joined     # synonym dedupe
     assert sum(line.startswith("[strat_") for line in rendered) >= 2
     # The 300-char cap cuts at a sentence end, never mid-clause with "…".
@@ -956,11 +961,10 @@ def test_build_prompt_with_task_moves_context_to_system(monkeypatch):
         profile,
         task=_task(),
         special_rules=profile.special_rules,
-        rules_note="rule_dice: 骰子规则",
     )
     system, user = messages[0]["content"], messages[1]["content"]
 
-    assert "已知规则" not in user and "rule_dice" not in user
+    assert "已知规则" not in user
     assert "固定牌组" not in user and "关卡特殊规则" not in user
     assert "三星率 0.30" in user
     assert "代表局 A" in user
@@ -972,12 +976,12 @@ def test_build_prompt_with_task_moves_context_to_system(monkeypatch):
 
 def test_build_prompt_task_none_keeps_legacy_layout():
     profile = _profile_for_new_prompt()
-    messages = build_prompt(profile, rules_note="rule_dice: 骰子规则")
+    messages = build_prompt(profile)
     user = messages[1]["content"]
     assert messages[0]["content"] == SYSTEM
     assert "固定牌组：keqing_jihua" in user
     assert "关卡特殊规则：开局我方支援区有「凯瑟琳」" in user
-    assert "已知规则：\nrule_dice: 骰子规则" in user
+    assert "已知规则" not in user
 
 
 def test_propose_candidates_injects_per_stage_task_and_special_rules():

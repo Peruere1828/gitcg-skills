@@ -9,6 +9,7 @@ from npc.spec import get_stage
 from skillloop.library import SkillLibrary
 from skillloop.loadout import (
     Loadout,
+    applicable_skills,
     build_messages,
     engine_lock_hash,
     load_loadouts,
@@ -45,7 +46,7 @@ def _library(*skill_ids: str, version: int = 4) -> SkillLibrary:
             skill_id=skill_id,
             skill_name=f"技能{skill_id}",
             description=f"{skill_id} 的一句话描述，用于检索和提示",
-            layer="rule" if skill_id.startswith("rule") else "strategy",
+            layer="strategy",
         )
         for skill_id in skill_ids
     ]
@@ -61,7 +62,7 @@ def _plan(replies, library, *, max_skills: int = 2, deck: str = "superconduct_mi
 
 
 def test_prompt_contains_stage_goal_enemy_deck_and_full_skill_list():
-    library = _library("alpha", "beta", "rule_one")
+    library = _library("alpha", "beta")
     loadout, client = _plan(
         ['{"skills": ["beta", "alpha"], "rationale": "先装备"}'], library
     )
@@ -77,7 +78,7 @@ def test_prompt_contains_stage_goal_enemy_deck_and_full_skill_list():
     assert "卡牌：" in text and "武器x" in text and "圣遗物x" in text
     assert "- alpha | strategy | 技能alpha |" in text
     assert "- beta | strategy | 技能beta |" in text
-    assert "- rule_one | rule | 技能rule_one |" in text     # full list, not top-k
+    assert "当前关卡适用 2 条" in text                        # full list, not top-k
     assert "最多选 2 条" in text
     assert '"skills"' in text and '"rationale"' in text
 
@@ -193,7 +194,6 @@ def test_save_load_round_trip_records_library_and_engine(tmp_path):
 
 def _stage_scoped_library() -> SkillLibrary:
     return SkillLibrary.from_skills([
-        Skill("rule_one", "规则", "通用规则", layer="rule"),
         Skill("chefmao_specific", "主厨专用", "只用于 chefmao",
               conditions=SkillConditions(stages=("chefmao",), round_max=5),
               layer="stage_specific"),
@@ -213,9 +213,54 @@ def test_prompt_lists_only_skills_applicable_to_current_stage():
     text = user["content"]
     assert "chefmao_specific | stage_specific" in text
     assert "liusu_specific" not in text          # other stage's stage_specific
-    assert "rule_one | rule" in text             # rule layer still applicable
     assert "generic_strategy | strategy" in text
-    assert "当前关卡适用 3 条" in text
+    assert "当前关卡适用 2 条" in text
+
+
+def _strategy_library() -> SkillLibrary:
+    return SkillLibrary.from_skills([
+        Skill("strat_burst", "爆发时机", "留骰给爆发", layer="strategy"),
+        Skill("strat_dice", "骰子规划", "先付关键费用", layer="strategy"),
+    ], version=11)
+
+
+def test_applicable_skills_lists_learned_layers():
+    library = _strategy_library()
+    ids = [skill.skill_id for skill in applicable_skills(get_stage("wagner"), library)]
+    assert ids == ["strat_burst", "strat_dice"]
+
+
+def test_plan_loadout_rejects_out_of_scope_ids_offered_by_model():
+    library = _stage_scoped_library()
+    client = _Client([
+        '{"skills": ["liusu_specific", "made_up_rule"]}',
+        '{"skills": ["chefmao_specific"]}',
+    ])
+    loadout = plan_loadout(
+        get_stage("chefmao"), library, "keqing_jihua", client, max_skills=2
+    )
+    # A reply made only of out-of-scope ids is a validation failure, so it retries.
+    assert len(client.calls) == 2
+    assert loadout.fallback is False
+    assert loadout.skills == ("chefmao_specific",)
+    # ... and the prompt never offered them in the first place.
+    user_text = client.calls[0][1]["content"]
+    assert "liusu_specific" not in user_text
+    assert "made_up_rule" not in user_text
+
+
+def test_library_without_applicable_skills_has_no_candidates_or_fallback():
+    library = SkillLibrary.from_skills([
+        Skill("liusu_specific", "流苏专用", "只用于 liusu",
+              conditions=SkillConditions(stages=("liusu",)), layer="stage_specific"),
+    ], version=3)
+    assert applicable_skills(get_stage("wagner"), library) == []
+    client = _Client([None, '{"skills": ["liusu_specific"]}'])
+    loadout = plan_loadout(
+        get_stage("wagner"), library, "superconduct_mika_attack", client, max_skills=2
+    )
+    assert loadout.fallback is True
+    assert loadout.skills == ()
 
 
 def test_out_of_scope_ids_are_dropped_and_valid_ids_kept():
@@ -241,7 +286,8 @@ def test_all_out_of_scope_ids_fall_back_to_bm25():
     assert loadout.fallback is True
     assert "out_of_scope:liusu_specific" in loadout.rationale
     assert "liusu_specific" not in loadout.skills
-    assert set(loadout.skills) <= {"rule_one", "chefmao_specific", "generic_strategy"}
+    # Only learned layers are candidates, so the fallback cannot invent a skill.
+    assert set(loadout.skills) <= {"chefmao_specific", "generic_strategy"}
 
 
 def test_current_stage_specific_skill_can_be_selected():

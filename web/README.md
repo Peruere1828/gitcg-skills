@@ -68,7 +68,7 @@ bash scripts/serve_web_demo.sh
 
 默认值对齐当前 static 基线（`reports/baseline_20261125_pve_prompt_v1.md`）：
 前端 7001、桥 8770、`configs/stage_decks.json` + `reports/loadouts/v2` + 引擎内置池（不 pin）。
-dynamic 组从 `static_v1` v2 起步（`dyn_v4`，随轮次演进），需要时覆盖 `POLICY=llm:dynamic LOADOUT_ROOT=reports/loadouts/v4`。
+dynamic 组从 `static_v1` 起步（`dyn_v4`，随轮次演进），需要时覆盖 `POLICY=llm:dynamic LOADOUT_ROOT=reports/loadouts/v4`。
 后台常驻：
 
 ```sh
@@ -112,12 +112,11 @@ setsid nohup bash scripts/serve_web_demo.sh >/tmp/gitcg-web.log 2>&1 < /dev/null
 
 | `llm:<选择>` | 实际库 | 含义 |
 |---|---|---|
-| `none` / `llm_empty` | `data/skills/rules_v1`（17 rule） | **仅游戏规则**，不含 strategy/stage_specific，也不用 loadout |
-| `static` | `data/skills/static_v1`（17 rule + 10 strategy） | 游戏规则 + 静态策略；可用 loadout |
-| `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2） | 游戏规则 + 动态策略；可用 loadout |
+| `none` / `llm_empty` | 无（规则在 system `GAME_RULES_V2`） | **仅游戏规则**，不加载技能库，也不用 loadout |
+| `static` | `data/skills/static_v1`（10 strategy，v3） | 游戏规则 + 静态策略；可用 loadout |
+| `dynamic` | `data/skills/dyn_v4`（10 strategy + 28 stage_specific，v5） | 游戏规则 + 动态策略；可用 loadout |
 
-主流程不暴露库选择；`GET /ai` 的 `library` 会报告实际解析到的库（`llm_empty`
-报告 `rules_v1`，17 条规则）。
+主流程不暴露库选择；`GET /ai` 的 `library` 会报告实际解析到的库（`llm_empty` 无库，返回空）。
 
 桥的 `--scratchpad` 开启**局内记录板**（默认关，仅用于和 `skillloop.run --scratchpad`
 对齐的 A/B 调试）；`GET /ai` 的 `scratchpad` 字段报告该状态。详见

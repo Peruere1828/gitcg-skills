@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from typing import Any
 
 from envs.decks import deck_spec
+from envs.match import asdict_decision, run_match
+from envs.policy import expert_policy
+from common.seeding import derive_seed
 from reps.action_adapter import BuiltDecisionContext
 from reps.schema import DecisionContext, DecisionType, LowLevelActionSpec, OptionKind
 from skillloop.agent import AgentConfig, SkillAgentPolicy, parse_choice, parse_note
@@ -249,33 +252,51 @@ def test_pinned_skills_replace_retrieval_and_keep_order():
     assert system.index("beta") < system.index("alpha")   # prompt order == pinned order
 
 
-def test_pinned_rule_is_not_injected_twice():
-    """Rule-layer pins are dropped from the skill block.
-
-    The rich system prefix already carries the full wiki rules and the objective
-    judgements, so a loadout that pins ``rule_*`` must not duplicate them; only
-    strategy/skill entries remain citable.
-    """
+def test_pinned_skill_appears_once_in_the_skill_block():
+    """A frozen loadout pin is injected exactly once and is citable."""
     lib = SkillLibrary.from_skills([
-        Skill(
-            skill_id="rule_burst", skill_name="元素爆发", description="爆发需要能量",
-            layer="rule",
-        ),
-        Skill(
-            skill_id="strat_burst", skill_name="爆发时机", description="留骰子给爆发",
-            layer="strategy",
-        ),
+        Skill(skill_id="strat_burst", skill_name="爆发时机", description="留骰子给爆发"),
+        Skill(skill_id="unpinned", skill_name="丙", description="不应出现"),
     ])
-    client = _FakeClient('{"choice": 0, "used": ["rule_burst", "strat_burst"]}')
-    agent = _agent(
-        client, library=lib, pinned_skills=("rule_burst", "strat_burst"),
-    )
+    client = _FakeClient('{"choice": 0, "used": ["strat_burst"]}')
+    agent = _agent(client, library=lib, pinned_skills=("strat_burst",))
     agent.choose(_built(3))
 
     system = client.calls[0][0]["content"]
     skills_block = system.split("可参考的技能（来自历史经验，优先级低于关卡目标）：")[-1]
-    assert "- [rule_burst]" not in skills_block
     assert skills_block.count("- [strat_burst]") == 1
+    assert "- [unpinned]" not in skills_block
+    assert agent.decisions[-1].used == ("strat_burst",)
+
+
+def test_legacy_rule_pin_is_dropped_after_load(tmp_path):
+    """A loadout may still name ``rule_*``; loading strips it, so it cannot be
+    injected or cited twice (rules live in ``prompt_v2.GAME_RULES_V2``)."""
+    import json as _json
+
+    (tmp_path / "library.json").write_text(
+        _json.dumps(
+            {
+                "library_version": 2,
+                "skills": [
+                    {"skill_id": "rule_burst", "skill_name": "元素爆发",
+                     "description": "爆发需要能量", "layer": "rule"},
+                    {"skill_id": "strat_burst", "skill_name": "爆发时机",
+                     "description": "留骰子给爆发", "layer": "strategy"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    lib = SkillLibrary.load(tmp_path)
+    client = _FakeClient('{"choice": 0, "used": ["rule_burst", "strat_burst"]}')
+    agent = _agent(client, library=lib, pinned_skills=("rule_burst", "strat_burst"))
+    agent.choose(_built(3))
+
+    system = client.calls[0][0]["content"]
+    assert "- [rule_burst]" not in system
+    assert [skill.skill_id for skill in agent._skills] == ["strat_burst"]
     assert agent.decisions[-1].used == ("strat_burst",)
 
 
@@ -387,7 +408,7 @@ def test_scratchpad_off_keeps_prompt_and_system_hash_unchanged():
     implicit = build()
     explicit = build(scratchpad=False)
     expected_system = StateRenderer(_FakeAssets(), opponent_name="NPC").system_message(
-        task=task, skills=(), rules_note=""
+        task=task, skills=()
     )["content"]
     for agent in (implicit, explicit):
         agent.choose(_built(3))
@@ -536,18 +557,19 @@ def test_round_plan_requires_scratchpad():
 # -- optional base guard -----------------------------------------------------
 def _guard_lib() -> SkillLibrary:
     return SkillLibrary.from_skills([
-        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
         Skill(skill_id="strat_x", skill_name="策略", description="策略层打法", layer="strategy"),
     ])
 
 
-def test_base_guard_falls_back_without_non_rule_evidence():
+def test_base_guard_falls_back_without_evidence():
     lib = _guard_lib()
-    for used in ((), ("rule_x",)):
+    # No citation, or a citation the model invented (not in the injected block):
+    # neither justifies overriding the deck expert.
+    for used in ((), ("unknown_skill",)):
         client = _FakeClient(
-            '{"choice": 2' + (', "used": ["rule_x"]' if used else "") + "}"
+            '{"choice": 2' + (', "used": ["unknown_skill"]' if used else "") + "}"
         )
-        agent = _agent(client, library=lib, pinned_skills=("rule_x", "strat_x"), base_guard=True)
+        agent = _agent(client, library=lib, pinned_skills=("strat_x",), base_guard=True)
         code = agent.choose(_built(3))
         assert code == 100                       # deck expert, not the model's 102
         decision = agent.decisions[-1]
@@ -559,7 +581,7 @@ def test_base_guard_falls_back_without_non_rule_evidence():
 def test_base_guard_keeps_model_choice_with_strategy_evidence():
     lib = _guard_lib()
     client = _FakeClient('{"choice": 2, "used": ["strat_x"]}')
-    agent = _agent(client, library=lib, pinned_skills=("rule_x", "strat_x"), base_guard=True)
+    agent = _agent(client, library=lib, pinned_skills=("strat_x",), base_guard=True)
     assert agent.choose(_built(3)) == 102
     decision = agent.decisions[-1]
     assert decision.guarded is False
@@ -570,14 +592,13 @@ def test_base_guard_keeps_model_choice_with_strategy_evidence():
 
 def test_base_guard_strict_requires_stage_evidence():
     lib = SkillLibrary.from_skills([
-        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
         Skill(skill_id="strat_x", skill_name="策略", description="策略层打法", layer="strategy"),
         Skill(skill_id="skill_wagner", skill_name="瓦格纳打法", description="本关打法", layer="strategy"),
     ])
     # 通用策略不算依据 -> 回退 base
     client = _FakeClient('{"choice": 2, "used": ["strat_x"]}')
     agent = _agent(
-        client, library=lib, pinned_skills=("rule_x", "strat_x", "skill_wagner"),
+        client, library=lib, pinned_skills=("strat_x", "skill_wagner"),
         base_guard=True, base_guard_strict=True,
     )
     assert agent.choose(_built(3)) == 100
@@ -585,7 +606,7 @@ def test_base_guard_strict_requires_stage_evidence():
     # 带当前关卡名的技能 -> 允许模型选择
     client = _FakeClient('{"choice": 2, "used": ["skill_wagner"]}')
     agent = _agent(
-        client, library=lib, pinned_skills=("rule_x", "strat_x", "skill_wagner"),
+        client, library=lib, pinned_skills=("strat_x", "skill_wagner"),
         base_guard=True, base_guard_strict=True,
     )
     assert agent.choose(_built(3)) == 102
@@ -595,7 +616,6 @@ def test_base_guard_strict_requires_stage_evidence():
 def test_base_guard_strict_matches_stage_name_by_suffix_only():
     """``lan`` must not match ``skill_blanche`` through a substring."""
     lib = SkillLibrary.from_skills([
-        Skill(skill_id="rule_x", skill_name="规则", description="规则层说明", layer="rule"),
         Skill(skill_id="skill_blanche", skill_name="布兰奇打法", description="别的关卡", layer="strategy"),
     ])
     task = TaskSpec(stage="lan", display="蓝", objectives=("5回合内胜利",), deck="x")
@@ -607,7 +627,7 @@ def test_base_guard_strict_matches_stage_name_by_suffix_only():
         task=task,
         library=lib,
         config=AgentConfig(
-            pinned_skills=("rule_x", "skill_blanche"),
+            pinned_skills=("skill_blanche",),
             base_guard=True, base_guard_strict=True,
         ),
     )
@@ -675,3 +695,90 @@ def test_base_guard_off_lets_model_choice_stand_without_citations():
     assert agent.choose(_built(3)) == 102
     assert agent.decisions[0].guarded is False
     assert agent.decisions[0].final_code == 102
+
+
+# -- per-decision match history ----------------------------------------------
+def test_history_is_absent_on_the_first_decision_and_lands_before_legal_actions():
+    client = _FakeClient('{"choice": 1}')
+    agent = _agent(client)
+
+    agent.choose(_built(3))
+    first = client.calls[0][1]["content"]
+    assert "对局历史" not in first
+
+    agent.choose(_built(3))
+    second = client.calls[1][1]["content"]
+    assert "对局历史（仅你方可见信息" in second
+    assert second.index("（无状态）") < second.index("对局历史") < second.index("合法动作：")
+    # The label comes from ``describe_candidate`` (candidate index stripped).
+    assert "R0 我方 · 使用技能：skill1" in second
+    # The system prefix is still byte-identical.
+    assert client.calls[0][0]["content"] == client.calls[1][0]["content"]
+
+
+def test_script_fallback_does_not_claim_an_我方_history_line():
+    client = _FakeClient('{"choice": 0}')
+    agent = _agent(client, max_calls_per_game=1)
+
+    agent.choose(_built(3))                       # real model call -> recorded
+    assert agent.history.render().count("我方") == 1
+
+    code = agent.choose(_built(3))                # budget exhausted -> script
+    assert code == 100
+    assert len(client.calls) == 1                 # no second prompt was built
+    assert agent.history.render().count("我方") == 1
+
+
+# -- decision attribution ("who picked this?") --------------------------------
+def test_last_decider_is_script_on_early_returns_and_llm_on_a_real_call():
+    client = _FakeClient('{"choice": 1}')
+    agent = _agent(client)
+    agent.choose(_built(1))                                    # forced pick
+    assert agent.last_decider == "script"
+    agent.choose(_built(3, request=DecisionType.SELECT_CARD))  # not an LLM request
+    assert agent.last_decider == "script"
+    agent.choose(_built(3))                                    # real model call
+    assert agent.last_decider == "llm"
+    assert len(client.calls) == 1
+
+
+def test_run_match_records_decider_per_request_type():
+    deck0, deck1 = "superconduct_aggro", "natlan_battleship"
+    client = _FakeClient('{"choice": 0}')
+    task = TaskSpec(
+        stage="wagner",
+        display="瓦格纳",
+        objectives=("赢得胜利",),
+        deck=deck0,
+        objective_types=("win",),
+    )
+    policy0 = SkillAgentPolicy(
+        expert_policy(deck0, seed=derive_seed(1, "p0", deck0)),
+        client,
+        renderer=StateRenderer(_FakeAssets(), opponent_name="NPC"),
+        task=task,
+        config=AgentConfig(),
+    )
+    policy1 = expert_policy(deck1, seed=derive_seed(1, "p1", deck1))
+    record = run_match(
+        deck_spec(deck0),
+        deck_spec(deck1),
+        policy0,
+        policy1,
+        seed=1,
+        max_steps=800,
+        record_decisions=True,
+        record_views=True,
+    )
+    by_type: dict[str, set[str]] = {}
+    for decision in record.decisions:
+        if decision.player != 0:          # P1 is the scripted expert
+            continue
+        by_type.setdefault(decision.request_type, set()).add(decision.decider)
+    # The sync runner sends these three to the model; forced picks stay script.
+    assert by_type.get("action") == {"llm"}
+    assert by_type.get("switch_hands") == {"llm"}
+    assert "llm" in by_type.get("choose_active", set())
+    assert by_type.get("reroll_dice") == {"script"}
+    # The attribution survives the dataclass/asdict projection.
+    assert asdict_decision(record.decisions[0])["decider"] in ("llm", "script")

@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "strat_equipment_timing",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "装备目标需按时打圣遗物；集火残血快速减员；火雷反应提伤；骰子经济保5回合内节奏；无收益即结束抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "e718ad1b3010",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

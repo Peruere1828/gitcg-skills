@@ -506,15 +506,12 @@ class RichStateRenderer(StateRenderer):
         *,
         task: Any,
         skills: Any,
-        rules_note: str = "",
     ) -> dict[str, str]:
         """The fixed six-part system message (role → rules → knowledge → goals → skills).
 
-        ``rules_note`` is accepted but **ignored**: the always-on rules now come from
-        ``prompt_v2.GAME_RULES_V2`` instead of the library's 17 ``rule_*`` skills.
-        Those skills stay in ``data/skills/*`` (the paired gate and historical
-        runs need them) but no longer appear as prompt lines, so keeping the
-        parameter only avoids touching every caller.
+        The game rules are the fixed ``prompt_v2.GAME_RULES_V2`` text, not a library
+        layer: the library only contributes learned ``strategy``/``stage_specific``
+        skills.
         """
         content = "\n".join(text for _name, text in self.system_parts(task=task, skills=skills))
         return {"role": "system", "content": content}
@@ -1058,10 +1055,19 @@ class RichStateRenderer(StateRenderer):
                 segment += f"；{hint}"
         return segment
 
-    def user_message(self, context: Any, candidates: Any, *, progress: str | None = None) -> dict[str, str]:
+    def user_message(
+        self,
+        context: Any,
+        candidates: Any,
+        *,
+        progress: str | None = None,
+        history: str | None = None,
+    ) -> dict[str, str]:
         """Reset the per-pass card-description cache before rendering (M12)."""
         self._seen_card_descriptions = set()
-        return super().user_message(context, candidates, progress=progress)
+        return super().user_message(
+            context, candidates, progress=progress, history=history
+        )
 
     def describe_candidate(self, context: Any, spec: Any, index: int) -> str:
         line = super().describe_candidate(context, spec, index)

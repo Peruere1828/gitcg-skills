@@ -44,11 +44,21 @@ def _data_root() -> Path:
 
 
 @lru_cache(maxsize=1)
-def _index() -> dict[int, tuple[dict[str, Any], ...]]:
+def _tables() -> tuple[dict[int, tuple[dict[str, Any], ...]], dict[int, dict[str, Any]]]:
+    """Parse once: ``(passives per character, passive by exact skill id)``.
+
+    A GTS alias is only unique *inside* one file: ``cryo``/``electro``/
+    ``physical`` hilichurl shooters all declare their passive as ``Hide`` while
+    the skill ids differ (31023 / 34023 / 30023). Keying the passive table by
+    alias alone made the last file win and mislabelled the other two, so the
+    table is keyed by the **exact skill id** and an alias only resolves through
+    the owning character's id namespace (``skill_id // 10 == character_id``).
+    """
     root = _data_root()
     if not root.exists():
-        return {}
-    passives_by_alias: dict[str, dict[str, Any]] = {}
+        return {}, {}
+    passives: dict[int, dict[str, Any]] = {}
+    by_alias: dict[str, list[int]] = {}
     characters: dict[int, list[str]] = {}
     for path in root.rglob("*.gts"):
         try:
@@ -62,11 +72,12 @@ def _index() -> dict[int, tuple[dict[str, Any], ...]]:
                 alias = _ALIAS.search(code)
                 if not match_id or not alias:
                     continue
+                skill_id = int(match_id.group(1))
                 match_name = _NAME.search(comment)
                 match_cost = _COST.search(comment)
                 match_desc = _DESCRIPTION.search(comment)
-                passives_by_alias[alias.group(1)] = {
-                    "id": int(match_id.group(1)),
+                passives[skill_id] = {
+                    "id": skill_id,
                     "name": (match_name.group(1).strip() if match_name else ""),
                     "cost": (
                         match_cost.group(0).split("@cost", 1)[1].strip()
@@ -77,6 +88,7 @@ def _index() -> dict[int, tuple[dict[str, Any], ...]]:
                         " ".join(match_desc.group(1).split()) if match_desc else ""
                     ),
                 }
+                by_alias.setdefault(alias.group(1), []).append(skill_id)
             if "define character" in code:
                 match_id = _ID.search(comment)
                 skills = _SKILLS.search(code)
@@ -90,7 +102,14 @@ def _index() -> dict[int, tuple[dict[str, Any], ...]]:
                 characters[int(match_id.group(1))] = aliases
     result: dict[int, tuple[dict[str, Any], ...]] = {}
     for character_id, aliases in characters.items():
-        items = [passives_by_alias[a] for a in aliases if a in passives_by_alias]
+        items: list[dict[str, Any]] = []
+        for alias in aliases:
+            candidates = by_alias.get(alias) or []
+            owned = [skill_id for skill_id in candidates if skill_id // 10 == character_id]
+            if owned:
+                items.append(passives[owned[0]])
+            elif len(candidates) == 1:
+                items.append(passives[candidates[0]])
         unique = []
         seen = set()
         for item in items:
@@ -101,8 +120,18 @@ def _index() -> dict[int, tuple[dict[str, Any], ...]]:
             unique.append(item)
         if unique:
             result[character_id] = tuple(unique)
-    return result
+    return result, passives
+
+
+@lru_cache(maxsize=1)
+def _index() -> dict[int, tuple[dict[str, Any], ...]]:
+    return _tables()[0]
 
 
 def passives_for(character_id: int) -> tuple[dict[str, Any], ...]:
     return _index().get(int(character_id), ())
+
+
+def passive_by_id(definition_id: int) -> dict[str, Any] | None:
+    """The passive sheet of one exact skill id (``31023`` -> 躲起来)."""
+    return _tables()[1].get(int(definition_id))

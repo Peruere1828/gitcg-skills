@@ -65,8 +65,8 @@ def test_tokenize_handles_chinese_and_ascii():
 
 # -- retrieval ---------------------------------------------------------------
 def test_retrieve_prefers_more_specific_layer():
-    # the rules layer is injected as a fixed prefix, so retrieval ranks only the
-    # strategy layers: stage_specific must outrank strategy on the same query.
+    # Rules live in the system prompt (prompt_v2.GAME_RULES_V2), so retrieval only
+    # ranks the two learned layers: stage_specific outranks strategy on the same query.
     lib = SkillLibrary.from_skills([
         _skill("strategy_a", layer="strategy", desc="装备牌可以增加护盾"),
         _skill("stage_a", layer="stage_specific", desc="装备牌在速攻关里只打一张"),
@@ -125,17 +125,26 @@ def test_usage_log_roundtrip(tmp_path):
     assert json.loads((tmp_path / "usage.json").read_text())["decisions"] == 2
 
 
-def test_rules_layer_is_injected_separately_from_retrieval():
-    from skillloop.rules import build_rules_library
-
-    lib = build_rules_library({"win_within_rounds", "play_equipment_card"})
-    text = lib.rules_text()
-    assert "rule_dice" in text and "规则_目标_回合上限" in text
-    # retrieval must not return the always-on rules layer
-    assert all(skill.layer != "rule" for skill in lib.retrieve("速攻 装备", {"stage": "wagner"}, k=5))
-    # but asking for rules explicitly still works
-    assert lib.retrieve("骰子", {}, k=3, layers=("rule",))
-
-    # a pinned rule can be excluded from the always-on block (no duplicate prompt)
-    trimmed = lib.rules_text(exclude_ids={"rule_dice"})
-    assert "rule_dice" not in trimmed and "rule_burst" in trimmed
+def test_load_drops_legacy_rule_layer_with_one_note(tmp_path, capsys):
+    """Historical snapshots still say ``layer: rule``; loading must not raise."""
+    payload = {
+        "library_version": 2,
+        "meta": {"history": [{"version": 2, "note": "old"}]},
+        "skills": [
+            {"skill_id": "rule_dice", "skill_name": "骰子", "description": "旧规则层条目",
+             "layer": "rule"},
+            {"skill_id": "rule_burst", "skill_name": "爆发", "description": "旧规则层条目",
+             "layer": "rule"},
+            {"skill_id": "strat_a", "skill_name": "节奏", "description": "保持骰子节奏"},
+        ],
+    }
+    (tmp_path / "library.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+    lib = SkillLibrary.load(tmp_path)
+    assert [skill.skill_id for skill in lib] == ["strat_a"]
+    assert lib.by_layer() == {"strategy": 1, "stage_specific": 0}
+    err = capsys.readouterr().err
+    # exactly one note per load, never one per dropped entry
+    assert err.count("legacy rule-layer") == 1
+    assert "2 legacy rule-layer skill(s)" in err

@@ -57,10 +57,13 @@ _MECHANICAL_TEXT = {
     "switch_hands": "换牌",
     "choose_active": "选人",
 }
-#: H10: reroll/mulligan/choose-active rows are executed by the *script policy*,
-#: not chosen by the LLM. The row is kept (the user wants dice + board context in
-#: the replay) but labelled, so a reader cannot mistake it for a model decision.
-_MECHANICAL_NOTE = "（脚本策略，非 LLM 决策）"
+#: H10: mechanical rows are labelled by who actually chose them: the LLM (sync
+#: runner's ``switch_hands``/``choose_active``) or the script policy (every
+#: ``reroll_dice``, plus all fallback/forced picks).
+_MECHANICAL_NOTE_LLM = "（LLM 决策）"
+_MECHANICAL_NOTE_SCRIPT = "（脚本策略）"
+#: Hand area constant from the engine's ``EntityArea`` enum.
+_HAND_AREA = 5
 _IGNORED_REQUESTS = frozenset({"select_card", "terminal"})
 
 _MAX_LABEL = 28
@@ -428,32 +431,52 @@ def _dice_pool_line(round_number: int, player: int, dice: Sequence[int]) -> str:
     return f"R{round_number} {side}骰子：{body}"
 
 
+def _hand_entry_definition_id(card: Any) -> int:
+    """Definition id from a snapshot hand card (dict), or 0 (incl. masked NPC)."""
+    if isinstance(card, dict):
+        return _as_int(card.get("definition_id") or card.get("card_definition_id"))
+    return _as_int(card)
+
+
+def _hand_entry_id(card: Any) -> int:
+    """Entity id from a snapshot hand card (dict), or 0 when unavailable."""
+    if isinstance(card, dict):
+        return _as_int(card.get("id"))
+    return 0
+
+
+def _view_hand_entries(decision: Any, player: int) -> list[Any] | None:
+    """One seat's hand from a real view (``None`` when the view is absent)."""
+    view = _field(decision, "player_view")
+    if not isinstance(view, dict):
+        return None
+    players = _view_players(view)
+    if player < 0 or player >= len(players):
+        return None
+    hand = players[player].get("hand_cards")
+    if not isinstance(hand, (list, tuple)):
+        return None
+    return list(hand)
+
+
+def _view_hand_defs(decision: Any, player: int) -> list[int] | None:
+    """One seat's hand definition ids in order (0 marks a masked card)."""
+    entries = _view_hand_entries(decision, player)
+    if entries is None:
+        return None
+    return [_hand_entry_definition_id(card) for card in entries]
+
+
 def _view_hand_ids(decision: Any) -> list[int] | None:
     """P0's hand definition ids from a real view (``None`` when unavailable).
 
     The contestant's view is the only one whose hand-card ids are trustworthy;
     the NPC's hand is masked, so it is never read into a drawn-card line.
     """
-    view = _field(decision, "player_view")
-    if not isinstance(view, dict):
+    defs = _view_hand_defs(decision, 0)
+    if defs is None:
         return None
-    players = _view_players(view)
-    if len(players) < 2:
-        return None
-    hand = players[0].get("hand_cards")
-    if not isinstance(hand, (list, tuple)):
-        return None
-    ids: list[int] = []
-    for card in hand:
-        if isinstance(card, dict):
-            definition_id = _as_int(
-                card.get("definition_id") or card.get("card_definition_id")
-            )
-        else:
-            definition_id = _as_int(card)
-        if definition_id:
-            ids.append(definition_id)
-    return ids
+    return [definition_id for definition_id in defs if definition_id]
 
 
 def _hand_additions(previous: Sequence[int], current: Sequence[int]) -> list[int]:
@@ -481,6 +504,272 @@ def _hand_add_line(round_number: int, definition_ids: Sequence[int]) -> str:
     if not names:
         return ""
     return f"R{round_number} 手牌新增：" + "、".join(f"「{name}」" for name in names)
+
+
+def _next_same_seat_view(
+    decisions: Sequence[Any], index: int, player: int
+) -> int | None:
+    """Index of the next record for ``player`` that carries a real view."""
+    for candidate in range(index + 1, len(decisions)):
+        other = decisions[candidate]
+        if _as_int(_field(other, "player", -1)) != player:
+            continue
+        view = _field(other, "player_view")
+        if isinstance(view, dict) and len(_view_players(view)) >= 2:
+            return candidate
+    return None
+
+
+def _dice_values(values: Any) -> list[int]:
+    """Strict int list from a view dice tuple (drops the engine's 0 filler)."""
+    if not isinstance(values, (list, tuple)):
+        return []
+    result: list[int] = []
+    for value in values:
+        number = _as_int(value)
+        if number:
+            result.append(number)
+    return result
+
+
+def _dice_line(values: Sequence[int]) -> str:
+    """``[水,水,雷]`` with the shared element symbols, capped like a pool row."""
+    return "[" + ",".join(_dice_symbol(value) for value in values[:_MAX_DICE_LINE]) + "]"
+
+
+def _label_tail(decision: Any) -> str:
+    label = str(_field(decision, "chosen_label") or "")
+    return label.split(":", 1)[1].strip() if ":" in label else ""
+
+
+def _switch_removed_ids(decision: Any) -> list[int]:
+    """Entity ids from ``switch_hands:<entity>,<entity>`` (negatives included)."""
+    tail = _label_tail(decision)
+    if not tail or tail.lower() == "none":
+        return []
+    ids: list[int] = []
+    for part in tail.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            continue
+    return ids
+
+
+def _card_move_events(events: Sequence[Any], *, kind: str | None = None) -> list[Any]:
+    result: list[Any] = []
+    for event in events:
+        if str(_field(event, "kind", "") or "") != "card_move":
+            continue
+        if kind is not None and str(_field(event, "reason", "") or "") != kind:
+            continue
+        result.append(event)
+    return result
+
+
+def _event_defs(events: Sequence[Any], player: int) -> tuple[list[int], bool]:
+    """Definition ids entering the hand; ``masked`` when an NPC card is hidden."""
+    definition_ids: list[int] = []
+    masked = False
+    for event in events:
+        if player is not None and _as_int(_field(event, "player", -1)) != player:
+            continue
+        definition_id = _as_int(_field(event, "definition_id", 0))
+        if definition_id == 0:
+            masked = True
+        definition_ids.append(definition_id)
+    return definition_ids, masked
+
+
+def _draw_line(round_number: int, player: int, events: Sequence[Any]) -> str:
+    """``R1 P0 抽牌：「雷楔」、「莲花酥」`` / ``R1 P1(NPC) 抽牌 2 张``."""
+    if not events:
+        return ""
+    definition_ids, masked = _event_defs(events, player)
+    if not definition_ids:
+        return ""
+    side = _side(player)
+    if player == 1 or masked:
+        return f"R{round_number} {side} 抽牌 {len(definition_ids)} 张"
+    names = [_card_name(int(definition_id)) for definition_id in definition_ids]
+    return f"R{round_number} {side} 抽牌：" + "、".join(f"「{name}」" for name in names)
+
+
+def _draw_buckets(events: Sequence[Any]) -> dict[int, list[Any]]:
+    """Card entries into hand (excluding switch gains) keyed by decision cursor."""
+    buckets: dict[int, list[Any]] = {}
+    for event in _card_move_events(events):
+        if _as_int(_field(event, "to_area", 0)) != _HAND_AREA:
+            continue
+        # Switch-hands gains are stated by the switch row itself; drawing them
+        # again would duplicate the same cards.
+        if str(_field(event, "reason", "") or "") == "switch":
+            continue
+        after = max(0, _as_int(_field(event, "decision_index", 0)))
+        buckets.setdefault(after, []).append(event)
+    return buckets
+
+
+def _draw_lines(bucket: Sequence[Any]) -> list[str]:
+    """One draw row per seat/round, in event order, for one notification batch."""
+    lines: list[str] = []
+    order: list[tuple[int, int]] = []
+    grouped: dict[tuple[int, int], list[Any]] = {}
+    for event in bucket:
+        player = _as_int(_field(event, "player", 0))
+        round_number = max(0, _as_int(_field(event, "round_number", 0)))
+        key = (player, round_number)
+        if key not in grouped:
+            order.append(key)
+            grouped[key] = []
+        grouped[key].append(event)
+    for key in order:
+        player, round_number = key
+        line = _draw_line(round_number, player, grouped[key])
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _switch_gains(
+    decision: Any,
+    *,
+    index: int,
+    decisions: Sequence[Any],
+    events: Sequence[Any],
+    player: int,
+) -> tuple[list[int], bool]:
+    """Cards that entered the hand after a mulligan: view diff first, events next."""
+    current = _view_hand_defs(decision, player)
+    next_index = _next_same_seat_view(decisions, index, player)
+    if current is not None and next_index is not None:
+        following = _view_hand_defs(decisions[next_index], player)
+        if following is not None:
+            masked = any(value == 0 for value in (*current, *following))
+            if not masked:
+                return _hand_additions(current, following), False
+    candidates = [
+        event
+        for event in _card_move_events(events, kind="switch")
+        if _as_int(_field(event, "to_area", 0)) == _HAND_AREA
+        and _as_int(_field(event, "player", -1)) == player
+        and _as_int(_field(event, "decision_index", 0)) in (0, index + 1)
+    ]
+    found, masked = _event_defs(candidates, player)
+    if not found:
+        return [], masked
+    return [definition_id for definition_id in found if definition_id], masked
+
+
+def _switch_line(
+    round_number: int,
+    player: int,
+    decision: Any,
+    *,
+    index: int,
+    decisions: Sequence[Any],
+    events: Sequence[Any],
+) -> str:
+    """``R1 P0 换牌：弃置「A」、「B」→ 获得「C」、「D」``."""
+    removed = _switch_removed_ids(decision)
+    if not removed:
+        return ""
+    entries = _view_hand_entries(decision, player)
+    by_id = {
+        _hand_entry_id(card): card
+        for card in (entries or ())
+        if _hand_entry_id(card)
+    }
+    names: list[str] = []
+    masked = False
+    for entity_id in removed:
+        card = by_id.get(entity_id)
+        if card is None:
+            if player == 1:
+                masked = True
+            else:
+                names.append(f"#{entity_id}")
+            continue
+        definition_id = _hand_entry_definition_id(card)
+        if definition_id == 0:
+            masked = True
+        else:
+            names.append(_card_name(definition_id))
+    if masked or (player == 1 and not names):
+        return f"R{round_number} {_side(player)} 换牌 {len(removed)} 张"
+    if not names:
+        return ""
+    text = "弃置" + "、".join(f"「{name}」" for name in names)
+    gains, gains_masked = _switch_gains(
+        decision, index=index, decisions=decisions, events=events, player=player
+    )
+    if gains:
+        text += "→ 获得" + "、".join(f"「{_card_name(gid)}」" for gid in gains)
+    elif gains_masked:
+        text += f"→ 获得 {len(removed)} 张"
+    return f"R{round_number} {_side(player)} 换牌：{text}"
+
+
+def _reroll_line(
+    round_number: int,
+    player: int,
+    decision: Any,
+    *,
+    index: int,
+    decisions: Sequence[Any],
+) -> str:
+    """``R1 P0 重掷 [旧] → [新]``; a ``none`` reroll is omitted as pure noise."""
+    tail = _label_tail(decision)
+    if not tail or tail.lower() == "none":
+        return ""
+    old_dice = _dice_values(_view_dice(decision))
+    old_text = _dice_line(old_dice) if old_dice else _reroll_tail(tail)
+    if not old_text:
+        return ""
+    body = f"R{round_number} {_side(player)} 重掷 {old_text}"
+    next_index = _next_same_seat_view(decisions, index, player)
+    if next_index is not None:
+        new_dice = _dice_values(_view_dice(decisions[next_index]))
+        if new_dice:
+            body += " → " + _dice_line(new_dice)
+    return body
+
+
+def _choose_active_name(decision: Any, player: int) -> str:
+    """Character name for a choose-active pick, or ``""`` when unresolvable."""
+    subject = _as_int(_field(decision, "subject_definition_id", 0))
+    names: list[str] = []
+    if subject > 0:
+        names.append(subject)
+    tail = _label_tail(decision)
+    if tail:
+        entity_id = _as_int(tail, 0)
+        view = _field(decision, "player_view")
+        players = _view_players(view)
+        if 0 <= player < len(players):
+            for character in _characters(players[player]):
+                if _as_int(character.get("id")) == entity_id:
+                    definition_id = _as_int(character.get("definition_id"))
+                    if definition_id:
+                        names.append(definition_id)
+                    break
+    for definition_id in names:
+        name = _character_name(int(definition_id))
+        if name.startswith("#"):
+            name = _npc_character_names().get(int(definition_id), "")
+        if name and not name.startswith("#") and name != "未知角色":
+            return name
+    return ""
+
+
+def _mechanical_note(request: str, decision: Any) -> str:
+    if request == "reroll_dice":
+        return _MECHANICAL_NOTE_SCRIPT
+    decider = str(_field(decision, "decider", "script") or "script")
+    return _MECHANICAL_NOTE_LLM if decider == "llm" else _MECHANICAL_NOTE_SCRIPT
 
 
 def _label_head(label: str) -> str:
@@ -602,23 +891,50 @@ def _reroll_tail(tail: str) -> str:
     return "[" + ",".join(symbols) + "]"
 
 
-def _mechanical_line(round_number: int, player: Any, request: str, decision: Any) -> str:
+def _mechanical_line(
+    round_number: int,
+    player: Any,
+    request: str,
+    decision: Any,
+    *,
+    index: int,
+    decisions: Sequence[Any],
+    events: Sequence[Any],
+) -> str:
+    note = _mechanical_note(request, decision)
+    side = _side(player)
+    if request == "reroll_dice":
+        body = _reroll_line(
+            round_number,
+            int(player),
+            decision,
+            index=index,
+            decisions=decisions,
+        )
+        return body + note if body else ""
+    if request == "switch_hands":
+        body = _switch_line(
+            round_number,
+            int(player),
+            decision,
+            index=index,
+            decisions=decisions,
+            events=events,
+        )
+        return body + note if body else ""
     kind_text = _MECHANICAL_TEXT[request]
     label = str(_field(decision, "chosen_label") or "")
     tail = label.split(":", 1)[1].strip() if ":" in label else ""
     if tail.lower() == "none":
         tail = ""
-    if not tail:
-        subject = _as_int(_field(decision, "subject_definition_id", 0))
-        tail = str(subject) if subject > 0 else ""
-    # ``choose_active``'s label carries an internal entity id (negative), which
-    # means nothing to the reader; keep just "选人".
+    body = f"R{round_number} {side} {kind_text}"
     if request == "choose_active":
-        tail = ""
-    if request == "reroll_dice":
-        tail = _reroll_tail(tail)
-    body = f"R{round_number} {_side(player)} {kind_text}{(' ' + tail[:_MAX_LABEL]) if tail else ''}"
-    return body + _MECHANICAL_NOTE
+        name = _choose_active_name(decision, int(player))
+        if name:
+            body += f"：{name}"
+    elif tail:
+        body += f" {tail[:_MAX_LABEL]}"
+    return body + note
 
 
 def _view_players(view: Any) -> list[dict[str, Any]]:
@@ -1168,14 +1484,19 @@ def compact_trace(
     * one line per ``action`` decision for both sides (``P0`` = contestant,
       ``P1(NPC)`` = the stage enemy), in recorder order;
     * the first ``switch_hands`` / ``choose_active`` per player, and one
-      ``reroll_dice`` line per player *per round* (the dice they rerolled);
-      these rows are executed by the script policy, so each carries
-      ``（脚本策略，非 LLM 决策）`` (H10);
+      ``reroll_dice`` line per player *per round*. Each row says who chose it:
+      ``（LLM 决策）`` or ``（脚本策略）`` from ``DecisionRecord.decider``;
+      rerolls are always script. A ``reroll:none`` row is omitted (no noise).
+      With recorded views a reroll row reads ``[旧池] → [新池]``; switch rows
+      name the discarded and gained cards, and choose-active rows name the
+      character;
     * one ``R{n} 我方/对方骰子：[...]（N个）`` row per player per round, taken from
       that player's own view (a real snapshot only; masked/absent views add
       nothing). It shows the *pool* the engine paid from;
-    * when P0's view enters a new round with more hand cards than its previous
-      view, one ``R{n} 手牌新增：「X」...`` row (at most four resolvable names);
+    * when the recorder captured ``card_move`` events, every card that enters a
+      hand is one ``R{n} P0 抽牌：「X」`` row (``抽牌 N 张`` for a masked NPC hand),
+      placed right after the action that caused it. Without those events the old
+      cross-round ``R{n} 手牌新增`` fallback is kept;
     * reaction events (localized Chinese names), coalesced when consecutive;
     * one closing line with winner, rounds and objective marks (always kept).
 
@@ -1192,8 +1513,9 @@ def compact_trace(
     no ``→ 此后场上`` (it is the usual case: the last decision has no successor
     view). Without it, the HP board falls back to the last recorded view.
 
-    ``meta`` (optional out-parameter) receives ``n_action_lines`` and
-    ``truncated`` so the runner can record why a trace was cut. When the body
+    ``meta`` (optional out-parameter) receives ``n_action_lines``,
+    ``truncated`` and ``deciders`` (LLM/script counts) so the runner can record
+    why a trace was cut and who made its decisions. When the body
     exceeds the cap, the oldest mechanical rows (``重掷``/``换牌``/``选人``) are
     dropped first so decision lines survive; if that is still not enough, the
     trace keeps its earliest rows (the pre-existing behaviour). A cut trace says
@@ -1204,8 +1526,15 @@ def compact_trace(
     events = list(events or ())
     views = [_field(decision, "player_view") for decision in decisions]
     previous_view, following_view = _nearest_view_indices(views)
+    card_events = _card_move_events(events)
+    has_card_moves = bool(card_events)
+    draw_buckets = _draw_buckets(events)
 
     action_entries: list[tuple[str, bool, int | None]] = []
+    # Draws that happened before the first recorded decision (opening hand)
+    # cannot be attributed to an action; put them at the head of the trace.
+    for line in _draw_lines(draw_buckets.pop(0, ())):
+        action_entries.append((line, False, None))
     seen_mechanical: set[tuple[Any, ...]] = set()
     seen_rolls: set[tuple[int, int]] = set()
     p0_round: int | None = None
@@ -1235,7 +1564,9 @@ def compact_trace(
                 )
             # Cross-round draws: the contestant's view is the only trustworthy
             # hand, so a round change is compared against the previous P0 view.
-            if player == 0:
+            # New ``card_move`` events already state every drawn card, so the
+            # old summary row is only a fallback for legacy/no-event records.
+            if player == 0 and not has_card_moves:
                 hand_ids = _view_hand_ids(decision)
                 if hand_ids is not None:
                     if p0_round is not None and round_number > p0_round:
@@ -1269,23 +1600,31 @@ def compact_trace(
             if request == "reroll_dice":
                 # One reroll row per player per round: later rounds stay legible.
                 key = (player, request, round_number)
-            if key in seen_mechanical:
-                continue
-            seen_mechanical.add(key)
-            action_entries.append(
-                (
-                    _mechanical_line(round_number, player, request, decision),
-                    True,
-                    None,
+            if key not in seen_mechanical:
+                seen_mechanical.add(key)
+                line = _mechanical_line(
+                    round_number,
+                    player,
+                    request,
+                    decision,
+                    index=index,
+                    decisions=decisions,
+                    events=events,
                 )
-            )
+                if line:
+                    action_entries.append((line, True, None))
         elif request in _IGNORED_REQUESTS:
-            continue
+            pass
         elif not request and not kind:
             # Unknown/empty record: keep it visible instead of silently dropping it.
             action_entries.append((f"R{round_number} {_side(player)} ?", False, None))
         else:
-            continue
+            pass
+
+        # A card entering the hand arrives in the notification *after* the
+        # decision that caused it; keep the draw row adjacent to that action.
+        for line in _draw_lines(draw_buckets.pop(index + 1, ())):
+            action_entries.append((line, False, None))
 
         # Round bookkeeping is only needed when no player_view was recorded.
         if kind == "action_declare_end":
@@ -1293,6 +1632,11 @@ def compact_trace(
             if len(ended) >= 2:
                 round_number += 1
                 ended.clear()
+
+    # End-phase draws (or anything after the last recorded decision) still show.
+    for bucket_index in sorted(draw_buckets):
+        for line in _draw_lines(draw_buckets[bucket_index]):
+            action_entries.append((line, False, None))
 
     n_action_lines = len(action_entries)
     reaction_lines = _reaction_lines(events)
@@ -1364,5 +1708,17 @@ def compact_trace(
         meta["n_action_lines"] = n_action_lines
         meta["n_lines"] = len(lines)
         meta["truncated"] = truncated
+        meta["deciders"] = {
+            "llm": sum(
+                1
+                for decision in decisions
+                if str(_field(decision, "decider", "script") or "script") == "llm"
+            ),
+            "script": sum(
+                1
+                for decision in decisions
+                if str(_field(decision, "decider", "script") or "script") != "llm"
+            ),
+        }
 
     return lines

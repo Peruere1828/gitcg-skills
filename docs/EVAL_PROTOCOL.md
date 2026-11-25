@@ -16,9 +16,12 @@
 | 组 | 库 | 推荐 loadout（需显式 `--loadout`） | `--library` 覆盖 |
 |---|---|---|---|
 | `scripted` | 无（无 LLM） | 不适用 | 不适用 |
-| `llm_empty` | `data/skills/rules_v1`（17 rule，仅游戏规则） | 不加载 | 忽略 |
-| `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2` | 允许 |
-| `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本；旧 dyn_v1–v3/v5–v6 已删） | `reports/loadouts/v4`（随库重建） | 允许 |
+| `llm_empty` | 无（规则在 system `GAME_RULES_V2`） | 不加载 | 忽略 |
+| `static` | `data/skills/static_v1`（10 strategy，v3） | `reports/loadouts/v2` | 允许 |
+| `dynamic` | `data/skills/dyn_v4`（10 strategy + 28 stage_specific，v5；旧 dyn_v1–v3/v5–v6 已删） | `reports/loadouts/v4`（随库重建） | 允许 |
+
+`rule` 层已删除：技能库只有 strategy/stage_specific，规则由 system 的 `GAME_RULES_V2` 提供；
+loadout 规划器不再产出 rule/目标类 pin，历史 loadout 里的 rule pin 运行时也会被 `SkillAgentPolicy` 丢弃。
 
 一局 **有效** 的条件：`error == 0` 且 `truncated == 0`；无效局不计入分母，但必须报数量。
 
@@ -75,14 +78,15 @@
 
 ## 5. 可复现
 
-- 每局记录 `stage / seed / deck / group / library_root / library_version / model / prompt_version / system_hash`；
+- 每局记录 `stage / seed / deck / group / library_root / library_version / model / prompt_version / system_hash`，
+  以及 `injected_skills`（该局实际注入的技能）与 `trace_meta.deciders`（各决策的实际决策方：LLM/脚本）；
   meta sidecar 现含 `code_sha / code_dirty / code_hash / prompt_version`（`code_hash` 覆盖
   `skillloop envs reps npc common` 的源码，排除 tests/docs/reports），逐局含 `system_hash`
   （该局实际 system 前缀哈希，非 LLM 组为空串）；`prompt_hash` 不再需要单独实现——`system_hash`
   即真实前缀指纹；resume 只由 `prompt_version` + `code_hash`（内容哈希）把关，
   `code_sha / code_dirty` 仅作 provenance 写入 meta，commit 或 `git add` 不会让同 `--out` 的续跑失效；
 - run 元数据指纹里 `stages` 是关卡列表，关卡文件哈希在 `stages_file_sha1`；
-  指纹使用**实际解析后的库根**（`llm_empty` 也会记录 `data/skills/rules_v1`）；
+  指纹使用**实际解析后的库根**（`llm_empty` 无技能库，库根为空）；
 - 原始逐局 JSONL 落 `data/`（gitignore），聚合摘要落 `reports/`（入库）；
 - LLM 温度 0；但本端点实测 `temperature=0` **不是字节级可复现**（只降低采样方差）。复现以 50 seeds 的统计而非单局复现为准。
 
@@ -115,13 +119,19 @@
 - **缓存**：记录板说明追加在 stable system 末尾（可缓存）；记录板正文只在 user message
   （动态尾部），不会破坏 system prefix 的缓存键。
 
+决策 user 段的固定顺序是**进度 → 局面 → 对局历史 → 合法动作**。对局历史（`skillloop.history`）
+从上一次决策以来的公开事件与公开局面差生成，只含我方（P0）可见信息：对方手牌只给张数、
+对方骰面不参与差分，刻意不做复盘式上帝视角；最多 12 行，首次决策没有该段。它属于动态尾部，
+不改变 system prefix 的缓存键，但**改变了 prompt 结构**（`PROMPT_VERSION` 2026-11-25），
+旧 run 不能与新 prompt 混跑/续跑。
+
 同属可选项、默认关闭、各自进指纹的还有三个实验开关（只在显式 A/B 时成组使用）：
 
 | 开关 | 作用 |
 |---|---|
 | `--round-plan` | 记录板改为轮级计划（隐含 `--scratchpad`）：每轮第一次决策提示「目标/本轮路线/风险/留骰」 |
 | `--compact-render` | **仅复现历史**：回到旧紧凑 prompt。默认已使用完整 prompt：system 含 3.3 规则/反应表、双方角色全部技能与整套牌效果；user 局面含元素/武器、附着、支援/召唤物/状态/装备、手牌费用；候选带反应效果 |
-| `--base-guard` | 只有模型引用了非 rule 技能时才采纳其选择；否则退回牌组 expert 的脚本动作 |
+| `--base-guard` | 只有模型引用了库内技能（strategy/stage_specific）时才采纳其选择；否则退回牌组 expert 的脚本动作 |
 | `--base-guard-strict` | 配合 `--base-guard`，只认 `stage_specific` 或以 `_<stage>` 结尾的技能 id |
 | `--override-kinds` | 只允许模型在这些高层动作类型上越权（如 `action_use_skill`），其余交还 expert |
 | `--override-stages` | 只在这些关卡调用模型；其他关卡纯 expert，不产生 API 调用 |

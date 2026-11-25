@@ -4,13 +4,13 @@
 One model call per stage (temperature 0), frozen for every seed of that stage.
 Loadouts are only used by the static/dynamic groups::
 
-    # static group -> reports/loadouts/v2
+    # static group (static_v1 v3)
     python -m scripts.plan_loadout --library data/skills/static_v1 \\
-        --out reports/loadouts/v2 --stages all --client real
+        --out reports/loadouts/v3 --stages all --client real
 
-    # dynamic group -> reports/loadouts/v4
+    # dynamic group (dyn_v4 v5)
     python -m scripts.plan_loadout --library data/skills/dyn_v4 \\
-        --out reports/loadouts/v4 --stages all --client real
+        --out reports/loadouts/v6 --stages all --client real
 
 ``--client stub`` never builds a network client; it answers with the library's
 BM25 top-k so the full parse/validate/save path can be exercised offline.

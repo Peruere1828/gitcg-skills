@@ -19,7 +19,7 @@ ROWS = [
             {"role": "system", "content": "你是对局助手"},
             {"role": "user", "content": "[0] 使用技能"},
         ],
-        "content": '{"choice": 0, "used": ["rule_dice"]}',
+        "content": '{"choice": 0, "used": ["strat_dice"]}',
         "reasoning_content": "先算骰子再出手",
         "finish_reason": "stop",
         "usage": {"prompt_tokens": 100, "completion_tokens": 50},

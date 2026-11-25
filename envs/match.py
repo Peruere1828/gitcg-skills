@@ -72,6 +72,11 @@ class DecisionRecord:
     # hand-card create/remove and character attachments). The replay uses it to
     # state "弃置「雷楔」" instead of leaving a hand-count delta unexplained.
     preview: tuple[dict[str, Any], ...] = ()
+    # Who actually picked this action: ``"llm"`` when ``SkillAgentPolicy`` made a
+    # real model call, ``"script"`` for the deck expert / mechanical defaults.
+    # The replay labels mechanical rows from this, so a mulligan/choose-active row
+    # cannot be mistaken for a model decision (or vice versa).
+    decider: str = "script"
 
 
 @dataclass
@@ -84,15 +89,30 @@ class MatchEvent:
     player is best-effort: ``skill_used`` carries ``who`` directly; reactions are
     attributed through the damage source instance id resolved against the latest
     public state.
+
+    ``card_move`` events cover hand traffic that was previously invisible: a
+    ``move_entity``/``create_entity``/``remove_entity`` touching the hand area
+    records the card's *definition* id plus the source/destination areas and a
+    short reason. ``decision_index`` is the number of decisions recorded when the
+    notification arrived, so the replay can attach the move to the action that
+    caused it (``0`` = before the first decision).
     """
 
-    kind: str  # "skill" | "reaction"
+    kind: str  # "skill" | "reaction" | "card_move" | "truncated"
     player: int | None = None
     round_number: int = 0
     skill_definition_id: int = 0
     skill_type: str | None = None  # "normal"/"elemental"/"burst"/"passive"/...
     reaction_type: str | None = None  # e.g. "superconduct"/"vaporize"/...
     source_definition_id: int = 0
+    # ``card_move`` projection: card definition id (0 = masked NPC hand) and the
+    # hand-card areas involved (engine ``EntityArea``; HAND is 5).
+    definition_id: int = 0
+    from_area: int = 0
+    to_area: int = 0
+    reason: str | None = None
+    # Number of ``DecisionRecord``\\ s already recorded when this arrived.
+    decision_index: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +123,11 @@ class MatchEvent:
             "skill_type": self.skill_type,
             "reaction_type": self.reaction_type,
             "source_definition_id": self.source_definition_id,
+            "definition_id": self.definition_id,
+            "from": self.from_area,
+            "to": self.to_area,
+            "reason": self.reason,
+            "decision_index": self.decision_index,
         }
 
 
@@ -124,6 +149,68 @@ _SKILL_TYPE_NAMES = {
     "SKILL_TYPE_TECHNIQUE": "technique",
     "SKILL_TYPE_TRIGGERED_FROM_ITS_ATTACHMENT": "triggered_attachment",
 }
+
+# Engine ``EntityArea`` value for a hand card (the protobuf enum is not
+# re-exported on older wheels, so keep the agreed ABI number).
+_ENTITY_AREA_HAND = 5
+# Keep one game's event log bounded. Content events stop at this many; one
+# ``kind="truncated"`` marker is appended to say the rest was dropped.
+_MAX_MATCH_EVENTS = 400
+_MOVE_REASON_NAMES = {
+    1: "switch",
+    2: "draw",
+    3: "undraw",
+    4: "steal",
+}
+_REMOVE_REASON_NAMES = {
+    1: "played",
+    2: "tuning",
+    3: "overflow",
+    4: "discarded",
+    5: "event_card_drawn",
+    # The installed wheel numbers "event card drawn" as 6; keep both so the
+    # replay vocabulary survives a proto revision.
+    6: "event_card_drawn",
+}
+
+
+def _public_event_payload(event: MatchEvent, viewer: int) -> dict[str, Any] | None:
+    """Public, prompt-safe projection of one ``MatchEvent`` for ``viewer``.
+
+    Only facts the viewer can see enter the decision prompt. The critical rule is
+    the opponent's hand: the engine hides its ``definition_id`` (``0`` or a
+    negative placeholder), so a ``card_move`` of the other seat keeps only the
+    direction and reason -- never the card identity. ``None`` means "do not show
+    this event at all" (the truncation marker is bookkeeping, not a game fact).
+    """
+    if event.kind == "skill":
+        return {
+            "kind": "skill",
+            "player": event.player,
+            "definition_id": int(event.skill_definition_id),
+            "round_number": int(event.round_number),
+        }
+    if event.kind == "reaction":
+        return {
+            "kind": "reaction",
+            "player": event.player,
+            "reaction_type": event.reaction_type,
+            "round_number": int(event.round_number),
+        }
+    if event.kind == "card_move":
+        payload: dict[str, Any] = {
+            "kind": "card_move",
+            "player": event.player,
+            "round_number": int(event.round_number),
+            "to": int(event.to_area),
+            "reason": event.reason,
+        }
+        if event.player is not None and int(event.player) == int(viewer):
+            # Our own hand is fully visible, so the card identity is safe here.
+            payload["definition_id"] = int(event.definition_id)
+            payload["from"] = int(event.from_area)
+        return payload
+    return None
 
 
 def _reaction_name(value: int) -> str | None:
@@ -291,6 +378,14 @@ class PolicyPlayer(Player):
         self.fallbacks = 0
         self.quit_requested = False
         self._step_index = 0
+        self._events_truncated = False
+        # Where ``event_sink`` was when this player last built a decision. Each
+        # decision exports only the events that arrived since then
+        # (``metadata["recent_events"]``), so the policy sees "what happened
+        # between my previous decision and this one". ``None`` until the first
+        # decision: the opening deal / setup belongs to the starting board, not
+        # to the history.
+        self._event_cursor: int | None = None
 
     # -- gitcg.Player interface -------------------------------------------------
     def on_notify(self, notification: Any) -> None:
@@ -324,6 +419,23 @@ class PolicyPlayer(Player):
                     for attachment in getattr(entity, "attachment", ()):
                         self._owner_by_entity_id[int(attachment.id)] = who
 
+    def _append_event(self, event: MatchEvent) -> None:
+        """Append one event, enforcing the per-game cap and one cut marker."""
+        sink = self.event_sink
+        if sink is None or self._events_truncated:
+            return
+        if len(sink) >= _MAX_MATCH_EVENTS:
+            sink.append(
+                MatchEvent(
+                    kind="truncated",
+                    round_number=event.round_number,
+                    decision_index=event.decision_index,
+                )
+            )
+            self._events_truncated = True
+            return
+        sink.append(event)
+
     def _collect_events(self, notification: Any) -> None:
         """Project the engine's public mutation stream into ``MatchEvent``s.
 
@@ -338,6 +450,12 @@ class PolicyPlayer(Player):
         if state is not None:
             self._register_entity_owners(state)
         round_number = int(getattr(state, "round_number", 0)) if state is not None else 0
+        # The shared recorder already contains every decision made by either
+        # seat, so its length is a robust "event happened after the k-th
+        # decision" cursor (the replay uses it to place drawn cards).
+        decision_index = (
+            len(self.recorder) if self.recorder is not None else int(self.decisions)
+        )
         mutations = list(getattr(notification, "mutation", ()))
         # The engine also counts reactions triggered by a *pure elemental
         # application* (``applyAura`` with ``!opt.fromDamage``; mutator.ts
@@ -353,7 +471,7 @@ class PolicyPlayer(Player):
             if which == "skill_used":
                 skill = mutation.skill_used
                 last_skill_who = int(skill.who)
-                sink.append(
+                self._append_event(
                     MatchEvent(
                         kind="skill",
                         player=int(skill.who),
@@ -361,26 +479,28 @@ class PolicyPlayer(Player):
                         skill_definition_id=int(skill.skill_definition_id),
                         skill_type=_skill_type_name(int(skill.skill_type)),
                         source_definition_id=int(skill.caller_definition_id),
+                        decision_index=decision_index,
                     )
                 )
             elif which == "damage":
                 damage = mutation.damage
                 if int(damage.reaction_type) == 0:
                     continue
-                sink.append(
+                self._append_event(
                     MatchEvent(
                         kind="reaction",
                         player=self._owner_by_entity_id.get(int(damage.source_id)),
                         round_number=round_number,
                         reaction_type=_reaction_name(int(damage.reaction_type)),
                         source_definition_id=int(damage.source_definition_id),
+                        decision_index=decision_index,
                     )
                 )
             elif which == "apply_aura":
                 aura = mutation.apply_aura
                 if int(aura.reaction_type) == 0:
                     continue
-                sink.append(
+                self._append_event(
                     MatchEvent(
                         kind="reaction",
                         player=last_skill_who,
@@ -389,6 +509,58 @@ class PolicyPlayer(Player):
                         # ``applyAura`` carries no source entity; the target is
                         # not a "source", so leave the source definition empty.
                         source_definition_id=0,
+                        decision_index=decision_index,
+                    )
+                )
+            elif which == "move_entity":
+                move = mutation.move_entity
+                from_area = int(move.from_where)
+                to_area = int(move.to_where)
+                if from_area != _ENTITY_AREA_HAND and to_area != _ENTITY_AREA_HAND:
+                    continue
+                who = int(move.to_who) if to_area == _ENTITY_AREA_HAND else int(move.from_who)
+                self._append_event(
+                    MatchEvent(
+                        kind="card_move",
+                        player=who,
+                        round_number=round_number,
+                        definition_id=int(move.entity.definition_id),
+                        from_area=from_area,
+                        to_area=to_area,
+                        reason=_MOVE_REASON_NAMES.get(int(move.reason), "unspecified"),
+                        decision_index=decision_index,
+                    )
+                )
+            elif which == "create_entity":
+                create = mutation.create_entity
+                if int(create.where) != _ENTITY_AREA_HAND:
+                    continue
+                self._append_event(
+                    MatchEvent(
+                        kind="card_move",
+                        player=int(create.who),
+                        round_number=round_number,
+                        definition_id=int(create.entity.definition_id),
+                        from_area=0,
+                        to_area=_ENTITY_AREA_HAND,
+                        reason="draw",
+                        decision_index=decision_index,
+                    )
+                )
+            elif which == "remove_entity":
+                remove = mutation.remove_entity
+                if int(remove.where) != _ENTITY_AREA_HAND:
+                    continue
+                self._append_event(
+                    MatchEvent(
+                        kind="card_move",
+                        player=int(remove.who),
+                        round_number=round_number,
+                        definition_id=int(remove.entity.definition_id),
+                        from_area=_ENTITY_AREA_HAND,
+                        to_area=0,
+                        reason=_REMOVE_REASON_NAMES.get(int(remove.reason), "unspecified"),
+                        decision_index=decision_index,
                     )
                 )
 
@@ -463,7 +635,28 @@ class PolicyPlayer(Player):
             player_view=view,
             full_state_json=full_state_json,
             step_index=self._step_index,
+            metadata={"recent_events": self._take_recent_events()},
         )
+
+    def _take_recent_events(self) -> list[dict[str, Any]]:
+        """Public events collected since the previous decision of this seat."""
+        sink = self.event_sink
+        if not sink:
+            return []
+        if self._event_cursor is None:
+            # Everything before the first decision is the starting board (the
+            # deal and the initial supports/summons), which the prompt already
+            # shows; history begins with the first between-decision delta.
+            self._event_cursor = len(sink)
+            return []
+        start = min(self._event_cursor, len(sink))
+        recent = [
+            payload
+            for event in sink[start:]
+            if (payload := _public_event_payload(event, self.who)) is not None
+        ]
+        self._event_cursor = len(sink)
+        return recent
 
     def _decide(self, request_type: DecisionType, request: Any) -> tuple[BuiltDecisionContext, int]:
         self._step_index += 1
@@ -500,6 +693,9 @@ class PolicyPlayer(Player):
                 dict(entry)
                 for entry in (getattr(spec, "metadata", None) or {}).get("preview", ())
             )
+            decider = str(getattr(self.policy, "last_decider", "script") or "script")
+            if decider not in ("llm", "script"):
+                decider = "script"
             self.recorder.append(
                 DecisionRecord(
                     player=self.who,
@@ -519,6 +715,7 @@ class PolicyPlayer(Player):
                     subject_definition_id=subject_definition_id,
                     card_kind=card_kind,
                     preview=preview,
+                    decider=decider,
                 )
             )
         return built, code

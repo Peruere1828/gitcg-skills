@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_dice_economy",
+    "strat_card_draw",
+    "strat_end_round"
+  ],
+  "rationale": "集火残血快速减员，先附着再补元素触发反应，骰子经济与过牌保证5回合内节奏，无收益即结束回合抢先后手。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "aa27f63f80c5",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

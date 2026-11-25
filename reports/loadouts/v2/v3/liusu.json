@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "5回合内需爆发斩杀，选爆发时机与集火；雷草需先附着再补元素；骰子经济与及时结束回合抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "a50ea27fa9ef",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

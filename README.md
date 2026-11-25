@@ -21,16 +21,16 @@
 | Skill 提取 | 从失败/成功局里抽取候选技能（LLM 写 description，规则填 metadata） |
 | Skill 检索 | 条件过滤（关卡/目标类型/敌人/回合）+ BM25，取 top-k 注入上下文 |
 | Skill 更新 | **库级配对 A/B** 通过才入库；滑窗为负则退役；冲突技能二选一 |
-| 创新点 | ① 以「同种子配对反事实」做入库门控 ② 技能分层（规则层/策略层/关卡特化层）③ 激活日志驱动的技能裁撤 |
+| 创新点 | ① 以「同种子配对反事实」做入库门控 ② 技能分层（策略层/关卡特化层，规则在 system）③ 激活日志驱动的技能裁撤 |
 
 ## 2. 实验分组
 
 | 组 | 技能库 | 说明 |
 |---|---|---|
 | ① 脚本 `scripted` | 无 | 手写规则/启发式（对照组，无 LLM） |
-| ②′ `llm_empty` | `data/skills/rules_v1`（17 条 rule） | 同一条 LLM 智能体 + **仅游戏规则**；不含任何 strategy/stage_specific，不用 loadout |
-| ② 静态 `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
-| ③ 动态 `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本，随轮次演进） | 从 ② 起步，自主扩展/合并/淘汰；可用 `reports/loadouts/v4` |
+| ②′ `llm_empty` | 无（规则在 system `GAME_RULES_V2`） | 同一条 LLM 智能体 + **仅游戏规则**；不加载技能库，不用 loadout |
+| ② 静态 `static` | `data/skills/static_v1`（10 strategy，v3） | 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
+| ③ 动态 `dynamic` | `data/skills/dyn_v4`（10 strategy + 28 stage_specific，v5，随轮次演进） | 从 ② 起步，自主扩展/合并/淘汰；可用 `reports/loadouts/v4` |
 
 指标：**三星率**（主）、逐目标达成率、每局 LLM 调用数/token；按关配对比较，50 seeds/关。
 
@@ -49,6 +49,7 @@ python -m skillloop.run --group scripted --stages all --seeds 1 --workers 4
 python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
     --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
     --stages all --seeds 1 --workers 4
+# llm_empty 不加载技能库（规则只在 system）；--library 只对 static/dynamic 生效
 
 # 网页调试：人类扮 NPC、AI 跑实际评测协议 + 决策/技能监控
 bash scripts/serve_web_demo.sh   # http://<本机IP>:7001/

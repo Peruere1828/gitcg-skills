@@ -157,10 +157,13 @@ class ParkablePolicy:
         if self.system is None:
             if self.library is not None:
                 if self.config.pinned_skills:
+                    # Same contract as ``SkillAgentPolicy``: only learned advice is
+                    # pinned; a legacy ``rule_*`` pin from an old loadout is dropped.
                     self.skills = [
                         skill
                         for skill_id in self.config.pinned_skills
                         if (skill := self.library.get(skill_id)) is not None
+                        and skill.layer != "rule"
                     ]
                 elif self.config.top_k > 0:
                     ctx = {
@@ -169,15 +172,7 @@ class ParkablePolicy:
                         "round": int(context.player_view.round_number) if context.player_view else None,
                     }
                     self.skills = self.library.retrieve(self.task.describe(), ctx, k=self.config.top_k)
-            pinned_rule_ids = {
-                skill.skill_id for skill in self.skills if skill.layer == "rule"
-            }
-            rules = (
-                self.library.rules_text(exclude_ids=pinned_rule_ids)
-                if self.library is not None
-                else ""
-            )
-            system = self.renderer.system_message(task=self.task, skills=self.skills, rules_note=rules)
+            system = self.renderer.system_message(task=self.task, skills=self.skills)
             if self.config.scratchpad:
                 system = {
                     **system,
@@ -350,8 +345,8 @@ class ParkedRunner:
         self.client = None if client is _CLIENT_UNSET else client
         # The library is immutable during a run: load it once, not per segment and
         # definitely not per row (the row used to re-read it from disk).
-        # ``llm_empty`` resolves to rules_v1 (LLM + game rules only); static/dynamic
-        # use their defaults or an explicit ``--library`` override.
+        # ``llm_empty`` has no library at all (rules are in the system prompt);
+        # static/dynamic use their defaults or an explicit ``--library`` override.
         self.library_root = resolved_library_root(spec)
         self.library: SkillLibrary | None = (
             SkillLibrary.load(self.library_root) if self.library_root else None
@@ -691,7 +686,7 @@ class ParkedRunner:
         """Mirror ``SkillAgentPolicy._has_strategy_evidence`` exactly."""
         for skill_id in used:
             skill = self.library.get(skill_id) if self.library is not None else None
-            if skill is None or skill.layer == "rule":
+            if skill is None:
                 continue
             if not self.spec.base_guard_strict:
                 return True
@@ -738,6 +733,8 @@ class ParkedRunner:
                 if task.stage.name in self.loadouts else ""
             ),
             "pinned_skills": list(self._pinned(task.stage.name)),
+            # Skills actually built into the rich prompt (rule pins are dropped).
+            "injected_skills": [skill.skill_id for skill in task.skills],
             "winner": task.winner,
             "rounds": task.rounds,
             "three_star": bool(stars.three_star) if stars else False,

@@ -39,12 +39,14 @@
 | `reps/action_adapter.py` | `_action_preview` 增抓 `create_entity`（HAND→`hand_add`，CHARACTER→`attach`）与 `remove_entity`（HAND→`hand_remove`，带 `reason`），上限 12→24 | 手牌操作（星斗归位弃雷楔换附魔）此前被截掉，回放无法解释手牌 7→6。2026-11-24 |
 | `envs/match.py` | `DecisionRecord` 增 `preview` 字段，recorder 从所选动作 `spec.metadata["preview"]` 写入，`asdict_decision` 一并输出 | 回放需要逐动作的引擎预测来解释手牌/附属变化。2026-11-24 |
 | `envs/match.py`、`skillloop/parked.py` | `run_match` / `_make_game` 新增 `player1_always_omni`（经 `game.set_attr(ATTR_PLAYER_ALWAYS_OMNI_1)`；`CreateParam.set_attr` 会拒绝 3011）；`skillloop/run.py`、`npc/eval.py`、`ParkedRunner` 的 PvE 路径开启 | 游戏内 NPC 每轮初始掷骰为 8 个万能骰；NPC policy 不重掷，避免引擎 `reroll` 用普通随机骰破坏该规则。2026-11-24 |
+| `envs/match.py` | `DecisionRecord` 增 `decider`（`llm`/`script`，来自 policy 的 `last_decider`）；`MatchEvent` 增 `definition_id/from_area/to_area/reason/decision_index`，`_collect_events` 收 `card_move`（HAND 进出，reason 映射 proto），事件上限 400 | 回放要标注真实决策归属、显示换牌/重掷/抽牌；此前机械行一律写「脚本策略」，把 LLM 的换牌/选人也标错。2026-11-25 |
+| `envs/match.py` | `PolicyPlayer._build` 把「上次决策以来的公开事件」投影进 `DecisionContext.metadata["recent_events"]`（对方 `card_move` 只给方向/张数，不给 definition id） | 决策 prompt 需要「对局历史」，且只能含 P0 可见信息；投影函数是唯一出口，避免把上帝视角写进 prompt。2026-11-25 |
 
 ## 4. 本项目的创新点（代码中标注 `INNOVATION:`）
 
 1. **库级配对反事实门控**：技能能否入库由「同种子、同关卡、开/关技能库」的配对三星率决定，
    而不是 LLM 自评（`skillloop/gate.py`）。
-2. **分层技能库**：规则层 / 策略层 / 关卡特化层，检索时按条件优先匹配特化层（`skillloop/library.py`）。
+2. **分层技能库**：策略层 / 关卡特化层（规则层 2026-11-25 删除，规则只在 system 的 wiki 文本里），检索时按条件优先匹配特化层（`skillloop/library.py`）。
 3. **激活日志驱动的裁撤**：每条技能记录被检索/被引用的决策数，长期零激活或消融为负则退役
    （`skillloop/library.py`、`skillloop/extract.py`）。
 4. **难度标定任务集**：按目标类型与回合分布标定三星阈值，使任务处于「可达成但有区分度」区间

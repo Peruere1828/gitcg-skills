@@ -14,18 +14,18 @@ only what the course experiments need:
 Usage::
 
     python -m skillloop.run --group scripted --stages all --seeds 3 --workers 6
-    python -m skillloop.run --group llm_empty --stages all --seeds 50   # rules_v1
-    python -m skillloop.run --group static --loadout reports/loadouts/v2 --seeds 50
+    python -m skillloop.run --group llm_empty --stages all --seeds 50   # rules only
+    python -m skillloop.run --group static --loadout reports/loadouts/v3 --seeds 50
     python -m skillloop.run --group dynamic --library data/skills/dyn_v4 \
-        --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \
+        --stage-decks configs/stage_decks.json --loadout reports/loadouts/v6 \
         --seeds 50 --out data/runs/dynamic_loadout.jsonl
     python -m skillloop.run --group scripted --stages all --seeds 3 --stage-rules
 
 Group defaults (``--library`` may only override static/dynamic)::
 
-    llm_empty -> data/skills/rules_v1   (17 rule; no strategy/stage_specific, no loadout)
-    static    -> data/skills/static_v1  (17 rule + 10 strategy)
-    dynamic   -> data/skills/dyn_v4     (17 rule + 23 strategy)
+    llm_empty -> no library      (LLM + the system's fixed game rules; no loadout)
+    static    -> data/skills/static_v1  (10 strategy)
+    dynamic   -> data/skills/dyn_v4     (10 strategy + 28 stage_specific)
 
 Seeds are ``1..N`` (or an explicit comma list); **seed 0 is refused**. The engine's
 RNG is a minstd LCG (``A=48271, C=0``) and 0 is its absorbing state, so a game at
@@ -78,16 +78,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CODE_TREES = ("skillloop", "envs", "reps", "npc", "common")
 
 GROUPS = ("scripted", "contestant", "llm_empty", "static", "dynamic")
-# Groups that load a skill library. ``llm_empty`` is **not** an empty prompt: it is
-# the "LLM + game rules only" arm, so it loads the 17-rule rules_v1 library.
-LIBRARY_GROUPS = ("llm_empty", "static", "dynamic")
+# Groups that call the model. ``llm_empty`` is the "LLM + game rules only" arm: the
+# rules are the fixed ``prompt_v2.GAME_RULES_V2`` system text and there is no
+# library, so it differs from ``static`` by the injected skills alone.
+LLM_GROUPS = ("llm_empty", "static", "dynamic")
+# Groups that load a skill library. ``llm_empty`` deliberately loads none.
+LIBRARY_GROUPS = ("static", "dynamic")
 # Frozen stage loadouts only make sense when the library has strategy candidates;
 # llm_empty deliberately ignores ``--loadout``.
 LOADOUT_GROUPS = ("static", "dynamic")
 DEFAULT_LIBRARY_ROOTS = {
-    "llm_empty": "data/skills/rules_v1",   # 17 rule skills, no strategy/stage_specific
-    "static": "data/skills/static_v1",     # 17 rule + 10 strategy
-    "dynamic": "data/skills/dyn_v4",       # 17 rule + evolving strategy layer
+    "static": "data/skills/static_v1",     # 10 strategy
+    "dynamic": "data/skills/dyn_v4",       # 10 strategy + evolving stage_specific layer
 }
 
 
@@ -128,7 +130,7 @@ class RunSpec:
     # Experimental prompt/agent levers (default off; separate fingerprints):
     #   rich_render: candidate/state effects, auras, reaction hints, hand count
     #   round_plan: structured per-round scratchpad plan (implies scratchpad)
-    #   base_guard: keep the scripted expert action unless the LLM cites a non-rule skill
+    #   base_guard: keep the scripted expert action unless the LLM cites an injected skill
     # The full prompt is now the default for every LLM group; ``--compact-render``
     # keeps the old minimal prompt for reproducing historical runs.
     rich_render: bool = True
@@ -221,12 +223,13 @@ class RunSpec:
 def resolved_library_root(spec: "RunSpec") -> str | None:
     """The library actually used by ``spec.group`` (defaults applied).
 
-    ``llm_empty`` is fixed to ``rules_v1`` and ignores an explicit ``library_root``;
-    ``static``/``dynamic`` may override their default; the other groups load none.
+    ``llm_empty`` has no library at all (rules are in the system prompt) and
+    ignores an explicit ``library_root``; ``static``/``dynamic`` may override their
+    default; the other groups load none.
     """
+    if spec.group == "llm_empty":
+        return None
     if spec.group in LIBRARY_GROUPS:
-        if spec.group == "llm_empty":
-            return DEFAULT_LIBRARY_ROOTS["llm_empty"]
         return spec.library_root or DEFAULT_LIBRARY_ROOTS[spec.group]
     return None
 
@@ -512,7 +515,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     pinned_skills = tuple(loadout.skills) if loadout is not None else ()
 
     client = None
-    if spec.group in LIBRARY_GROUPS:
+    if spec.group in LLM_GROUPS:
         from common.llm import build_llm_client
 
         client = build_llm_client()
@@ -582,6 +585,14 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
     elapsed = time.perf_counter() - started
     stars = evaluate_stage(stage, record)
     decisions = getattr(policy0, "decisions", []) or []
+    # ``pinned_skills`` is the *request* (the frozen loadout); ``injected_skills`` is
+    # what actually reached the rich prompt. Rule-layer pins are dropped by
+    # ``SkillAgentPolicy``, so the two differ whenever a loadout contains them.
+    injected_skills = (
+        [skill.skill_id for skill in policy0._skills]
+        if isinstance(policy0, SkillAgentPolicy)
+        else []
+    )
     usage = getattr(client, "usage", None)
     library_root = resolved_library_root(spec)
     if loadout is not None:
@@ -617,6 +628,7 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         "library_version": library_version,
         "skill_loadout_hash": loadout.fingerprint() if loadout is not None else "",
         "pinned_skills": list(pinned_skills),
+        "injected_skills": injected_skills,
         "winner": record.winner,
         "rounds": record.rounds,
         "three_star": bool(stars.three_star),
@@ -654,6 +666,9 @@ def play_one(payload: dict[str, Any]) -> dict[str, Any]:
         row["trace_meta"] = {
             "n_decisions": len(match_decisions),
             "truncated": bool(trace_meta.get("truncated", False)),
+            # Who made the recorded decisions (LLM vs script counts); produced by
+            # ``compact_trace`` from each decision's ``decider`` label.
+            "deciders": dict(trace_meta.get("deciders") or {}),
         }
     return row
 
@@ -727,8 +742,8 @@ def run(spec: RunSpec, *, progress: bool = True) -> dict[str, Any]:
     stage_decks = _stage_decks_for_spec(spec)
     if progress and spec.group == "llm_empty" and spec.library_root:
         print(
-            f"[run] --library ignored for group 'llm_empty' "
-            f"(fixed library: {DEFAULT_LIBRARY_ROOTS['llm_empty']})",
+            "[run] --library ignored for group 'llm_empty' "
+            "(no skill library; rules live in the system prompt)",
             flush=True,
         )
     loadouts = _loadouts_for_spec(spec)
@@ -922,7 +937,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
         "--library", default=None,
-        help="skill library override (static/dynamic only; llm_empty is fixed to rules_v1)",
+        help="skill library override (static/dynamic only; llm_empty has no library)",
     )
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--model", default=None)
@@ -944,7 +959,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--round-plan", action="store_true",
                         help="structured per-round plan in the scratchpad (implies --scratchpad)")
     parser.add_argument("--base-guard", action="store_true",
-                        help="keep the scripted expert action unless the LLM cites a non-rule skill")
+                        help="keep the scripted expert action unless the LLM cites an injected skill")
     parser.add_argument("--base-guard-strict", action="store_true",
                         help="with --base-guard: only stage-specific/stage-named skills count")
     parser.add_argument("--override-kinds", default="",

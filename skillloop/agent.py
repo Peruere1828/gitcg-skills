@@ -18,6 +18,7 @@ version can be audited after the fact (``skillloop.gate``).
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
@@ -26,6 +27,7 @@ from common.llm import extract_json_object
 from reps.action_adapter import BuiltDecisionContext
 from reps.schema import OptionKind
 from skillloop.cards import card_kind, skill_kind
+from skillloop.history import MatchHistory
 from skillloop.library import SkillLibrary
 from common.llm import set_trace_context
 
@@ -70,7 +72,7 @@ class AgentConfig:
     # message carries a one-line per-round reminder. Off by default.
     round_plan: bool = False
     # Base guard: only let the model's choice stand when it cites at least one
-    # non-rule skill; otherwise fall back to the deck expert. Off by default.
+    # injected skill; otherwise fall back to the deck expert. Off by default.
     base_guard: bool = False
     # Strict base guard: only a stage-specific skill (or a skill id carrying the
     # current stage name, e.g. ``skill_liusu``) counts as evidence. Generic
@@ -182,6 +184,43 @@ def scratchpad_instruction(note_max_chars: int, round_plan: bool = False) -> str
     )
 
 
+_CANDIDATE_PREFIX = re.compile(r"^\[\d+\]\s*")
+#: Markers that separate the plain action label from dynamic advice/forecast text.
+_LABEL_STOPS = ("（", "；预计", " 需求")
+
+
+def _own_action_label(
+    renderer: Any,
+    context: Any,
+    candidates: Sequence[tuple[int, Any]],
+    code: int,
+) -> str:
+    """Short label of the action actually committed, for the match history.
+
+    ``describe_candidate`` is the single source of naming (skill / card / target),
+    so a history line always matches the candidate list the model just saw. The
+    trailing cost/preview blocks are dropped: the history is a record of fact.
+    """
+    for index, (candidate, spec) in enumerate(candidates):
+        if int(candidate) != int(code):
+            continue
+        try:
+            text = renderer.describe_candidate(context, spec, index)
+        except Exception:
+            return ""
+        text = _CANDIDATE_PREFIX.sub("", str(text or "")).strip()
+        for marker in _LABEL_STOPS:
+            cut = text.find(marker)
+            if cut > 0:
+                text = text[:cut]
+        text = text.strip()
+        if text.endswith("换掉"):
+            # "起手换牌：换掉" means the mask was 0 (keep everything).
+            text = text[: -len("换掉")] + "全部保留"
+        return text
+    return ""
+
+
 class SkillAgentPolicy:
     """LLM policy over the legal candidates, with the deck expert as fallback."""
 
@@ -193,7 +232,6 @@ class SkillAgentPolicy:
         renderer: StateRenderer,
         task: TaskSpec,
         library: SkillLibrary | None = None,
-        rules_note: str = "",
         config: AgentConfig | None = None,
         on_decision: Callable[[Decision], None] | None = None,
     ) -> None:
@@ -202,12 +240,15 @@ class SkillAgentPolicy:
         self.renderer = renderer
         self.task = task
         self.library = library
-        self.rules_note = rules_note
         self.config = config or AgentConfig()
         self.on_decision = on_decision
         self.decisions: list[Decision] = []
         self.calls = 0
         self.name = f"llm+{getattr(base, 'name', 'base')}"
+        # ``envs.match.PolicyPlayer`` reads this on every decision to label the
+        # recorded row as an LLM or script choice. Default to script and flip it
+        # only right before a real model call.
+        self.last_decider = "script"
         self._system: dict[str, str] | None = None
         self._system_hash = ""
         self._skills: list[Skill] = []
@@ -218,6 +259,9 @@ class SkillAgentPolicy:
         # Last round for which the round-plan reminder was emitted. ``-1`` means
         # no decision yet, so the first decision always gets the reminder.
         self._last_plan_round: int | None = -1
+        # Public, own-seat-only log of what both sides did between decisions.
+        # It is per-game working memory like the scratchpad: never persisted.
+        self.history = MatchHistory()
 
     # -- prompt ---------------------------------------------------------------
     def _scratchpad_instruction(self) -> str:
@@ -232,12 +276,10 @@ class SkillAgentPolicy:
         if self._system is None:
             if self.library is not None:
                 if self.config.pinned_skills:
-                    # Frozen loadout: exactly these ids, in order; unknown ids skipped.
-                    # Rule-layer entries are dropped: the rich prompt already carries
-                    # the full wiki rules and objective judgements in the system
-                    # prefix, so pinning ``rule_*`` again would only duplicate them.
-                    # ``static`` therefore differs from ``llm_empty`` by the strategy
-                    # skills alone.
+                    # Frozen loadout: exactly these ids, in order; unknown ids
+                    # skipped. Only learned advice may be pinned; the game rules
+                    # are not a library layer any more, and a legacy ``rule_*`` pin
+                    # from an old loadout is dropped the same way.
                     self._skills = [
                         skill
                         for skill_id in self.config.pinned_skills
@@ -248,20 +290,7 @@ class SkillAgentPolicy:
                     self._skills = self.library.retrieve(
                         self.task.describe(), self._context_dict(context), k=self.config.top_k
                     )
-            if self.library is not None and not self.rules_note:
-                # A frozen loadout may pin rule-layer skills (e.g. ``rule_burst``).
-                # They stay in the pinned block for citation accounting, but must not
-                # be repeated by the always-on rules note.
-                pinned_rule_ids = {
-                    skill.skill_id for skill in self._skills if skill.layer == "rule"
-                }
-                self.rules_note = self.library.rules_text(exclude_ids=pinned_rule_ids)
-            # ``rules_note`` feeds the plain/compact renderer (historical minimal
-            # prompt) and stays on the policy for audit; the rich renderer ignores it
-            # and uses the fixed ``prompt_v2.GAME_RULES_V2`` instead.
-            system = self.renderer.system_message(
-                task=self.task, skills=self._skills, rules_note=self.rules_note
-            )
+            system = self.renderer.system_message(task=self.task, skills=self._skills)
             if self.config.scratchpad:
                 system = {
                     **system,
@@ -327,7 +356,7 @@ class SkillAgentPolicy:
     def _has_strategy_evidence(self, used: Sequence[str]) -> bool:
         """True when at least one cited skill can justify overriding the expert.
 
-        Normal mode: any non-rule layer. Strict mode: only ``stage_specific`` or
+        Normal mode: any injected skill. Strict mode: only ``stage_specific`` or
         an id carrying this stage's name (the dyn libraries name stage skills
         ``skill_<stage>``); generic ``strat_*`` advice is not enough.
         """
@@ -335,7 +364,7 @@ class SkillAgentPolicy:
         stage = str(getattr(self.task, "stage", "") or "")
         for skill_id in used:
             skill = by_id.get(skill_id)
-            if skill is None or skill.layer == "rule":
+            if skill is None:
                 continue
             if not self.config.base_guard_strict:
                 return True
@@ -347,7 +376,18 @@ class SkillAgentPolicy:
 
     # -- policy ---------------------------------------------------------------
     def choose(self, built: BuiltDecisionContext) -> int:
+        # Every early return below keeps the base/script choice; only the branch
+        # that really builds the prompt and calls the model flips this to "llm".
+        self.last_decider = "script"
         context = built.context
+        # Consume the public events/state delta *before* any early return so the
+        # history stays complete even across script-only decisions (a mulligan or
+        # a forced pick still happened, it is just not attributed to the model).
+        try:
+            self.history.consume(context)
+        except Exception:
+            # The log is auxiliary: a surprising snapshot must never cost a game.
+            pass
         base_code = int(self.base.choose(built))
         if context.request_type.value not in self.config.request_types:
             return self._finish(context, base_code)
@@ -361,7 +401,9 @@ class SkillAgentPolicy:
 
         system = self._system_message(context)
         progress = progress_block(self.task, context, self._signals)
-        user = self.renderer.user_message(context, candidates, progress=progress)
+        user = self.renderer.user_message(
+            context, candidates, progress=progress, history=self.history.render()
+        )
         if self.config.expert_hint:
             for index, (code, spec) in enumerate(candidates):
                 if int(code) == base_code:
@@ -388,6 +430,9 @@ class SkillAgentPolicy:
             step=int(context.step_index),
             method=context.request_type.value,
         )
+        # From here on a model call is actually issued (a raising client still
+        # counts as an LLM attempt, matching the recorded ``http_calls``).
+        self.last_decider = "llm"
         raw = self.client.chat(
             [system, user],
             max_tokens=self.config.max_tokens,
@@ -416,7 +461,7 @@ class SkillAgentPolicy:
             final_code = base_code
             guarded = True
         elif self.config.base_guard and not self._has_strategy_evidence(used):
-            # No non-rule skill cited: the model's pick is unsupported, so keep the
+            # No injected skill cited: the model's pick is unsupported, so keep the
             # deck expert's scripted (era/expert) action instead.
             final_code = base_code
             guarded = True
@@ -450,4 +495,10 @@ class SkillAgentPolicy:
         self.decisions.append(decision)
         if self.on_decision is not None:
             self.on_decision(decision)
+        # Only a real prompt-injected choice is attributed to "我方" here; the
+        # expert/script fallbacks above return before this point, so a scripted
+        # action is never presented to the model as its own past decision.
+        self.history.record_own(
+            context, _own_action_label(self.renderer, context, candidates, final_code)
+        )
         return self._finish(context, final_code)

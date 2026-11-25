@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "strat_equipment_timing",
+    "strat_mulligan",
+    "strat_dice_economy",
+    "strat_focus_fire",
+    "strat_end_round"
+  ],
+  "rationale": "三星需打出武器牌且5回合内速胜：装备时机与起手保留确保武器牌打出，骰子经济与集火残血压缩回合数，无收益即结束回合抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "78c450883efe",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

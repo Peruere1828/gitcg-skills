@@ -1,5 +1,9 @@
 # dynamic 组两轮进化结果（2026-11-25）
 
+> **2026-11-25 superseded**：此后 prompt 增加了「对局历史」段，`rule` 层已从库中删除，
+> `static` 的 loadout 重规划为每关 5 条 strategy（旧版只有 1–3 条生效）。
+> 本文数字属于旧 prompt / 旧库口径，只能作历史记录；新结果见 `data/runs/v12_*`。
+
 > 口径：16 关 × 5 seeds = 80 局/组，配对比较；训练与评测**不同 seed 块**
 > （训练 seeds 1–5，评测 seeds 6–10）。数据在 `data/runs/v11_*`（未入库）。
 > 基线口径见 [`baseline_20261125_pve_prompt_v1.md`](./baseline_20261125_pve_prompt_v1.md)；

@@ -1,6 +1,13 @@
 """Skill schema: the smallest representation that satisfies the course requirement
 (``skill_id`` / ``skill_name`` / ``description``) plus what our experiments need
 (conditions for retrieval, evidence for gating, version for lifecycle).
+
+There is deliberately **no ``rule`` layer**: the game rules are a single fixed text
+(``skillloop.prompt_v2.GAME_RULES_V2``) baked into the system message, so they can
+never drift from the engine and never compete with learned advice for context.
+Older library snapshots that still carry ``layer == "rule"`` entries are read
+tolerantly by :meth:`skillloop.library.SkillLibrary.load`, which drops them with one
+stderr note (history files stay inspectable; the live prompt does not change).
 """
 
 from __future__ import annotations
@@ -8,7 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-LAYERS = ("rule", "strategy", "stage_specific")
+LAYERS = ("strategy", "stage_specific")
 STATUSES = ("candidate", "active", "degraded", "retired")
 
 

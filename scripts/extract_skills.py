@@ -7,7 +7,7 @@ Pipeline (the "dynamic" arm's first half):
 2. build a per-stage failure profile (which objectives fail, how often, round stats)
    plus one close loss and one 3★ trace per stage when rows carry ``trace``;
 3. attach the stage's fixed deck facts (``configs/stage_decks.json``), its special
-   rules (``configs/npc/special_rules.json``) and the relevant non-rule skills from
+   rules (``configs/npc/special_rules.json``) and the relevant learned skills from
    the base library, so candidates can name concrete characters/cards and replace
    a known-bad skill instead of repeating it. Relevance is stage-first and demotes
    strategy text that names another stage; at least two generic ``strat_*`` skills
@@ -29,7 +29,7 @@ under ``history/`` so a failed gate is just "don't promote".
 Usage::
 
     python -m scripts.extract_skills --rows data/runs/smoke2_llm_empty.jsonl \\
-        --base data/skills/rules_v1 --out data/skills/dyn_v1
+        --base data/skills/static_v1 --out data/skills/dyn_v4
 """
 
 from __future__ import annotations
@@ -329,8 +329,8 @@ def relevant_existing_skills(
     Near-duplicate advice is de-duplicated by its first :data:`DEDUPE_PREFIX`
     characters (highest rank wins), and at least
     :data:`GENERIC_STRATEGY_RESERVE` slots stay for generic ``strat_*`` skills so
-    a stage never only sees stage-named text. Rule-layer skills are excluded
-    (they arrive via ``rules_note``).
+    a stage never only sees stage-named text. The game rules are not a library
+    layer, so only ``strategy``/``stage_specific`` skills are considered.
     """
     cap = max(0, int(limit))
     if cap == 0:
@@ -529,7 +529,7 @@ def enrich_profiles(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--rows", required=True, help="per-game JSONL of the run to learn from")
-    ap.add_argument("--base", default="data/skills/rules_v1", help="library to extend (may be absent)")
+    ap.add_argument("--base", default="data/skills/static_v1", help="library to extend (may be absent)")
     ap.add_argument("--out", default="data/skills/dyn_v1")
     ap.add_argument("--model", default=None)
     ap.add_argument("--min-failure-rate", type=float, default=0.15)
@@ -576,7 +576,6 @@ def main(argv: list[str] | None = None) -> int:
         # another stage (B5) instead of spending a slot on it.
         all_stages=tuple(objectives_by_stage),
     )
-    rules_note = library.rules_text()
     # Same TaskSpec / special-rules text the decision prompt uses, so the
     # reflection system message and the in-game system message share one source.
     tasks = build_stage_tasks(
@@ -592,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("no LLM config; fill .env (see scripts/probe_llm.py)")
 
     candidates = propose_candidates(
-        client, profiles, model=args.model, rules_note=rules_note,
+        client, profiles, model=args.model,
         min_failure_rate=args.min_failure_rate,
         effort=args.effort, max_tokens=args.max_tokens,
         tasks=tasks, special_rules_by_stage=special_rules_by_stage,

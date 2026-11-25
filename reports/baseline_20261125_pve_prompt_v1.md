@@ -1,5 +1,9 @@
 # 基线：修正后的 PvE 规则 + 重构 prompt（seeds 1–5）
 
+> **2026-11-25 superseded**：此后 prompt 增加了「对局历史」段，`rule` 层已从库中删除，
+> `static` 的 loadout 重规划为每关 5 条 strategy（旧版只有 1–3 条生效）。
+> 本文数字属于旧 prompt / 旧库口径，只能作历史记录；新结果见 `data/runs/v12_*`。
+
 > 生成日期 2026-11-25。**这是当前唯一有效的性能基线。** 之前所有结果（NPC 随机掷骰、
 > 旧 prompt、seed 0、pin 旧卡池）一律作废，不作为对照。
 > 数据：`data/runs/v10_{scripted,llm_empty,static}_s1_5.jsonl`（逐局 JSONL，未入库）。

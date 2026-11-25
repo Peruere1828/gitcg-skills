@@ -48,6 +48,38 @@ def _entity(definition_id: int, **variables: int) -> dict[str, Any]:
     }
 
 
+def _held(entity_id: int, definition_id: int) -> dict[str, Any]:
+    """A hand card with both the engine instance id and its definition id."""
+    return {
+        "id": int(entity_id),
+        "definition_id": int(definition_id),
+        "variables": {},
+        "attachments": [],
+    }
+
+
+def _card_move(
+    player: int,
+    definition_id: int,
+    *,
+    reason: str = "draw",
+    to_area: int = 5,
+    from_area: int = 0,
+    round_number: int = 1,
+    decision_index: int = 1,
+) -> MatchEvent:
+    return MatchEvent(
+        kind="card_move",
+        player=player,
+        round_number=round_number,
+        definition_id=definition_id,
+        from_area=from_area,
+        to_area=to_area,
+        reason=reason,
+        decision_index=decision_index,
+    )
+
+
 def _player(
     characters: tuple[dict[str, Any], ...],
     *,
@@ -98,11 +130,13 @@ def _decision(
     subject: int = 0,
     card_kind: str | None = None,
     preview: tuple[dict[str, Any], ...] = (),
+    request: str = "action",
+    decider: str = "script",
 ) -> DecisionRecord:
     return DecisionRecord(
         player=player,
         step_index=step,
-        request_type="action",
+        request_type=request,
         chosen_action_code=1,
         chosen_label=label,
         chosen_kind=kind,
@@ -113,6 +147,7 @@ def _decision(
         subject_definition_id=subject,
         card_kind=card_kind,
         preview=preview,
+        decider=decider,
     )
 
 
@@ -161,10 +196,11 @@ def _mechanical(label: str, request: str = "reroll_dice") -> DecisionRecord:
 
 def test_reroll_line_uses_element_symbols():
     trace = compact_trace(_row(), [_mechanical("reroll:2,2,4,5,5,6,6,7")], [])
-    assert trace[0] == "R1 P0 重掷 [水,水,雷,风,风,岩,岩,草]（脚本策略，非 LLM 决策）"
-    assert compact_trace(_row(), [_mechanical("reroll:none")], [])[0] == (
-        "R1 P0 重掷（脚本策略，非 LLM 决策）"
-    )
+    assert trace[0] == "R1 P0 重掷 [水,水,雷,风,风,岩,岩,草]（脚本策略）"
+    # Choosing not to reroll is a no-op: no empty "重掷" row.
+    assert all("重掷" not in line for line in compact_trace(
+        _row(), [_mechanical("reroll:none")], []
+    ))
 
 
 def test_npc_skill_name_and_effect_are_resolved():
@@ -867,3 +903,200 @@ def test_hand_add_line_omits_unresolvable_cards_and_caps_names():
     decisions[1] = _decision(0, 2, label="use_skill:0:none",
                              kind="action_use_skill", view=p0_r1, subject=14031)
     assert all("手牌新增" not in line for line in compact_trace(_row(), decisions, []))
+
+
+# --------------------------------------------------------------------------- #
+# (g) switch-hands: entity id -> card name, NPC mask, gains from the next view
+# --------------------------------------------------------------------------- #
+def test_switch_hands_names_discarded_and_gained_cards():
+    before = _view(
+        _player(
+            (_char(1401),),
+            hand=(_held(-101, 332009), _held(-102, 332002)),  # 白垩之术 / 换班时间
+        ),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    after = _view(
+        _player(
+            (_char(1401),),
+            hand=(_held(-201, 322012), _held(-202, 217011)),  # 刘苏 / 飞叶迴斜
+        ),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    decisions = [
+        _decision(0, 1, label="switch_hands:-101,-102", kind="switch_hands",
+                  view=before, request="switch_hands"),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=after, subject=14031),
+    ]
+    trace = compact_trace(_row(), decisions, [])
+    assert (
+        "R1 P0 换牌：弃置「白垩之术」、「换班时间」→ 获得「刘苏」、「飞叶迴斜」（脚本策略）"
+        in trace
+    )
+
+
+def test_switch_hands_masks_npc_cards_as_a_count():
+    view = _view(
+        _player((_char(1401),)),
+        _player((_char(3301),), hand=(_held(-201, 0), _held(-202, 0))),
+        round_number=1,
+    )
+    decision = _decision(1, 1, label="switch_hands:-201,-202", kind="switch_hands",
+                         view=view, request="switch_hands")
+    trace = compact_trace(_row(), [decision], [])
+    assert "R1 P1(NPC) 换牌 2 张（脚本策略）" in trace
+    # The masked hand never leaks instance ids or fake names.
+    assert all("#-2" not in line for line in trace)
+
+
+def test_switch_hands_gains_fall_back_to_card_move_events():
+    before = _view(
+        _player((_char(1401),), hand=(_held(-101, 332009),)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    decision = _decision(0, 1, label="switch_hands:-101", kind="switch_hands",
+                         view=before, request="switch_hands")
+    events = [_card_move(0, 322012, reason="switch", decision_index=1)]
+    trace = compact_trace(_row(), [decision], events)
+    assert "R1 P0 换牌：弃置「白垩之术」→ 获得「刘苏」（脚本策略）" in trace
+
+
+# --------------------------------------------------------------------------- #
+# (h) reroll: old pool -> new pool, masked NPC pool, no "none" noise
+# --------------------------------------------------------------------------- #
+def test_reroll_shows_old_pool_arrow_new_pool():
+    before = _view(
+        _player((_char(1401),), dice=(2, 2, 7)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    after = _view(
+        _player((_char(1401),), dice=(8, 8, 4)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    decisions = [
+        _decision(0, 1, label="reroll:2,2,7", kind="reroll_dice",
+                  view=before, request="reroll_dice"),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=after, subject=14031),
+    ]
+    trace = compact_trace(_row(), decisions, [])
+    assert "R1 P0 重掷 [水,水,草] → [万,万,雷]（脚本策略）" in trace
+
+
+def test_npc_reroll_none_adds_no_noise_row():
+    view = _view(
+        _player((_char(1401),)),
+        _player((_char(3301),), dice=(2, 3)),
+        round_number=1,
+    )
+    decision = _decision(1, 1, label="reroll:none", kind="reroll_dice",
+                         view=view, request="reroll_dice")
+    trace = compact_trace(_row(), [decision], [])
+    assert all("重掷" not in line for line in trace)
+    assert "R1 对方骰子：[水,火]（2个）" in trace
+
+
+def test_masked_npc_reroll_has_no_arrow():
+    view = _view(
+        _player((_char(1401),)),
+        _player((_char(3301),), dice=(3,)),
+        round_number=1,
+    )
+    decision = _decision(1, 1, label="reroll:3", kind="reroll_dice",
+                         view=view, request="reroll_dice")
+    trace = compact_trace(_row(), [decision], [])
+    line = next(line for line in trace if "重掷" in line)
+    assert line == "R1 P1(NPC) 重掷 [火]（脚本策略）"
+    assert "→" not in line
+
+
+# --------------------------------------------------------------------------- #
+# (i) draw rows from card_move events, placed right after the trigger
+# --------------------------------------------------------------------------- #
+def test_draw_rows_follow_the_triggering_action_with_names():
+    decision = _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                         subject=14031)
+    events = [
+        _card_move(0, 114031, decision_index=1),  # 雷楔
+        _card_move(0, 333003, decision_index=1),  # 莲花酥
+    ]
+    trace = compact_trace(_row(), [decision], events)
+    assert trace[0].startswith("R1 P0 技能 ")
+    assert trace[1] == "R1 P0 抽牌：「雷楔」、「莲花酥」"
+
+
+def test_end_phase_draws_after_the_last_decision_are_still_shown():
+    decisions = [
+        _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                  subject=14031),
+        _decision(0, 2, label="declare_end:0:none", kind="action_declare_end"),
+    ]
+    events = [
+        _card_move(0, 114031, decision_index=2),
+        _card_move(0, 333003, decision_index=2),
+    ]
+    trace = compact_trace(_row(), decisions, events)
+    assert "R1 P0 抽牌：「雷楔」、「莲花酥」" in trace
+    draw_index = trace.index("R1 P0 抽牌：「雷楔」、「莲花酥」")
+    assert trace[draw_index - 1].startswith("R1 P0 结束")
+
+
+def test_masked_npc_draws_are_a_count():
+    decision = _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                         subject=14031)
+    events = [
+        _card_move(1, 0, decision_index=1),
+        _card_move(1, 0, decision_index=1),
+    ]
+    trace = compact_trace(_row(), [decision], events)
+    assert "R1 P1(NPC) 抽牌 2 张" in trace
+
+
+# --------------------------------------------------------------------------- #
+# (j) mechanical note follows the recorded decider
+# --------------------------------------------------------------------------- #
+def test_mechanical_rows_label_llm_vs_script_and_reroll_is_always_script():
+    llm_pick = _decision(
+        0, 1, label="choose_active:1403", kind="choose_active",
+        subject=1403, request="choose_active", decider="llm",
+    )
+    llm_reroll = _decision(
+        0, 2, label="reroll:3", kind="reroll_dice",
+        request="reroll_dice", decider="llm",
+    )
+    trace = compact_trace(_row(), [llm_pick, llm_reroll], [])
+    assert "R1 P0 选人：刻晴（LLM 决策）" in trace
+    assert "R1 P0 重掷 [火]（脚本策略）" in trace
+
+
+def test_switch_hands_without_a_view_falls_back_to_entity_ids():
+    decision = _decision(0, 1, label="switch_hands:-101", kind="switch_hands",
+                         request="switch_hands")
+    trace = compact_trace(_row(), [decision], [])
+    assert "R1 P0 换牌：弃置「#-101」（脚本策略）" in trace
+
+
+def test_card_move_draws_replace_the_legacy_hand_add_line():
+    a = _entity(332001)  # 最好的伙伴！
+    b = _entity(332004)  # 运筹帷幄
+    p0_r1 = _view(_player((_char(1401),), hand=(a,)), _player((_char(3301),)),
+                  round_number=1)
+    p0_r2 = _view(_player((_char(1401),), hand=(a, b)), _player((_char(3301),)),
+                  round_number=2)
+    decisions = [
+        _decision(0, 1, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r1, subject=14031),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=p0_r2, subject=14031),
+    ]
+    trace = compact_trace(
+        _row(), decisions, [_card_move(0, 332004, decision_index=1)]
+    )
+    assert "R1 P0 抽牌：「运筹帷幄」" in trace
+    assert all("手牌新增" not in line for line in trace)

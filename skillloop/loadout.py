@@ -11,6 +11,10 @@ choice depends on the deck's characters and card mix.
 
 INNOVATION: stage-level loadout selection with a deterministic BM25 fallback and a
 stale-loadout check, so a library/engine bump cannot silently reuse old skills.
+
+Only ``strategy``/``stage_specific`` skills are candidates: the game rules are the
+fixed ``prompt_v2.GAME_RULES_V2`` text in the system prefix, not a library layer, so
+they never occupy a loadout slot.
 """
 
 from __future__ import annotations
@@ -131,8 +135,17 @@ def stage_context(stage: NpcStage) -> dict[str, Any]:
 
 
 def applicable_skills(stage: NpcStage, library: SkillLibrary) -> list[Any]:
-    """Active skills whose conditions match this stage (rule layer included)."""
-    return library.applicable(stage_context(stage))
+    """Active stage-applicable skills (``strategy``/``stage_specific`` only).
+
+    The game rules are not a library layer, so a legacy ``rule_*`` entry (read from
+    an old snapshot) would be an unusable slot; it is excluded here and ``allowed``
+    rejects it at parse time.
+    """
+    return [
+        skill
+        for skill in library.applicable(stage_context(stage))
+        if skill.layer != "rule"
+    ]
 
 
 def _objective_detail(objective: NpcObjective) -> ObjectiveDetail:
@@ -241,8 +254,9 @@ def _skills_block(skills: Sequence[Any]) -> list[str]:
 def build_messages(stage: NpcStage, library: SkillLibrary, deck: str, *, max_skills: int) -> tuple[dict[str, str], dict[str, str]]:
     """System + user prompt. Kept separate so ``prompt_hash`` can cover both.
 
-    Only skills applicable to **this stage** are listed (rule layer included), so
-    the model cannot pick a stage-specific skill that belongs to another stage.
+    Only stage-applicable ``strategy``/``stage_specific`` skills are listed: rules
+    live in ``prompt_v2.GAME_RULES_V2`` and are never library pins. Stage filtering
+    still stops the model from picking another stage's ``stage_specific`` skill.
     """
     applicable = applicable_skills(stage, library)
     lines = [
@@ -312,7 +326,13 @@ def _parse_skills(
 
 def _fallback_skills(stage: NpcStage, library: SkillLibrary, deck: str, max_skills: int) -> tuple[str, ...]:
     task = stage_task(stage, deck)
-    picked = library.retrieve(task.describe(), stage_context(stage), k=max(0, int(max_skills)))
+    # Same candidate pool as ``applicable_skills``: both learned layers only.
+    picked = library.retrieve(
+        task.describe(),
+        stage_context(stage),
+        k=max(0, int(max_skills)),
+        layers=("strategy", "stage_specific"),
+    )
     return tuple(skill.skill_id for skill in picked)
 
 

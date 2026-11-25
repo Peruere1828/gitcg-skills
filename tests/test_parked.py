@@ -100,12 +100,12 @@ def _spec(*, group: str = "llm_empty", max_calls: int = 80,
     )
 
 
-def test_llm_empty_uses_rules_library_by_default():
+def test_llm_empty_has_no_library_by_default():
+    # Rules are the system's fixed GAME_RULES_V2 text; llm_empty loads no library.
     runner = ParkedRunner(_spec(group="llm_empty"), client=StubClient())
-    assert runner.library_root == "data/skills/rules_v1"
-    assert runner.library is not None
-    assert runner.library.by_layer() == {"rule": 17, "strategy": 0, "stage_specific": 0}
-    assert runner.library_version == 1
+    assert runner.library_root is None
+    assert runner.library is None
+    assert runner.library_version == 0
 
 
 def _task(spec: RunSpec, stage_name: str = "timmie", seed: int = 0,

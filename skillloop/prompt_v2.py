@@ -31,7 +31,8 @@ from typing import Any
 
 # Bumped whenever the prompt structure or the wikitext-derived blocks change, so a
 # run's meta can be attributed to the prompt generation it was produced with.
-PROMPT_VERSION = "2026-11-24"
+# 2026-11-25: the decision user message gained the 对局历史 segment.
+PROMPT_VERSION = "2026-11-25"
 
 # -- section headers (one source for the v2 layout) -------------------------
 CARD_INFO_HEADER = "当前对局的卡组信息："

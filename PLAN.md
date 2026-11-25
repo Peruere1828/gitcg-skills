@@ -25,6 +25,7 @@
 | D15 | 2026-11-24 | `static_v1` 升 v2：修正「装备前两轮才回本」的错误启发；重生成 `reports/loadouts/v2`；旧实验全部作废 | 错误启发直接进入 prompt；库版本必须与 loadout 匹配 |
 | D16 | 2026-11-25 | PvE 路径（`skillloop.run` / `npc.eval` / `parked`）给 NPC 座位启用引擎 `alwaysOmni`：每轮初始 8 万能骰 | 游戏内 NPC 规则如此；此前 NPC 掷随机骰，所有历史对局与 prompt 样本失真 |
 | D17 | 2026-11-25 | 以 seeds 1–5 三组建立新基线；**旧验收区间（纯脚本 30–45%）作废**，待按新基线重标定 | 现状实测 scripted 63.75%（旧区间来自随机 NPC 骰 + 旧 prompt）；基线见 `reports/baseline_20261125_pve_prompt_v1.md` |
+| D18 | 2026-11-25 | 删除 skill 的 rule 层：库/代码/文档全部移除，规则只保留 system 内置文本；`llm_empty` 改为无库 | 规则与 wiki 文本重复、rule 条目从未进入 rich prompt，保留只会造成口径漂移（rule_equipment 与 GAME_RULES_V2 冲突） |
 
 ## 1. 任务定义
 
@@ -76,7 +77,7 @@ task = (stage, deck, seed)
 }
 ```
 
-**分层**：`rule`（游戏规则，静态组起点）→ `strategy`（跨关策略）→ `stage_specific`（关卡特化）。
+**分层**：`strategy`（跨关策略）→ `stage_specific`（关卡特化）；游戏规则不在库里，只在 system 的 `GAME_RULES_V2`。
 
 ## 4. 自进化机制
 
@@ -84,7 +85,7 @@ task = (stage, deck, seed)
 |---|---|---|
 | **库级配对门控** | 候选技能成一个库版本 v_{n+1}；与 v_n 在**同一批 seeds** 上配对比较；三星率 CI 下界 > 0 才采纳 | 「什么经验该成为 Skill」 |
 | **批量更新** | 每 20 局（可调）触发一次提取+门控，而不是每局 | 「Skill 什么时候该更新」 |
-| **分层组织** | 规则层常驻；策略层按条件检索；特化层优先级最高 | 「多个 Skill 如何组织」 |
+| **分层组织** | 策略层按条件检索；特化层优先级最高（规则不在库内，始终在 system） | 「多个 Skill 如何组织」 |
 | **激活日志 + 消融** | 每条技能记录被检索/被引用的决策数；长期零激活或消融为负 → 退役 | 「错误 Skill 如何淘汰」 |
 | **冲突处理** | 条件重叠且方向相反的技能强制 A/B，输者 `degraded` | 课程示例「冲突处理」 |
 
@@ -95,12 +96,12 @@ task = (stage, deck, seed)
 | # | 组名 | 技能库 | 内容 |
 |---|---|---|---|
 | ① | `scripted` | 无 | `expert:<deck>`（无目标注入，无 LLM）；参照天花板：`npc/contestant.py`（历史 74.7%） |
-| ②′ | `llm_empty` | `data/skills/rules_v1`（17 条 rule） | LLM + **仅游戏规则**；不加载 strategy/stage_specific，不用 loadout |
-| ② | `static` | `data/skills/static_v1`（17 rule + 10 strategy，v2） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
-| ③ | `dynamic` | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本，随轮次演进） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
+| ②′ | `llm_empty` | 无（规则在 system `GAME_RULES_V2`） | LLM + **仅游戏规则**；不加载技能库，不用 loadout |
+| ② | `static` | `data/skills/static_v1`（10 strategy，v3） | LLM + 游戏规则 + 手写静态策略；可用 `reports/loadouts/v2` |
+| ③ | `dynamic` | `data/skills/dyn_v4`（10 strategy + 28 stage_specific，v5，随轮次演进） | LLM + 游戏规则 + 动态策略；可用 `reports/loadouts/v4`，自演化 |
 
-> `llm_empty` 不是「无提示词」：规则层始终注入，用于隔离「LLM + 规则」与
-> 「LLM + 规则 + 策略」的差别。`--library` 只能覆盖 static/dynamic；
+> `llm_empty` 不是「无提示词」：规则始终由 system 的 `GAME_RULES_V2` 注入（规则不在技能库里），
+> 用于隔离「LLM + 规则」与「LLM + 规则 + 策略」的差别。`--library` 只能覆盖 static/dynamic；
 > `--loadout` 只对 static/dynamic 生效。
 
 **因子实验（≥3 个）**：更新门控（每局/每 20 局/配对门控）、检索 top-k（1/3/5/8）、
@@ -113,7 +114,7 @@ task = (stage, deck, seed)
 | 阶段 | 交付 | 验收 |
 |---|---|---|
 | M1 环境与标定 | 新仓库 + 独立 env + 血量重链 + 阈值重标 | 手写策略 60–75%，脚本组 15–35% |
-| M2 静态组 | 规则库生成 + 检索 + LLM 智能体 + ② 组跑通 | 24 seeds/关筛选表 |
+| M2 静态组 | 静态策略库 + 检索 + LLM 智能体 + ② 组跑通 | 24 seeds/关筛选表 |
 | M3 动态组 | 提取/门控/退役闭环 | ③ vs ② 按关配对 |
 | M4 因子与泛化 | 4 个因子 + 留出关卡 | 曲线/表格 + 原因分析 |
 | M5 报告与演示 | 综述 + 技术创新报告 + 演示 | 课堂检查 |

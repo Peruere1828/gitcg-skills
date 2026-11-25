@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "5回合内需爆发与快速击杀：爆发时机确保元素爆发用于斩杀，集火残血减少行动数，先附着再补元素提伤害，骰子经济保关键动作，无收益早结束抢节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "4847005ac790",
+  "fallback": false,
+  "library_version": 3,
+  "engine_lock": "d3961dd5d34d"
+}

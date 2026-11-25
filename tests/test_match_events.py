@@ -109,3 +109,88 @@ def test_talent_card_kind_matches_asset_vocabulary():
     assert _card_kind_from_entity(6, 1) == "weapon"
     assert _card_kind_from_entity(6, 2) == "artifact"
     assert _card_kind_from_entity(5, 0) == "support"
+
+
+# -- card_move projection ----------------------------------------------------
+HAND = int(mutation_pb2.ENTITY_AREA_HAND)
+PILE = int(mutation_pb2.ENTITY_AREA_PILE)
+
+
+def _move(
+    *,
+    from_where: int,
+    to_where: int,
+    definition_id: int,
+    reason: int,
+    from_who: int = 0,
+    to_who: int = 0,
+) -> mutation_pb2.ExposedMutation:
+    mutation = mutation_pb2.ExposedMutation()
+    mutation.move_entity.from_where = int(from_where)
+    mutation.move_entity.to_where = int(to_where)
+    mutation.move_entity.from_who = int(from_who)
+    mutation.move_entity.to_who = int(to_who)
+    mutation.move_entity.entity.definition_id = int(definition_id)
+    mutation.move_entity.reason = int(reason)
+    return mutation
+
+
+def _create(definition_id: int, who: int = 0) -> mutation_pb2.ExposedMutation:
+    mutation = mutation_pb2.ExposedMutation()
+    mutation.create_entity.who = int(who)
+    mutation.create_entity.where = HAND
+    mutation.create_entity.entity.definition_id = int(definition_id)
+    return mutation
+
+
+def _remove(definition_id: int, *, who: int = 0, reason: int = 1) -> mutation_pb2.ExposedMutation:
+    mutation = mutation_pb2.ExposedMutation()
+    mutation.remove_entity.who = int(who)
+    mutation.remove_entity.where = HAND
+    mutation.remove_entity.entity.definition_id = int(definition_id)
+    mutation.remove_entity.reason = int(reason)
+    return mutation
+
+
+def test_draw_into_hand_is_recorded_as_card_move():
+    sink = _collect([_move(from_where=PILE, to_where=HAND, definition_id=333003,
+                           reason=2, to_who=0)])
+    moves = [event for event in sink if event.kind == "card_move"]
+    assert len(moves) == 1
+    move = moves[0]
+    assert (move.player, move.definition_id, move.from_area, move.to_area) == (0, 333003, PILE, HAND)
+    assert move.reason == "draw"
+
+
+def test_create_entity_in_hand_and_hand_remove_are_recorded():
+    sink = _collect([
+        _create(322012),
+        _remove(332009, reason=1),
+    ])
+    moves = [event for event in sink if event.kind == "card_move"]
+    assert [(m.definition_id, m.reason) for m in moves] == [
+        (322012, "draw"),
+        (332009, "played"),
+    ]
+    assert moves[1].from_area == HAND and moves[1].to_area == 0
+
+
+def test_moves_outside_the_hand_are_ignored():
+    sink = _collect([_move(from_where=PILE, to_where=PILE, definition_id=333003, reason=2)])
+    assert [event for event in sink if event.kind == "card_move"] == []
+
+
+def test_card_move_decision_index_uses_the_shared_recorder():
+    sink: list = []
+    recorder = [object(), object()]
+    player = PolicyPlayer(0, None, recorder=recorder, event_sink=sink)
+    player._collect_events(SimpleNamespace(state=None, mutation=[_create(333003)]))
+    assert sink[0].kind == "card_move"
+    assert sink[0].decision_index == 2
+
+
+def test_card_move_events_stop_at_the_cap_with_one_marker():
+    sink = _collect([_create(100000 + index) for index in range(401)])
+    assert len(sink) == 401
+    assert sum(event.kind == "card_move" for event in sink) == 400
+    assert sink[-1].kind == "truncated"

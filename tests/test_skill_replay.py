@@ -79,14 +79,14 @@ def test_compact_trace_orders_actions_reactions_and_scoreboard():
     trace = compact_trace(_row(), decisions, events)
 
     assert len(trace) == 8
-    # H10: reroll/mulligan rows are script-policy rows, not LLM decisions, and the
-    # paid dice are the engine's auto-selection; both are labelled as such.
-    assert trace[0] == "R1 P0 重掷 [?,水]（脚本策略，非 LLM 决策）"
+    # H10: reroll rows are script-policy rows, and the paid dice are the engine's
+    # auto-selection; both are labelled as such.
+    assert trace[0] == "R1 P0 重掷 [?,水]（脚本策略）"
     assert trace[1].startswith("R1 P0 技能 ")
     assert trace[1].endswith(" 自动支付[冰,水]")
     assert "#32031" not in trace[1]
     assert trace[2] == "R1 P1(NPC) 打牌 最好的伙伴！ (事件) 自动支付[火]"
-    assert trace[3] == "R1 P0 选人（脚本策略，非 LLM 决策）"   # second choose_active dropped
+    assert trace[3] == "R1 P0 选人（脚本策略）"   # second choose_active dropped
     assert trace[4] == "R2 P1(NPC) 结束"
     assert trace[5] == "R1 反应 超导 P0"
     assert trace[6] == "R2 反应 蒸发 P1(NPC) x2"
@@ -171,12 +171,10 @@ def test_reroll_line_is_kept_once_per_player_per_round():
     ]
     trace = compact_trace(_row(), decisions, [])
     rerolls = [line for line in trace if "重掷" in line]
-    note = "（脚本策略，非 LLM 决策）"
+    note = "（脚本策略）"
     assert rerolls == [
         f"R1 P0 重掷 [冰]{note}",
-        f"R1 P1(NPC) 重掷{note}",
         f"R2 P0 重掷 [火]{note}",
-        f"R2 P1(NPC) 重掷{note}",
         f"R3 P0 重掷 [雷]{note}",
     ]
 
@@ -188,7 +186,7 @@ def test_payment_and_reroll_labels_are_distinct():
                   dice=(4, 4), round_number=1, subject=14031),
     ]
     trace = compact_trace(_row(), decisions, [])
-    assert trace[0] == "R1 P0 重掷 [水,火]（脚本策略，非 LLM 决策）"
+    assert trace[0] == "R1 P0 重掷 [水,火]（脚本策略）"
     assert "自动支付[雷,雷]" in trace[1]
     assert all("骰[" not in line for line in trace)
 

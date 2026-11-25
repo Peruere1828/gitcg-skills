@@ -12,7 +12,7 @@ Evaluated with the same protocol as ``skillloop.run``::
         --concurrency 96 --out data/runs/parked_llm_empty.jsonl
 
     python -m scripts.run_parked --group dynamic --stages all --seeds 10 \\
-        --stage-decks configs/stage_decks.json --loadout reports/loadouts/v4 \\
+        --stage-decks configs/stage_decks.json --loadout reports/loadouts/v6 \\
         --stage-rules \\
         --concurrency 96 --out data/runs/parked_dynamic.jsonl
 
@@ -20,9 +20,10 @@ The card pool is not pinned: omit ``--card-version`` to follow the engine's
 built-in pool (``configs/engine.lock``). Do not pass ``v3.3.0`` — its asset API is
 retired, so pinning it mismatches the latest card text/costs.
 
-``llm_empty`` is fixed to ``data/skills/rules_v1`` (LLM + game rules only) and does
-not accept a loadout; ``static``/``dynamic`` default to ``static_v1``/``dyn_v4``
-and may override with ``--library``. ``--loadout`` only applies to static/dynamic.
+``llm_empty`` loads no skill library at all (LLM + the system's fixed game rules)
+and does not accept a loadout; ``static``/``dynamic`` default to
+``static_v1``/``dyn_v4`` and may override with ``--library``. ``--loadout`` only
+applies to static/dynamic.
 """
 
 from __future__ import annotations
@@ -48,8 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         "--library", default=None,
         help=(
             "skill library override for static/dynamic (defaults: "
-            "data/skills/static_v1 / data/skills/dyn_v4); llm_empty is fixed to "
-            "data/skills/rules_v1 and ignores this flag"
+            "data/skills/static_v1 / data/skills/dyn_v4); llm_empty has no "
+            "library and ignores this flag"
         ),
     )
     ap.add_argument("--top-k", type=int, default=5)
@@ -62,8 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--loadout", default=None,
         help=(
-            "frozen skill loadouts (evaluation: reports/loadouts/v2 for static, "
-            "reports/loadouts/v4 for dynamic); static/dynamic only"
+            "frozen skill loadouts (evaluation: reports/loadouts scratch dir; "
+            "the runner picks the v<library_version> subdir); static/dynamic only"
         ),
     )
     ap.add_argument(

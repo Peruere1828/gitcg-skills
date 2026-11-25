@@ -257,8 +257,8 @@ class StageProfile:
     # Human-readable stage special rules (initial supports / action-phase
     # effects), omitted from the prompt when empty.
     special_rules: str = ""
-    # Already rendered lines ``[id] name: description`` for the relevant
-    # non-rule skills in the base library (rules already arrive via rules_note).
+    # Already rendered lines ``[id] name: description`` for the relevant learned
+    # skills in the base library (rules are the fixed system text, never extracted).
     existing_skills: tuple[str, ...] = ()
 
     def as_text(self, *, include_context: bool = True) -> str:
@@ -493,7 +493,6 @@ def build_prompt(
     *,
     task: Any = None,
     special_rules: str = "",
-    rules_note: str = "",
 ) -> list[dict[str, str]]:
     """Build the reflection prompt.
 
@@ -505,8 +504,8 @@ def build_prompt(
     rules that moved into the system message.
 
     Without ``task`` the historical prompt is reproduced exactly (single big
-    ``SYSTEM`` constant, deck/special-rule facts on the statistics line, optional
-    ``rules_note``), so old rows/tests keep working.
+    ``SYSTEM`` constant, deck/special-rule facts on the statistics line), so old
+    rows/tests keep working.
     """
     if task is None:
         parts = [profile.as_text()]
@@ -519,9 +518,12 @@ def build_prompt(
     if profile.replays:
         blocks = [
             "代表局回放（用于定位失误；不要复述单局操作）：",
-            # H10: the replay mixes engine mechanics and script-policy rows with
-            # LLM decisions; say which is which up front (see replay.py).
-            "说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。",
+            # H10: the replay mixes engine mechanics with LLM/script decisions;
+            # say which is which up front (see replay.py). The first sentence is
+            # the historical wording kept for older prompts; the correction names
+            # the sync runner's actual behaviour.
+            "说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。"
+            "（更正：同步 runner 的换牌/选人为 LLM 决策，驻留 runner 才由脚本执行。）",
         ]
         blocks.extend(
             replay.as_text(index) for index, replay in enumerate(profile.replays)
@@ -531,8 +533,6 @@ def build_prompt(
         lines = ["当前技能库中与本关相关/通用的技能（可批判、可替换；不要重复）："]
         lines.extend(f"- {entry}" for entry in profile.existing_skills)
         parts.append("\n".join(lines))
-    if task is None and rules_note:
-        parts.append("已知规则：\n" + rules_note)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": "\n\n".join(parts)},
@@ -774,7 +774,6 @@ def propose_candidates(
     profiles: Sequence[StageProfile],
     *,
     model: str | None = None,
-    rules_note: str = "",
     max_tokens: int = DEFAULT_MAX_TOKENS,
     effort: str | None = "high",
     min_failure_rate: float = 0.15,
@@ -798,7 +797,7 @@ def propose_candidates(
     ``tasks`` / ``special_rules_by_stage`` inject the same per-stage
     :class:`~skillloop.render.TaskSpec` and special-rules text the decision prompt
     uses. When no task is available for a stage the call falls back to the legacy
-    prompt (``rules_note`` included) rather than half-render a new system message.
+    prompt rather than half-render a new system message.
 
     ``existing_ids`` are the current library's ids; a candidate whose ``replaces``
     names one of them is accepted as an in-place rewrite (B6), anything else is
@@ -823,7 +822,6 @@ def propose_candidates(
             profile,
             task=task,
             special_rules=special_rules,
-            rules_note=rules_note,
         )
         budget = int(max_tokens)
         raw = client.chat(

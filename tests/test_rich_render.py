@@ -430,19 +430,17 @@ def test_plain_renderer_is_unchanged_and_rich_system_uses_the_new_layout():
         objectives=("赢得胜利",),
         deck="test",
     )
-    # The compact renderer keeps its historical minimal prompt …
-    plain_system = plain.system_message(task=task, skills=(), rules_note="规则摘要")["content"]
+    # The compact renderer keeps its historical minimal prompt (role + task only) …
+    plain_system = plain.system_message(task=task, skills=())["content"]
     assert plain_system.startswith(
         "你是《七圣召唤》的对局助手。"
     )
-    assert "规则摘要" in plain_system
-    # … while the default (rich) renderer uses the fixed six-part layout.
-    rich_system = rich.system_message(
-        task=task, skills=(), rules_note="规则摘要"
-    )["content"]
+    assert "【对局流程】" not in plain_system
+    # … while the default (rich) renderer uses the fixed six-part layout, whose
+    # rules segment is ``prompt_v2.GAME_RULES_V2`` — the library has no rule layer.
+    rich_system = rich.system_message(task=task, skills=())["content"]
     assert rich_system != plain_system
-    assert "规则摘要" not in rich_system        # rules_note is ignored
-    assert "【对局流程】" in rich_system        # fixed rules text instead
+    assert "【对局流程】" in rich_system
     assert "当前对局的获胜目标" in rich_system
 
 

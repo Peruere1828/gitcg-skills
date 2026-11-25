@@ -4,10 +4,10 @@ INNOVATION: activation accounting + evidence-gated lifecycle.
 
 Three behaviours matter for the course project and are implemented here:
 
-1. **Layered retrieval** — a `stage_specific` skill outranks a `strategy` skill that
-   outranks a `rule` skill when both are applicable. The rules layer is always a
-   candidate (the agent must know how cards work); strategy layers compete for the
-   remaining context budget.
+1. **Layered retrieval** — a `stage_specific` skill outranks a `strategy` skill
+   when both are applicable. Game *rules* are not a layer: they are the fixed
+   ``prompt_v2.GAME_RULES_V2`` text in the system message, so the library only
+   holds learned advice (``strategy`` / ``stage_specific``).
 2. **Activation accounting** — every retrieval is counted per skill, so we can later
    ask "did this skill actually earn its context?" (`usage.json`). A skill that is
    never retrieved/used cannot be defended and is retired by `skillloop.extract`.
@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -32,7 +33,7 @@ from .schema import Skill, SkillConditions
 _ASCII_WORD = re.compile(r"[a-z0-9_]+")
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 
-LAYER_BONUS = {"stage_specific": 1.5, "strategy": 0.8, "rule": 0.0}
+LAYER_BONUS = {"stage_specific": 1.5, "strategy": 0.8}
 
 
 def tokenize(text: str) -> list[str]:
@@ -55,7 +56,7 @@ def match_context(conditions: SkillConditions, context: dict[str, Any]) -> bool:
 
     ``context`` keys: ``stage``, ``objective_types`` (iterable), ``enemies``
     (iterable), ``round`` (int). Unspecified conditions are wildcards, so a skill
-    with ``SkillConditions()`` applies everywhere (the rules layer uses that).
+    with ``SkillConditions()`` applies everywhere (the ``strategy`` layer uses that).
     """
     if conditions.stages:
         if str(context.get("stage") or "") not in conditions.stages:
@@ -134,23 +135,9 @@ class SkillLibrary:
     def active(self) -> list[Skill]:
         return [skill for skill in self if skill.status == "active"]
 
-    def rules_text(self, *, exclude_ids: Iterable[str] = ()) -> str:
-        """The always-on rules layer, as a stable (sorted) prompt block.
-
-        ``exclude_ids`` drops rule skills that are already injected elsewhere (e.g.
-        a frozen loadout pins ``rule_burst``: it stays in the pinned block, so the
-        same block must not appear a second time under the rules note).
-        """
-        excluded = set(exclude_ids)
-        rules = [
-            skill for skill in self.active()
-            if skill.layer == "rule" and skill.skill_id not in excluded
-        ]
-        return "\n".join(skill.prompt_block() for skill in sorted(rules, key=lambda s: s.skill_id))
-
     def by_layer(self) -> dict[str, int]:
         counts = Counter(skill.layer for skill in self.skills.values())
-        return {layer: counts.get(layer, 0) for layer in ("rule", "strategy", "stage_specific")}
+        return {layer: counts.get(layer, 0) for layer in ("strategy", "stage_specific")}
 
     # -- mutation -----------------------------------------------------------
     def add(self, skill: Skill, *, now: str | None = None) -> Skill:
@@ -195,9 +182,9 @@ class SkillLibrary:
     ) -> list[Skill]:
         """Top-k applicable skills for ``query`` under ``context``.
 
-        Rules-layer skills are always *applicable* but score with no layer bonus, so
-        a task-specific skill wins the slot when the query matches. Ties break on
-        ``skill_id`` to keep prompts byte-stable (prompt caching).
+        Both layers compete on BM25 plus their layer bonus, so a stage-specific skill
+        wins the slot when the query matches. Ties break on ``skill_id`` to keep
+        prompts byte-stable (prompt caching).
         """
         if k <= 0:
             return []
@@ -237,9 +224,29 @@ class SkillLibrary:
 
     @classmethod
     def load(cls, root: str | Path) -> "SkillLibrary":
+        """Load ``library.json``, tolerating legacy ``rule``-layer entries.
+
+        The rule layer no longer exists (rules come from
+        ``prompt_v2.GAME_RULES_V2``), but ``history/*.json`` snapshots and older
+        run outputs still contain ``layer == "rule"`` skills. They are dropped here
+        with a single stderr note instead of raising, so a historical library stays
+        readable and the injected prompt is unchanged by the migration.
+        """
         path = Path(root) / "library.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
-        skills = [Skill.from_dict(item) for item in payload.get("skills") or []]
+        skills: list[Skill] = []
+        dropped = 0
+        for item in payload.get("skills") or []:
+            if str((item or {}).get("layer") or "").strip() == "rule":
+                dropped += 1
+                continue
+            skills.append(Skill.from_dict(item))
+        if dropped:
+            print(
+                f"[library] {path}: dropped {dropped} legacy rule-layer skill(s); "
+                "rules come from prompt_v2.GAME_RULES_V2",
+                file=sys.stderr,
+            )
         return cls(
             skills={skill.skill_id: skill for skill in skills},
             version=int(payload.get("library_version") or 0),

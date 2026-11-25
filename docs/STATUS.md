@@ -31,7 +31,7 @@
 - 主指标：**三星率**；次指标：逐目标达成、LLM calls/局、token/局。
 - 只在同 `stage / deck / card_version / stage_rules / loadout` 下比较。
 - 卡池 = 引擎内置（`configs/engine.lock`），不 pin 旧版本。启用关卡特殊规则 `--stage-rules`。
-- 每局记录 `stage/seed/deck/group/library_version/model/prompt_hash`；
+- 每局记录 `stage/seed/deck/group/library_version/model/prompt_version/system_hash`；
   原始 JSONL 落 `data/`，聚合摘要进 `reports/`。成本门禁见 `EVAL_PROTOCOL.md §6`。
 
 ## 4. 四组（新口径）
@@ -39,14 +39,20 @@
 | 组 | 策略 | 技能库 | loadout | 说明 |
 |---|---|---|---|---|
 | `scripted` | 固定脚本，无 LLM | — | — | 免费基线（expert/era base） |
-| `llm_empty` | LLM + **仅游戏规则** | `data/skills/rules_v1`（17 rule） | — | 不加载 strategy |
-| `static` | LLM + 规则 + 静态 skill | `data/skills/static_v1`（17 rule + 10 strategy，v2） | `reports/loadouts/v2`（可选） | 规则 + 静态经验 |
-| `dynamic` | LLM + 规则 + 动态 skill | `data/skills/dyn_v4`（round 0 = `static_v1` v2 副本） | `reports/loadouts/v4`（重建后重生成） | 规则 + 进化经验；旧 dyn_v1–v3/v5–v6 已删 |
+| `llm_empty` | LLM + **仅游戏规则** | 无（规则在 system） | — | 不加载技能库 |
+| `static` | LLM + 规则 + 静态 skill | `data/skills/static_v1`（10 strategy，v3） | `reports/loadouts/v2`（可选） | 规则 + 静态经验 |
+| `dynamic` | LLM + 规则 + 动态 skill | `data/skills/dyn_v4`（10 strategy + 28 stage_specific，v5） | `reports/loadouts/v4`（重建后重生成） | 规则 + 进化经验；旧 dyn_v1–v3/v5–v6 已删 |
+
+规则（含 target/objective 判定文本）不在技能库里，唯一来源是 system 的 `GAME_RULES_V2`；
+`static_v1` / `dyn_v4` 都不含 `rule` 层。
 
 `contestant` 仅作参照，不在四组内。
 
-`static` 的 loadout pin 从 `de0bf9d` 起只保留 strategy 层（每关 1–3 条），
-rule/目标类条目被过滤；`static` 与 `llm_empty` 的差异只剩 `static_v1` 里的 10 条策略。
+`static` 的 loadout 只含 strategy 层（每关 1–3 条）：规划器不再产出 rule/`规则_目标_*` pin，
+运行时即使遇到也会丢弃；`reports/loadouts/{v2,v4}` 里仍带旧 rule pin 的是**历史文件**（未重新生成）。
+`static` 与 `llm_empty` 的差异只剩 `static_v1` 里的 10 条策略。
+
+- loadout 不含 rule pin；逐局行 `injected_skills` 才是**实际注入**，`pinned_skills` 只是请求集。
 
 ### 4.1 当前基线（2026-11-25）
 
@@ -89,7 +95,7 @@ COMMON="--stages all --seeds 50 --workers 6 --stage-decks configs/stage_decks.js
 # scripted（免费）
 "$PY" -m skillloop.run --group scripted $COMMON --out data/runs/scripted.jsonl
 
-# llm_empty（仅规则；需预算上限）
+# llm_empty（无技能库；规则在 system；需预算上限）
 GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group llm_empty $COMMON \
   --out data/runs/llm_empty.jsonl
 
@@ -109,21 +115,23 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
   12 线程机器上建议默认 **6**（约 20% 提速），出现 429/超时再降到 4。scripted 可用 6–8。
 - `GITCG_LLM_BUDGET_USD` 是**硬上限**（D11）：触顶只停止启动新局，已在飞的局跑完。
   模型与预算写进 run meta；成本先按 `EVAL_PROTOCOL.md §6` 标定再上全量。
-- **`llm_empty` 新口径会注入 17 条规则**，prompt/成本高于旧「空库」；上全量前先
-  3–5 seeds 标定成本。
+- **规则的唯一来源是 system 里的 `prompt_v2.GAME_RULES_V2`**：技能库已无 `rule` 层
+  （旧规则库目录已整个删除，见 D18），rich prompt 也不注入任何规则技能。
+  `llm_empty` 是**无技能库**组，与 `static` 的规则段完全相同，差异只在 10 条策略技能。
 - **旧 run 的 fingerprint 不兼容**：旧 meta 的 `stages` 字段是文件 hash；新代码
   `stages` 是关卡列表、文件 hash 改名为 `stages_file_sha1`。新实验请用新的
   `--out`，不要续跑旧输出。
 - 冒烟要核查：无 `no_llm_config` / `unknown card` 错误；prompt 内库内容与
-  loadout 版本匹配；`llm_empty` 只含 17 条 rule、无 strategy。
+  loadout 版本匹配；`llm_empty` 不加载技能库（库内容为空）；逐局行
+  `injected_skills` 与请求的 loadout pin 一致（rule pin 已被丢弃）。
 
 ## 6. Prompt（2026-11-24 重构）
 
-- 决策 system 顺序：角色 → 游戏规则（wiki 原文 34 节，无「特技」）→ 关卡特殊规则 → 当前对局卡组信息（我方角色/技能、对方角色/技能、我方牌组、名词解释）→ 获胜目标与判定 → 候选「预计」优先级说明 → 学习技能 → 输出契约。
-- 决策 user：进度（第 R 轮；三星轮数上限；对局上限 15 轮；未完成目标）→ 局面（双方角色/能量/附着/装备/状态、骰子、手牌、支援/召唤物、牌堆张数）→ 合法动作（需求 / 支付 / 目标 / 反应预览 / 引擎结算「预计」）。
+- 决策 system 顺序：角色 → 游戏规则（`GAME_RULES_V2`，wiki 原文 34 节，无「特技」）→ 关卡特殊规则 → 当前对局卡组信息（我方角色/技能、对方角色/技能、我方牌组、名词解释）→ 获胜目标与判定 → 候选「预计」优先级说明 → 学习技能 → 输出契约。规则只来自 system 内置文本，技能库里没有 rule 条目。
+- 决策 user：进度（第 R 轮；三星轮数上限；对局上限 15 轮；未完成目标）→ 局面（双方角色/能量/附着/装备/状态、骰子、手牌、支援/召唤物、牌堆张数）→ **对局历史（仅 P0 可见信息）** → 合法动作（需求 / 支付 / 目标 / 反应预览 / 引擎结算「预计」）。对局历史由 `skillloop.history.MatchHistory` 生成：上一次决策以来的公开事件（双方技能/反应、我方抽到的牌名、对方抽牌只给张数）＋公开局面差（双方角色 HP/能量/附着/装备/状态/召唤/支援、我方手牌新增与骰子；对方手牌只比张数），最多保留最近 12 行；对方手牌内容与骰面永不进入该段（引擎掩码 id 也不出现）。首次决策没有历史段；脚本回退的决策不写「我方」行。
 - 候选上限 16（起手换牌 32，保证 5 张手牌的全部组合可选），保底「宣布结束」与每张手牌至少一个动作；起手换牌按 mask 保留组合（不再折叠成单张）。
 - 复盘 system：教练角色 + 同一份游戏规则 + 关卡特殊规则 + 卡组信息 + 目标判定 + 输出要求；user：统计（不含关卡目标）+ 失败回放（对应失败计数最大的 objective）+ 三星回放 + 相关技能。
-- 回放：骰子元素、每轮双方掷骰、跨轮抽牌内容、`自动支付`、`→ 此后场上` 公开状态差分、`最终`、截断标记、脚本行标注（重掷/换牌/选人）；动作的手牌弃置/获得与角色附属来自所选动作的引擎 `preview`（例如 `手牌：弃置「雷楔」；附属「雷元素附魔」`），不靠手牌数量反推。
+- 回放：骰子元素、每轮双方掷骰、跨轮抽牌内容；换牌显示「弃置「X」→ 获得「Y」」并带真实归属标注（`（LLM 决策）`/`（脚本策略）`；同步 runner 的换牌/选人是 LLM、重掷是脚本，驻留 runner 三者都是脚本）；重掷显示 `[旧池] → [新池]`；所有进手牌的牌都有带名字的抽牌行（NPC 只给张数）；开局起手也打印；`自动支付`、`→ 此后场上` 公开状态差分、`最终`、截断标记；动作的手牌弃置/获得与角色附属来自所选动作的引擎 `preview`（例如 `手牌：弃置「雷楔」；附属「雷元素附魔」`），不靠手牌数量反推。
 - 两份样本是**真实调用原文**（`GITCG_LLM_TRACE` 的 `messages` 逐字节落盘）：
   [`../reports/prompts/decision_prompt.md`](../reports/prompts/decision_prompt.md)、
   [`../reports/prompts/reflection_prompt.md`](../reports/prompts/reflection_prompt.md)。
@@ -135,7 +143,7 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
 - 对方骰子：`skillloop.run` 已用 `full_state_for_agents=True` 从非掩码全量状态读取并显示真实骰子（`骰子N个：<符号串>`）；web 调试端手工构造 `DecisionContext`（`full_state=view`），看不到对方骰子，只显示「引擎视图未提供」。对方手牌两边都只给数量。
 - 名词解释对同一名称最多列 2 个**不同**描述（同文去重），每条尽量标来源 `（来自「X」）`——来源是资产库里 description 提到该名词的卡牌/技能/被动，找不到则标「（另一版本）」；资产库没有「状态↔来源」的真实关联，标签是启发式。
 - `重击`/`下落攻击` 按 wiki 保留，但当前牌组不使用。
-- `dyn_v4–v6` 为旧结果产物，含已否定的 `strat_equipment_timing` 旧文本；重建前不得用于评测。
+- `dyn_v4` 已按新口径重建（v5：10 strategy + 28 stage_specific）；更早的动态库产物含已否定的 `strat_equipment_timing` 旧文本，不得用于评测。
 
 ## 8. 下一步
 

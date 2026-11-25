@@ -187,21 +187,19 @@ def test_fingerprint_keeps_stage_list_and_hashes_stage_file():
 # -- four-group policy/library contract --------------------------------------
 def test_group_library_defaults():
     assert run_module.DEFAULT_LIBRARY_ROOTS == {
-        "llm_empty": "data/skills/rules_v1",
         "static": "data/skills/static_v1",
         "dynamic": "data/skills/dyn_v4",
     }
-    assert run_module.LIBRARY_GROUPS == ("llm_empty", "static", "dynamic")
+    assert run_module.LLM_GROUPS == ("llm_empty", "static", "dynamic")
+    assert run_module.LIBRARY_GROUPS == ("static", "dynamic")
     assert run_module.LOADOUT_GROUPS == ("static", "dynamic")
     # Frozen libraries pin their version; ``dynamic`` evolves, so compare against
     # the library file instead of hard-coding its current round.
-    expected_versions = {"llm_empty": 1, "static": 2}
-    for group, version in expected_versions.items():
-        fp = RunSpec(
-            group=group, stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
-        ).fingerprint()
-        assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS[group]
-        assert fp["library_version"] == version
+    static = RunSpec(
+        group="static", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
+    ).fingerprint()
+    assert static["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["static"]
+    assert static["library_version"] == 3
     dynamic = RunSpec(
         group="dynamic", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     ).fingerprint()
@@ -209,10 +207,13 @@ def test_group_library_defaults():
     assert dynamic["library_version"] == SkillLibrary.load(
         run_module.DEFAULT_LIBRARY_ROOTS["dynamic"]
     ).version
-    scripted = RunSpec(
-        group="scripted", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
-    ).fingerprint()
-    assert scripted["library_root"] is None and scripted["library_version"] == 0
+    # llm_empty has no library at all and must resolve to None even with --library.
+    for group in ("llm_empty", "scripted"):
+        fp = RunSpec(
+            group=group, stages=("wagner",), seeds=(1,), deck="superconduct_aggro",
+            library_root="data/skills/static_v1",
+        ).fingerprint()
+        assert fp["library_root"] is None and fp["library_version"] == 0
 
 
 def test_scripted_group_is_not_a_skill_agent():
@@ -225,7 +226,7 @@ def test_scripted_group_is_not_a_skill_agent():
 
 @pytest.mark.parametrize(
     ("group", "strategies"),
-    [("llm_empty", 0), ("static", 10), ("dynamic", None)],
+    [("llm_empty", None), ("static", 10), ("dynamic", None)],
 )
 def test_group_policies_load_expected_library_layers(tmp_path, group, strategies):
     spec = RunSpec(
@@ -233,35 +234,33 @@ def test_group_policies_load_expected_library_layers(tmp_path, group, strategies
         stages=("wagner",),
         seeds=(1,),
         deck="superconduct_aggro",
-        # llm_empty must ignore any override.
+        # llm_empty must ignore any override (it has no library at all).
         library_root=_library_root(tmp_path) if group == "llm_empty" else None,
     )
     client = _FakeLLMClient()
     policy = run_module.build_policy(spec, get_stage("wagner"), client=client)
     assert isinstance(policy, SkillAgentPolicy)
+    system = policy._system_message(SimpleNamespace(player_view=None))["content"]
+    if group == "llm_empty":
+        # Rules are the system's fixed text; nothing is loaded from a library.
+        assert policy.library is None
+        assert policy._skills == []
+        assert not any("- [strat_" in line for line in system.splitlines())
+        return
     assert policy.library is not None
     layers = policy.library.by_layer()
+    assert set(layers) == {"strategy", "stage_specific"}
     if group == "dynamic":
         # The dynamic library grows with every evolution round, so its strategy
-        # count is not hard-coded; only the fixed rule layer and the floor are.
-        assert layers["rule"] == 17
+        # count is not hard-coded; only the floor is.
         assert layers["strategy"] >= 10
+        assert layers["stage_specific"] >= 1
         # Proves the default resolves to the evolving root, not static_v1.
         assert policy.library.meta.get("library_root") == "data/skills/dyn_v4"
     else:
-        assert layers == {"rule": 17, "strategy": strategies, "stage_specific": 0}
-    system = policy._system_message(SimpleNamespace(player_view=None))["content"]
-    # v2: the rules are one fixed text, so the library's 17 rule skills stay in the
-    # library (gate/reproducibility) but no longer print as prompt lines.
+        assert layers == {"strategy": strategies, "stage_specific": 0}
+    # Rules are one fixed system text, so no rule skill can be a prompt line.
     assert "[rule_" not in system
-    for rule in policy.library.active():
-        if rule.layer == "rule":
-            assert rule.skill_id not in system
-    # Retrieval never re-injects the rules layer as a strategy skill.
-    assert all(skill.layer != "rule" for skill in policy._skills)
-    if group == "llm_empty":
-        assert policy._skills == []
-        assert not any("- [strat_" in line for line in system.splitlines())
 
 
 def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
@@ -279,19 +278,22 @@ def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
     )
     client = _FakeLLMClient()
     policy = run_module.build_policy(spec, get_stage("wagner"), client=client)
-    assert policy.library is not None
-    assert policy.library.by_layer() == {"rule": 17, "strategy": 0, "stage_specific": 0}
+    assert policy.library is None
     assert policy.config.pinned_skills == ()
     fp = spec.fingerprint()
-    assert fp["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["llm_empty"]
-    assert fp["library_version"] == 1
+    assert fp["library_root"] is None
+    assert fp["library_version"] == 0
     # Loadout is not part of an llm_empty run at all.
     assert fp["loadout_root"] is None and fp["loadout_hash"] == "none"
 
 
-def test_pinned_rule_from_loadout_is_dropped_from_the_skill_block():
+def test_pinned_rule_from_loadout_is_dropped_from_the_skill_block(tmp_path):
+    # An old loadout may still name ``rule_burst``; the library no longer has that
+    # skill (loading strips the rule layer), so the pin resolves to nothing.
+    library_root = _legacy_library_root(tmp_path, version=4)
     spec = RunSpec(
-        group="static", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
+        group="static", stages=("wagner",), seeds=(1,), deck="superconduct_aggro",
+        library_root=library_root,
     )
     client = _FakeLLMClient('{"choice": 0, "used": ["rule_burst"]}')
     policy = run_module.build_policy(
@@ -302,7 +304,7 @@ def test_pinned_rule_from_loadout_is_dropped_from_the_skill_block():
     assert [skill.skill_id for skill in policy._skills] == []
 
 
-def test_play_one_records_resolved_library_root_for_llm_empty(monkeypatch):
+def test_play_one_records_no_library_for_llm_empty(monkeypatch):
     monkeypatch.setattr(common.llm, "build_llm_client", lambda: _FakeLLMClient())
     monkeypatch.setattr(
         run_module, "run_match",
@@ -324,9 +326,10 @@ def test_play_one_records_resolved_library_root_for_llm_empty(monkeypatch):
         {"spec": spec.__dict__, "stage": "wagner", "seed": 7, "task_index": 0,
          "stage_decks": {}}
     )
-    assert row["library_root"] == run_module.DEFAULT_LIBRARY_ROOTS["llm_empty"]
-    assert row["library_version"] == 1
+    assert row["library_root"] is None
+    assert row["library_version"] == 0
     assert row["pinned_skills"] == []
+    assert row["injected_skills"] == []
 
 
 # -- compact trace rows ------------------------------------------------------
@@ -336,7 +339,7 @@ def _fake_match_record():
             player=0, step_index=1, request_type="action",
             chosen_label="use_skill:0:1", chosen_kind="action_use_skill",
             used_dice=(1,), player_view={"round_number": 1},
-            subject_definition_id=32031, card_kind=None,
+            subject_definition_id=32031, card_kind=None, decider="llm",
         ),
         SimpleNamespace(
             player=1, step_index=1, request_type="action",
@@ -376,7 +379,13 @@ def test_play_one_adds_trace_keys_only_when_enabled(monkeypatch):
 
     traced = play(trace=True)
     assert isinstance(traced["trace"], list) and traced["trace"]
-    assert traced["trace_meta"] == {"n_decisions": 2, "truncated": False}
+    assert traced["trace_meta"] == {
+        "n_decisions": 2,
+        "truncated": False,
+        # Compact-trace counts of who decided each recorded row (the second fake
+        # row has no ``decider`` label, so it counts as script).
+        "deciders": {"llm": 1, "script": 1},
+    }
     assert any(line.startswith("结局 ") for line in traced["trace"])
     json.dumps(traced, ensure_ascii=False)          # JSON-serialisable
 
@@ -506,6 +515,32 @@ def _library_root(tmp_path, *, version: int = 4) -> str:
         ],
         version=version,
     ).save(root)
+    return str(root)
+
+
+def _legacy_library_root(tmp_path, *, version: int = 4) -> str:
+    """A pre-migration library: one ``rule`` entry plus two strategy skills.
+
+    ``Skill`` itself refuses ``layer="rule"`` now, so the legacy shape is written as
+    raw JSON — which is exactly what ``history/*.json`` snapshots look like.
+    """
+    root = tmp_path / "legacy_library"
+    root.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "library_version": version,
+        "meta": {"history": []},
+        "skills": [
+            {"skill_id": "rule_burst", "skill_name": "元素爆发",
+             "description": "爆发需要能量", "layer": "rule"},
+            {"skill_id": "alpha", "skill_name": "甲", "description": "技能甲",
+             "layer": "strategy"},
+            {"skill_id": "beta", "skill_name": "乙", "description": "技能乙",
+             "layer": "strategy"},
+        ],
+    }
+    (root / "library.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
     return str(root)
 
 
@@ -700,8 +735,42 @@ def test_play_one_pins_skills_and_records_loadout_hash(tmp_path, monkeypatch):
     assert captured == {"deck": "superconduct_mika_attack", "pinned_skills": ("beta", "alpha")}
     assert row["deck"] == "superconduct_mika_attack"
     assert row["pinned_skills"] == ["beta", "alpha"]
+    # The dummy policy is not a ``SkillAgentPolicy``, so the non-LLM default applies.
+    assert row["injected_skills"] == []
     assert row["skill_loadout_hash"] == loadout.fingerprint()
     assert row["library_version"] == 4
+
+
+def test_play_one_static_injected_skills_drop_the_rule_layer(tmp_path, monkeypatch):
+    """``pinned_skills`` is the request; ``injected_skills`` is what reached the prompt."""
+    root = Path(_legacy_library_root(tmp_path, version=4))
+
+    def fake_run_match(contestant, npc_deck, policy, npc_policy, **kwargs):
+        # Build the real system prefix so ``_skills`` reflects the injection path.
+        policy._system_message(SimpleNamespace(player_view=None))
+        return SimpleNamespace(winner=0, rounds=3, error=None, truncated=False)
+
+    monkeypatch.setattr(run_module, "run_match", fake_run_match)
+    monkeypatch.setattr(common.llm, "build_llm_client", lambda: _FakeLLMClient())
+    monkeypatch.setattr(
+        run_module, "evaluate_stage",
+        lambda stage, record: SimpleNamespace(three_star=True, stars=3, objectives=()),
+    )
+    spec = RunSpec(
+        group="static", stages=("wagner",), seeds=(1,),
+        deck="superconduct_aggro", library_root=str(root),
+    )
+    loadout = Loadout(
+        stage="wagner", deck="superconduct_aggro", skills=("rule_burst", "alpha"),
+        rationale="test", model="stub-model", prompt_hash="abcdef123456",
+        library_version=4, engine_lock=engine_lock_hash(),
+    )
+    row = run_module.play_one(
+        {"spec": spec.__dict__, "stage": "wagner", "seed": 1, "task_index": 0,
+         "stage_decks": {}, "loadout": loadout.as_dict()}
+    )
+    assert row["pinned_skills"] == ["rule_burst", "alpha"]
+    assert row["injected_skills"] == ["alpha"]
 
 
 # -- budget guard ------------------------------------------------------------
