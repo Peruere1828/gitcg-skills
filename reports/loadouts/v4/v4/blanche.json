@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "r1_blanche",
+    "skill_blanche",
+    "skill_blanche_2",
+    "规则_目标_元素爆发",
+    "strat_burst_timing"
+  ],
+  "rationale": "关卡专属节奏与斩杀窗口最关键；冰盾破盾顺序保证输出效率；爆发目标与时机策略确保5回合内完成爆发并取胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "6a6a11c69e76",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -29,7 +29,7 @@
 - 回滚前的工作区 `data/skills/dyn_v4/library.json` 里，全局策略 `strat_burst_timing`
   被改写成上述单关文本；`strat_equipment_timing` 同样被 `wagner` 的单关文本覆盖。
 - 3 个候选都指向同一个 id，写入器按顺序原地 `update()`：后写覆盖前写，**前两个候选被静默丢弃**，
-  库里 `version` 从 1 连跳到 4（3 次 update），但最终只剩最后一条文本。
+  `strat_burst_timing` 的 `version` 被连升到 4（3 次 update），但最终只剩最后一条文本。
 - 两个被覆盖的 `strat_*` 都没有 `conditions.stages` pin。它们会被检索到**所有关卡**，
   于是 `liusu` 的「13 血火债 + 12 血风拳」和 `wagner` 的单关装备建议进入了每一关的决策提示。
 

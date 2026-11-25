@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "5_4_1_marjorie",
+    "skill_marjorie",
+    "1_marjorie",
+    "strat_focus_fire",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "选关卡专属节奏与斩杀提示，配合集火残血和5回合上限规则，确保速杀且少阵亡。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "660b2525531d",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

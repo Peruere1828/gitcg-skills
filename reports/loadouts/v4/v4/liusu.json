@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_burst",
+    "rule_reaction",
+    "skill_liusu",
+    "skill_liusu_2",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "围绕5回合速攻：爆发规则保证完成元素爆发目标，反应规则配合雷草附着，两条关卡专属技能给出刻晴雷楔开局与菲谢尔充能收尾，回合上限规则强调速胜节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "657429b01388",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_shitou",
+    "skill_shitou_2",
+    "rule_reaction",
+    "strat_reaction",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡专属两条直接指导斧丘暴徒留骰与凑三同色打战技；元素反应规则与先附着再补元素确保2次反应；回合上限提醒5回合内速胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "13e3ed587d32",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

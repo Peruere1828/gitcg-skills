@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "skill_wagner",
+    "skill_wagner_2",
+    "rule_equipment",
+    "strat_equipment_timing",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡需5回合内胜利并打出武器牌，瓦格纳两条专属技能直接指导免费武器上手即装与不空转骰子，配合装备规则与装备时机确保完成武器目标，回合上限规则强调速攻节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "59edb8c207ae",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

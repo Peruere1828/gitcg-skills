@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "5_irontonguetian",
+    "skill_irontonguetian",
+    "skill_irontonguetian_2",
+    "rule_burst",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "选关卡专属收尾与雷楔/水铳应对，加爆发规则保证1次爆发目标，回合上限规则强调5轮内速胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "7a504bebb74e",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

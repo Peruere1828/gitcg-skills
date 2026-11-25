@@ -48,7 +48,9 @@
 `static` 的 loadout pin 从 `de0bf9d` 起只保留 strategy 层（每关 1–3 条），
 rule/目标类条目被过滤；`static` 与 `llm_empty` 的差异只剩 `static_v1` 里的 10 条策略。
 
-### 4.1 当前基线（seeds 1–5，2026-11-25）
+### 4.1 当前基线（2026-11-25）
+
+**训练块 seeds 1–5**（`dyn_v4` 的抽取输入）：
 
 | 组 | 三星 | 三星率 | 成本 |
 |---|---|---|---|
@@ -56,10 +58,23 @@ rule/目标类条目被过滤；`static` 与 `llm_empty` 的差异只剩 `static
 | `llm_empty` | 45/80 | 56.25% | $0.389 |
 | `static` | 47/80 | 58.75% | $0.306 |
 
-三组差异均不显著（配对 n=80，McNemar p>0.3）；`static` vs `llm_empty` 净 +2 局。
-完整口径、逐关表与 50-seed 成本估算见
-[`../reports/baseline_20261125_pve_prompt_v1.md`](../reports/baseline_20261125_pve_prompt_v1.md)。
-原始数据 `data/runs/v10_{scripted,llm_empty,static}_s1_5.jsonl`（未入库）。
+**评测块 seeds 6–10**（动态组的样本外评测；静态组基线也在这个块上）：
+
+| 组 | 三星 | 三星率 | 成本 |
+|---|---|---|---|
+| `scripted` | 41/80 | 51.25% | $0 |
+| `llm_empty` | 36/80 | 45.00% | $0.303 |
+| `static` | 41/80 | 51.25% | $0.294 |
+| `dynamic` r1（v3） | 39/80 | 48.75% | $0.297 |
+| `dynamic` r2（v4） | 39/80 | 48.75% | $0.300 |
+
+两块难度差异很大（scripted 63.75% → 51.25%），**跨块不可比，只做组内配对**。
+动态两轮都没有可测收益：r2 vs static 净 −2（p=0.81）、r2 vs r1 净 0（p=1.00）；
+r1 在训练块 +4 局、评测块 −2 局（样本内乐观）。
+完整口径、逐关表、两轮协议与成本见
+[`../reports/baseline_20261125_pve_prompt_v1.md`](../reports/baseline_20261125_pve_prompt_v1.md)
+与 [`../reports/dynamic_rounds_20261125.md`](../reports/dynamic_rounds_20261125.md)。
+原始数据 `data/runs/v10_*` / `data/runs/v11_*`（未入库，勿删）。
 **早于本基线的一切胜率/门控结论作废**，包括 NPC 随机掷骰时期的全部 replay 与报告。
 
 ## 5. 运行命令（当前有效）
@@ -124,15 +139,17 @@ GITCG_LLM_BUDGET_USD=... "$PY" -m skillloop.run --group static \
 
 ## 8. 下一步
 
-1. ~~seeds 1–5 冒烟：`scripted` / `llm_empty` / `static`~~ 已完成，见 §4.1。
-2. `reasoning=none` vs `low` 对照（旧结论作废，必须重测）。
-3. 按 50 seeds/关、4–6 workers 跑配对；门控按 `EVAL_PROTOCOL.md §4`。
-4. dynamic 线从 `static_v1` v2 重建后再进 gate。
-5. 任何 prompt 改动：重采两份样本，并记录 system sha / prompt hash。
+1. ~~seeds 1–5 冒烟~~ / ~~评测块 6–10 三组基线~~ / ~~dynamic 两轮~~ 已完成，见 §4.1。
+2. dynamic 逐技能门禁：整库接受时 18 条改写会互相抵消，下一步对候选做
+   `skillloop.gate.paired_delta`，只保留 CI_low>0 的改动；同轮同一 `replaces`
+   冲突要拒绝后者。
+3. `reasoning=none` vs `low` 对照（旧结论作废，必须重测）。
+4. 按 50 seeds/关、4–6 workers 跑配对；门控按 `EVAL_PROTOCOL.md §4`。
+5. 任何 prompt 改动：重采两份样本（`reports/prompts/`），并记录 `prompt_version`。
 
 ## 9. 历史
 
-- 2026-11-25：建立新基线（seeds 1–5，三组，$0.695）。此前所有胜率与门控结论**全部作废**：
+- 2026-11-25：建立新基线（seeds 1–5 三组 + seeds 6–10 四组 + dynamic 两轮，≈ $2.3）。此前所有胜率与门控结论**全部作废**：
   NPC 座位未按游戏规则置 `alwaysOmni`（掷随机骰）、prompt 含错误费用/血量与候选截断、
   卡池 pin 与资产文本错配、seed 0 退化。
 - 2026-11-13 及以前的胜率与门控结论**全部作废**。

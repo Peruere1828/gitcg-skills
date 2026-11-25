@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_chefmao",
+    "skill_chefmao_2",
+    "strat_focus_fire",
+    "strat_protect_low_hp",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "关卡附火机制与藏镜仕女蒸发威胁是核心，选两条关卡专属；配合集火残血、保护低血量角色，并强调5回合内速胜节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "f2c53593f176",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

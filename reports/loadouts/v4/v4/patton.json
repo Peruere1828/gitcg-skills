@@ -1,0 +1,17 @@
+{
+  "stage": "patton",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "规则_目标_元素反应",
+    "规则_目标_回合上限",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需5回合内胜利并触发1次元素反应；选反应规则与先附着再补元素策略，配合集火残血与回合上限规则，确保速攻达标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "860c2f2dbba5",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,16 @@
+{
+  "stage": "jifang",
+  "deck": "keqing_jihua",
+  "skills": [
+    "rule_reaction",
+    "strat_reaction",
+    "strat_focus_fire",
+    "规则_目标_少被击倒"
+  ],
+  "rationale": "草雷双元素需先附着再补元素触发反应；集火残血加速5回合内取胜；回合上限与少被击倒目标约束节奏与保护。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "b46765abcd42",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

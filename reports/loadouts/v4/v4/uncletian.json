@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "skill_uncletian_2",
+    "规则_目标_事件牌",
+    "规则_目标_回合上限",
+    "strat_focus_fire"
+  ],
+  "rationale": "优先选关卡专属刻晴破盾充能节奏与残血换人，确保5回合内速胜；事件牌目标提示留骰打事件，集火残血减少敌方行动。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c96125a9cece",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

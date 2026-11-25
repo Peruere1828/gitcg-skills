@@ -1,0 +1,17 @@
+{
+  "stage": "lan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "7_lan",
+    "skill_lan",
+    "rule_reaction",
+    "strat_reaction",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "优先选岚姐关卡专属破火罩与刻晴速攻开局，配合元素反应规则和先附着再补元素策略，确保5回合内完成2次反应并取胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c5e2531bac74",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

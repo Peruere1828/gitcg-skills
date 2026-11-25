@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "1_timaeus",
+    "skill_timaeus",
+    "规则_目标_回合上限",
+    "规则_目标_装备牌",
+    "strat_focus_fire"
+  ],
+  "rationale": "优先选关卡专属铺场与刻晴保命清场，配合5回合上限、圣遗物目标及集火残血，确保速胜并完成三星。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "37fd1697cd87",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}

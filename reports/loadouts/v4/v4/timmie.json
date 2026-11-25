@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "2_timmie",
+    "r1_r2_timmie",
+    "strat_focus_fire",
+    "strat_end_round",
+    "规则_目标_回合上限"
+  ],
+  "rationale": "选关卡专属两条定节奏，配集火残血、无收益早结束抢先手、5回合上限提醒，覆盖速杀与保命。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "732542cc875b",
+  "fallback": false,
+  "library_version": 4,
+  "engine_lock": "d3961dd5d34d"
+}
