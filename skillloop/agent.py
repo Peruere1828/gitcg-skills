@@ -233,10 +233,16 @@ class SkillAgentPolicy:
             if self.library is not None:
                 if self.config.pinned_skills:
                     # Frozen loadout: exactly these ids, in order; unknown ids skipped.
+                    # Rule-layer entries are dropped: the rich prompt already carries
+                    # the full wiki rules and objective judgements in the system
+                    # prefix, so pinning ``rule_*`` again would only duplicate them.
+                    # ``static`` therefore differs from ``llm_empty`` by the strategy
+                    # skills alone.
                     self._skills = [
                         skill
                         for skill_id in self.config.pinned_skills
                         if (skill := self.library.get(skill_id)) is not None
+                        and skill.layer != "rule"
                     ]
                 elif self.config.top_k > 0:
                     self._skills = self.library.retrieve(

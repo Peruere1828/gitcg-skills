@@ -273,7 +273,7 @@ def test_llm_empty_ignores_library_and_loadout_overrides(tmp_path):
     assert fp["loadout_root"] is None and fp["loadout_hash"] == "none"
 
 
-def test_pinned_rule_from_loadout_is_not_duplicated_and_stays_citable():
+def test_pinned_rule_from_loadout_is_dropped_from_the_skill_block():
     spec = RunSpec(
         group="static", stages=("wagner",), seeds=(1,), deck="superconduct_aggro"
     )
@@ -282,9 +282,8 @@ def test_pinned_rule_from_loadout_is_not_duplicated_and_stays_citable():
         spec, get_stage("wagner"), client=client, pinned_skills=("rule_burst",)
     )
     system = policy._system_message(SimpleNamespace(player_view=None))["content"]
-    assert system.count("- [rule_burst]") == 1
-    # Still in the pinned block, so a citation can resolve (see test_skill_agent).
-    assert "rule_burst" in [skill.skill_id for skill in policy._skills]
+    assert "- [rule_burst]" not in system
+    assert [skill.skill_id for skill in policy._skills] == []
 
 
 def test_play_one_records_resolved_library_root_for_llm_empty(monkeypatch):
