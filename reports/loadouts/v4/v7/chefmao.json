@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "8_6_chefmao",
+    "skill_chefmao",
+    "skill_chefmao_2",
+    "strat_focus_fire",
+    "strat_dice_economy"
+  ],
+  "rationale": "选关卡专属三条覆盖附火保刻晴、先杀藏镜仕女与打满骰；配集火残血与骰子经济，5回合内速胜且控制击倒数。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "041aac7b50aa",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

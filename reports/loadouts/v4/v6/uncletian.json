@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "skill_uncletian_2",
+    "strat_dice_economy",
+    "strat_focus_fire",
+    "strat_end_round"
+  ],
+  "rationale": "优先关卡专属刻晴节奏与残血换人，配合骰子经济、集火残血和及时结束回合，支撑5回合内胜利与事件牌目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "c5b549855de0",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

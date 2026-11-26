@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "r1_0_wagner",
+    "skill_wagner",
+    "skill_wagner_2",
+    "strat_equipment_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "瓦格纳关卡需打出武器牌，选瓦格纳专属三条确保0费装狼末并避免空转；装备时机与集火残血补足目标与节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "18f82af3fc4a",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

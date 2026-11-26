@@ -1,0 +1,17 @@
+{
+  "stage": "wagner",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "r1_0_wagner",
+    "skill_wagner",
+    "skill_wagner_2",
+    "strat_equipment_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡需打出武器牌且5回合内速胜：瓦格纳免费装狼末给诺艾尔，首动即装并兑现普攻；装备目标未完成前不空转骰子，装备时机配合，集火残血速推。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "6c11c180bbbe",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

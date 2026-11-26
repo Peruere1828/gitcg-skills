@@ -1,0 +1,17 @@
+{
+  "stage": "chefmao",
+  "deck": "keqing_jihua",
+  "skills": [
+    "8_6_chefmao",
+    "skill_chefmao",
+    "skill_chefmao_2",
+    "strat_focus_fire",
+    "strat_end_round"
+  ],
+  "rationale": "关卡附火机制决定超载/燃烧换伤害与先杀藏镜仕女；配合集火残血、无收益结束回合，5回合内低阵亡取胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "bda5740bdab9",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

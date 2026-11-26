@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "1_marjorie",
+    "5_4_1_marjorie",
+    "skill_marjorie",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "选关卡专属的保命与五回合速杀节奏，配合爆发斩杀时机和集火残血，确保5回合内取胜且阵亡少于2次。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5b38408b910e",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

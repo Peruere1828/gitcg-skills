@@ -83,7 +83,21 @@
 | `llm_empty` | 45/80 | 56.25% | $0.389 |
 | `static` | 47/80 | 58.75% | $0.306 |
 
-**评测块 seeds 6–10**（动态组的样本外评测；静态组基线也在这个块上）：
+**评测块 seeds 6–10**（`v13` 口径；动态组样本外评测）：
+
+| 组 | 三星 | 三星率 | 成本 |
+|---|---|---|---|
+| `scripted` | 41/80 | 51.25% | $0 |
+| `static` | 40/80 | 50.00% | $0.317 |
+| `llm_empty` | 50/80 | 62.50% | $0.334 |
+| `dynamic` r1（v6） | 58/80 | **72.50%** | $0.316 |
+| `dynamic` r2（v7） | 51/80 | 63.75% | $0.312 |
+
+第一轮对 static 22 胜 4 负（p=0.0005）；第二轮原地改写后掉回 llm_empty 水平
+（对 v6 5 胜 12 负），见 [`failures/dynamic-round2-regression.md`](./failures/dynamic-round2-regression.md)
+与 [`../reports/dynamic_v13_rounds.md`](../reports/dynamic_v13_rounds.md)。
+
+**旧重掷下的评测块**（`v11`，仅历史对照）：
 
 | 组 | 三星 | 三星率 | 成本 |
 |---|---|---|---|

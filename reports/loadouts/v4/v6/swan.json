@@ -1,0 +1,17 @@
+{
+  "stage": "swan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_dice_economy",
+    "strat_end_round",
+    "strat_burst_timing"
+  ],
+  "rationale": "5回合速攻需集火残血、草雷反应增伤、骰子经济保节奏、无收益早结束抢先手，爆发留给斩杀窗口。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "042c1b86f9ba",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "ellin",
+  "deck": "keqing_jihua",
+  "skills": [
+    "strat_focus_fire",
+    "strat_reaction",
+    "strat_burst_timing",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "5回合速攻需集火残血、草雷反应增伤、爆发斩杀；骰子经济与及时结束回合保证节奏，避免拖轮。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "eb2cab3309cd",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

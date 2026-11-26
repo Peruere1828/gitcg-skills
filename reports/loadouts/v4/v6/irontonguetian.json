@@ -1,0 +1,17 @@
+{
+  "stage": "irontonguetian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "5_irontonguetian",
+    "skill_irontonguetian",
+    "skill_irontonguetian_2",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "选关卡专属三条覆盖第5轮收尾、防焚毁之锋、水铳附着应对；配爆发时机与集火残血，契合5回合内胜利与1次元素爆发目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "e518dd0de218",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

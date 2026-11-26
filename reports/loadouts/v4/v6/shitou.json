@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_shitou",
+    "skill_shitou_2",
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_dice_economy"
+  ],
+  "rationale": "本关需5回合内胜利并触发2次元素反应：选关卡专属两条应对斧丘暴徒与冰箭丘丘人，配先附着再补元素、集火残血、骰子经济保证节奏。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "07602a77791e",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "blanche",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "r1_blanche",
+    "skill_blanche",
+    "skill_blanche_2",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "选布兰琪专属节奏与斩杀/破盾要点，配合爆发时机和集火残血，覆盖5回合内胜利与元素爆发目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "8f3abecbf9b8",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

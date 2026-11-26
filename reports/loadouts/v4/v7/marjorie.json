@@ -1,0 +1,17 @@
+{
+  "stage": "marjorie",
+  "deck": "linghua_yongdong",
+  "skills": [
+    "1_marjorie",
+    "5_4_1_marjorie",
+    "skill_marjorie",
+    "strat_burst_timing",
+    "strat_focus_fire"
+  ],
+  "rationale": "选关卡专属3条覆盖保命、5回合节奏与霜灭斩杀；配爆发时机与集火残血，契合5回合内胜利且阵亡<2。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "8cb4c0ea4f5d",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

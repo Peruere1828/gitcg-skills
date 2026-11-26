@@ -1,0 +1,17 @@
+{
+  "stage": "lan",
+  "deck": "keqing_jihua",
+  "skills": [
+    "7_lan",
+    "skill_lan",
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_dice_economy"
+  ],
+  "rationale": "优先选关卡专属破火罩与刻晴速攻开局，配合元素反应、集火残血和骰子经济，覆盖5回合内胜利与2次反应目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "975bf418300c",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "timaeus",
+  "deck": "keqing_shuanghuo",
+  "skills": [
+    "1_timaeus",
+    "skill_timaeus",
+    "strat_equipment_timing",
+    "strat_focus_fire",
+    "strat_end_round"
+  ],
+  "rationale": "优先关卡专属铺场与保命清场，装备时机保证圣遗物目标，集火残血与及时结束回合压缩到5回合内。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "835e8480ace9",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

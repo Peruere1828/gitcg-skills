@@ -1,0 +1,17 @@
+{
+  "stage": "timmie",
+  "deck": "keqing_jihua",
+  "skills": [
+    "2_timmie",
+    "r1_r2_timmie",
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "strat_protect_low_hp"
+  ],
+  "rationale": "优先选两条提米专属：保命防被击倒、R1打满抢R2先手斩杀；再配爆发时机、集火残血、低血保护，覆盖5回合速杀与阵亡限制。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "5d1fa8112e96",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

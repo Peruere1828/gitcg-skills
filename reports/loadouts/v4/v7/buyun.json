@@ -1,0 +1,17 @@
+{
+  "stage": "buyun",
+  "deck": "nvpu_shuangyan_era",
+  "skills": [
+    "buyun_cryo_shield_geo_strip_and_burst_buyun",
+    "buyun_five_round_all_in_tempo_buyun",
+    "buyun_geo_reaction_two_hits_buyun",
+    "strat_dice_economy",
+    "strat_end_round"
+  ],
+  "rationale": "冰盾破盾、5回合节奏、2次结晶反应均为本关核心；骰子经济与及时结束回合保障5回合内速胜。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "ae18b3978832",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

@@ -9,6 +9,7 @@
 | 002 | [判定看不到出牌：3 关恒为 0](./record-decisions-judge-blind.md) | `record_decisions=False` 让装备/事件目标恒 false；修复后 scripted 0.3812→0.4250、contestant 0.4062→0.4813 | invalid（2026-11-02 已修复，待重跑） | 用修复后的 runner 重跑全链，且 `timaeus`/`uncletian` 至少一组出现非零目标 |
 | 003 | [抽取覆盖全局 strategy](./extract-overwrote-global-strategy.md) | 单关候选以 `layer=strategy` 覆盖 `strat_burst_timing`/`strat_equipment_timing`，无 stage pin 污染所有关卡；已改为降级 `stage_specific` 且拒绝全局改写 | invalid（2026-11-25 已修复，v3 废弃） | 需要跨关配对证据才允许进全局层 |
 | 004 | [手写策略注入越多越差](./strategy-pins-hurt.md) | loadout 修好后每关注入 5 条策略，`static` 58.75%→47.50%（配对 −9，p=0.035）；同批 `llm_empty` 不变，指向策略本身 | open（2026-11-25 实测，待逐条消融） | 逐条消融后至少一条策略的配对 CI 下界 > 0 |
+| 005 | [dynamic 第二轮改写把收益改没](./dynamic-round2-regression.md) | v6 样本外 72.5%（对 static 22/4，p=0.0005）；第二轮 20 条原地改写后 v7 掉回 63.75%（对 v6 5/12） | open（2026-11-25 实测，待逐技能门禁） | 逐条门禁下改写与「保留旧文本」配对 CI 下界 > 0 |
 
 ## 沿用的上游教训（只作设计约束，不作为本项目结论）
 

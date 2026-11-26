@@ -1,0 +1,17 @@
+{
+  "stage": "uncletian",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_uncletian",
+    "skill_uncletian_2",
+    "strat_reaction",
+    "strat_focus_fire",
+    "strat_dice_economy"
+  ],
+  "rationale": "优先选关卡专属的刻晴破盾充能与残血保护，配合先附着后补元素、集火残血和骰子经济，覆盖5回合内取胜与事件牌目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "903bc6a0f2af",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}

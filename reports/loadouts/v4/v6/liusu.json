@@ -1,0 +1,17 @@
+{
+  "stage": "liusu",
+  "deck": "keqing_jihua",
+  "skills": [
+    "skill_liusu",
+    "skill_liusu_2",
+    "strat_burst_timing",
+    "strat_focus_fire",
+    "strat_reaction"
+  ],
+  "rationale": "选刻晴雷楔开局与菲谢尔充能爆发两条关卡专属，配合爆发斩杀时机、集火残血、先附着再补元素，覆盖5回合内胜利与元素爆发目标。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "2b120e9d2561",
+  "fallback": false,
+  "library_version": 6,
+  "engine_lock": "d3961dd5d34d"
+}

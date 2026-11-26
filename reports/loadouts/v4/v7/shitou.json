@@ -1,0 +1,17 @@
+{
+  "stage": "shitou",
+  "deck": "keqing_jihua",
+  "skills": [
+    "r2_shitou",
+    "skill_shitou",
+    "skill_shitou_2",
+    "strat_reaction",
+    "strat_focus_fire"
+  ],
+  "rationale": "关卡专属三条覆盖开局感电、防冻结与骰子/元素战技节奏；反应与集火帮助5回合内完成2次反应并速杀冰箭丘丘人。",
+  "model": "deepseek-v4.1-flash",
+  "prompt_hash": "17b44844c3a2",
+  "fallback": false,
+  "library_version": 7,
+  "engine_lock": "d3961dd5d34d"
+}
