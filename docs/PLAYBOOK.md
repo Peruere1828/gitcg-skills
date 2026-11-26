@@ -19,6 +19,7 @@
 | 每条技能带 `conditions` 元数据 | 检索与「激活」统计都需要，但不参与执行 |
 | 记录 `prompt_version` + `system_hash`（meta 与逐局行） | 事后归因与断点续跑；`system_hash` 是该局实际 system 前缀的指纹 |
 | 规则只在 system，不进技能库 | 规则文本唯一来源是 `GAME_RULES_V2`，避免库内副本漂移/冲突 |
+| 重掷按队伍元素：只留万能 + 我方角色元素，其余全弃（`skillloop/reroll.py`） | P0 固定脚本策略，不交给 LLM；避免重投掉本队可用的元素骰 |
 | `--seeds` 从 1 起，禁用 0 | 引擎 minstd LCG 的 0 是吸收态，首轮 8 骰恒为 CRYO |
 | 卡池 = 引擎内置（`configs/engine.lock`），不 pin 旧版本 | 唯一可用资产目录是 latest，pin 会造成卡面/费用/血量错配 |
 | prompt 样本必须来自 `GITCG_LLM_TRACE` 的 `messages` | 二次渲染会与真实调用漂移，无法审计 |

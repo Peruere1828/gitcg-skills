@@ -29,6 +29,7 @@ from reps.schema import OptionKind
 from skillloop.cards import card_kind, skill_kind
 from skillloop.history import MatchHistory
 from skillloop.library import SkillLibrary
+from skillloop.reroll import preferred_reroll_code
 from common.llm import set_trace_context
 
 from skillloop.render import (
@@ -389,6 +390,10 @@ class SkillAgentPolicy:
             # The log is auxiliary: a surprising snapshot must never cost a game.
             pass
         base_code = int(self.base.choose(built))
+        if context.request_type.value == "reroll_dice":
+            # Fixed rule, not a model decision: keep omni + our team's elements.
+            code = preferred_reroll_code(built)
+            return self._finish(context, base_code if code is None else code)
         if context.request_type.value not in self.config.request_types:
             return self._finish(context, base_code)
         if self.config.override_stages and str(self.task.stage) not in self.config.override_stages:

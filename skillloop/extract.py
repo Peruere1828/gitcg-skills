@@ -55,6 +55,14 @@ COACH_ROLE = (
     "objective_types 只用本关真实存在的类型，其他类型会被剔除。"
     "layer 固定填 stage_specific（本关专用）：抽取只写本关技能，跨关 strategy "
     "由人工维护，写了也会被降级。"
+    "复盘时必须做四类量化分析并据此写技能："
+    "①骰子利用率：对照「本关量化」的可用/支付，指出哪些回合骰子被浪费"
+    "（支付数远低于可用数），给出下一局的具体用法；"
+    "②手牌利用率：说明打出、调和、留在手里各多少，哪些牌该早打、哪些该留；"
+    "③元素反应：我方触发了哪些反应、是否用于提高伤害；没触发时缺哪一步元素附着；"
+    "④对方规律：对方最常用的技能与节奏（例如每轮固定先手某技能），"
+    "给出针对性应对（留骰、换人、抢结束）。"
+    "候选中至少有一条要引用上述量化数字（例如「R1 可用 8 骰只支付 3」）。"
     "回放只用于定位问题，不要编造数据。"
 )
 OUTPUT_SCHEMA = (
@@ -242,6 +250,61 @@ class ReplaySample:
 
 
 @dataclass
+class StageMetrics:
+    """Quantitative evidence parsed from a stage's compact replay traces.
+
+    These are the four things the coach is asked to reason about (dice, hand,
+    reactions, opponent habits), aggregated over every game of the stage that
+    was recorded with a ``trace``. Every counter is a plain int / dict so the
+    dataclass round-trips through JSON alongside :class:`StageProfile`.
+    """
+
+    games: int = 0
+    #: Sum over rounds of *our* dice pool after the reroll (the last
+    #: ``我方骰子`` line of the round, or the reroll's ``→ [...]`` pool).
+    dice_available: int = 0
+    #: Elements in every ``自动支付[...]`` on a P0 action line (dice actually spent).
+    dice_spent: int = 0
+    #: P0 actions whose label is ``调和`` (elemental tuning).
+    tuning: int = 0
+    #: P0 ``打牌`` actions (tuning excluded; it is its own kind).
+    cards_played: int = 0
+    #: Card names after P0 ``抽牌：`` (opening hand included).
+    cards_drawn: int = 0
+    #: Reactions triggered by P0, name -> occurrences.
+    reactions: dict[str, int] = field(default_factory=dict)
+    #: NPC skills used, name (without the effect text) -> occurrences, top 5.
+    opponent_skills: dict[str, int] = field(default_factory=dict)
+
+    def as_text(self) -> str:
+        """One prompt line, or ``""`` when no trace produced any evidence."""
+        parts: list[str] = []
+        if self.dice_available > 0:
+            percent = int(self.dice_spent * 100 / self.dice_available + 0.5)
+            parts.append(
+                f"骰子利用率 {percent}%"
+                f"（可用 {self.dice_available} / 支付 {self.dice_spent}）"
+            )
+        if self.tuning:
+            parts.append(f"调和 {self.tuning} 次")
+        if self.cards_played:
+            parts.append(f"出牌 {self.cards_played} 张")
+        if self.cards_drawn:
+            parts.append(f"抽牌 {self.cards_drawn} 张")
+        if self.reactions:
+            items = sorted(self.reactions.items(), key=lambda kv: (-kv[1], kv[0]))
+            parts.append("我方触发的反应：" + "、".join(f"{name} {count}" for name, count in items))
+        if self.opponent_skills:
+            items = sorted(
+                self.opponent_skills.items(), key=lambda kv: (-kv[1], kv[0])
+            )
+            parts.append("对方最常用：" + "、".join(f"{name} {count}" for name, count in items))
+        if not parts:
+            return ""
+        return f"本关量化（{self.games} 局）：" + "；".join(parts) + "。"
+
+
+@dataclass
 class StageProfile:
     stage: str
     n: int
@@ -260,6 +323,10 @@ class StageProfile:
     # Already rendered lines ``[id] name: description`` for the relevant learned
     # skills in the base library (rules are the fixed system text, never extracted).
     existing_skills: tuple[str, ...] = ()
+    # Quantitative evidence parsed from the stage's replay traces. ``None`` for
+    # profiles built by hand or from rows without traces, so the prompt is
+    # byte-identical to the pre-metrics layout in that case.
+    metrics: StageMetrics | None = None
 
     def as_text(self, *, include_context: bool = True) -> str:
         """Statistics line; ``include_context=False`` drops deck/special-rule facts.
@@ -312,6 +379,130 @@ def _row_trace(item: dict[str, Any]) -> tuple[str, ...] | None:
         return None
     lines = tuple(str(line) for line in raw if str(line).strip())
     return lines or None
+
+
+# -- quantitative metrics from a compact trace --------------------------------
+#: ``R<n>`` prefix; only these lines are counted, so scoreboard / truncation
+#: notes pass through untouched.
+_ROUND_LINE = re.compile(r"^R(\d+)\s")
+_MY_DICE = re.compile(r"^R\d+\s+我方骰子：(?P<body>.*)$")
+_DICE_COUNT = re.compile(r"（(\d+)个）")
+_REROLL_ARROW = re.compile(r"^R\d+\s+P0\s+重掷\b.*?→\s*\[(?P<pool>[^\]]*)\]")
+_P0_LINE = re.compile(r"^R\d+\s+P0(?:\s|$)")
+_AUTOPAY = re.compile(r"自动支付\[([^\]]*)\]")
+_P0_TUNING = re.compile(r"^R\d+\s+P0\s+调和(?:\s|$)")
+_P0_PLAY = re.compile(r"^R\d+\s+P0\s+打牌(?:\s|$)")
+_P0_DRAW = re.compile(r"^R\d+\s+P0\s+抽牌：(?P<body>.*)$")
+_CARD_NAME = re.compile(r"「([^」]*)」")
+_REACTION = re.compile(
+    r"^R\d+\s+反应\s+(?P<name>\S+)(?:\s+(?P<side>P0|P1\(NPC\)))?(?:\s+x(?P<count>\d+))?$"
+)
+_OPPONENT_SKILL = re.compile(r"^R\d+\s+P1\(NPC\)\s+技能\s+(?P<name>.+)$")
+
+
+def _element_count(pool: str) -> int:
+    """Comma-separated element symbols -> count (``""`` -> 0)."""
+    return len([part for part in str(pool).split(",") if part.strip()])
+
+
+def _opponent_skill_name(raw: str) -> str:
+    """Skill name without the ``（...）`` effect text or the paid-dice suffix."""
+    name = str(raw).split("（", 1)[0]
+    name = name.split(" 自动支付", 1)[0]
+    return name.strip()
+
+
+def parse_metrics(traces: Iterable[Sequence[str]]) -> StageMetrics:
+    """Aggregate dice/hand/reaction/opponent evidence from compact traces.
+
+    ``traces`` is one sequence of rendered lines per game (the ``trace`` field
+    of a JSONL row). Any line that does not match a known shape is skipped
+    silently: old runs predate several of these rows and must not raise.
+
+    Counting rules:
+
+    * ``dice_available``: for each ``R<n> 我方骰子：[...]（N个）`` line keep ``N``
+      for that round; a later ``R<n> P0 重掷 ... → [...]`` replaces it with the
+      size of the post-reroll pool. Rounds are then summed. The last update of a
+      round wins, so a repeated snapshot never double-counts.
+    * ``dice_spent``: summed element counts of every ``自动支付[...]`` on a P0
+      line (tuning and card plays included: they cost dice too).
+    * ``reactions``: only ``R<n> 反应 <name> P0`` (the contestant's triggers).
+      The trace coalesces consecutive duplicates as `` xK``; ``K`` is honoured
+      so the count is occurrences, not rendered lines.
+    * ``opponent_skills``: ``R<n> P1(NPC) 技能 <name>`` grouped by name, top 5.
+    """
+    games = 0
+    dice_available = 0
+    dice_spent = 0
+    tuning = 0
+    cards_played = 0
+    cards_drawn = 0
+    reactions: Counter[str] = Counter()
+    opponent: Counter[str] = Counter()
+
+    for lines in traces:
+        games += 1
+        round_dice: dict[int, int] = {}
+        for line in lines:
+            text = str(line).strip()
+            match = _ROUND_LINE.match(text)
+            if match is None:
+                continue
+            round_number = int(match.group(1))
+
+            dice = _MY_DICE.match(text)
+            if dice:
+                body = dice.group("body")
+                counted = _DICE_COUNT.search(body)
+                round_dice[round_number] = int(counted.group(1)) if counted else 0
+                continue
+
+            reroll = _REROLL_ARROW.match(text)
+            if reroll:
+                round_dice[round_number] = _element_count(reroll.group("pool"))
+                continue
+
+            reaction = _REACTION.match(text)
+            if reaction and reaction.group("side") == "P0":
+                count = int(reaction.group("count") or 1)
+                reactions[reaction.group("name")] += count
+                continue
+
+            opponent_skill = _OPPONENT_SKILL.match(text)
+            if opponent_skill:
+                name = _opponent_skill_name(opponent_skill.group("name"))
+                if name:
+                    opponent[name] += 1
+                continue
+
+            if not _P0_LINE.match(text):
+                continue
+            for pool in _AUTOPAY.findall(text):
+                dice_spent += _element_count(pool)
+            if _P0_TUNING.match(text):
+                tuning += 1
+            if _P0_PLAY.match(text):
+                cards_played += 1
+            draw = _P0_DRAW.match(text)
+            if draw:
+                cards_drawn += len(_CARD_NAME.findall(draw.group("body")))
+
+        dice_available += sum(round_dice.values())
+
+    top_skills = dict(
+        sorted(opponent.items(), key=lambda item: (-item[1], item[0]))[:5]
+    )
+    return StageMetrics(
+        games=games,
+        dice_available=dice_available,
+        dice_spent=dice_spent,
+        tuning=tuning,
+        cards_played=cards_played,
+        cards_drawn=cards_drawn,
+        reactions=dict(reactions),
+        opponent_skills=top_skills,
+    )
 
 
 def _missing_objectives(item: dict[str, Any]) -> tuple[str, ...]:
@@ -470,6 +661,11 @@ def failure_profiles(
                     round_cap=(round_caps_by_stage or {}).get(stage),
                     failed_counts=dict(failed),
                 ),
+                metrics=parse_metrics(
+                    trace
+                    for item in items
+                    if (trace := _row_trace(item)) is not None
+                ),
             )
         )
     return profiles
@@ -515,6 +711,12 @@ def build_prompt(
         # ``enrich_profiles`` attached to the profile when the caller omits it.
         parts = [profile.as_text(include_context=False)]
         system = build_system(task, special_rules=special_rules or profile.special_rules)
+    # Quantitative evidence sits between the statistics line and the replays:
+    # the coach reads *how much* went wrong before seeing *where*.
+    if profile.metrics is not None:
+        metrics_text = profile.metrics.as_text()
+        if metrics_text:
+            parts.append(metrics_text)
     if profile.replays:
         blocks = [
             "代表局回放（用于定位失误；不要复述单局操作）：",

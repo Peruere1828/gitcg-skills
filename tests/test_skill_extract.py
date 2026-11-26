@@ -7,9 +7,11 @@ import skillloop.extract as extract
 from skillloop.extract import (
     SYSTEM,
     ReplaySample,
+    StageMetrics,
     StageProfile,
     build_prompt,
     failure_profiles,
+    parse_metrics,
     parse_skills,
     propose_candidates,
 )
@@ -140,6 +142,129 @@ def test_failure_profiles_respect_max_replays():
     ]
     assert len(failure_profiles(rows, max_replays=1)[0].replays) == 1
     assert failure_profiles(rows, max_replays=0)[0].replays == []
+
+
+# -- quantitative metrics ----------------------------------------------------
+_SYNTHETIC_TRACE = [
+    "R0 P0 抽牌：「甲」、「乙」",
+    "R1 我方骰子：[万,雷,雷,草,水,水,水,岩]（8个）",
+    "R1 P0 重掷 [万,雷] → [万,万,万,雷,雷,水,水,岩]（脚本策略）",
+    "R1 对方骰子：[万,万,万,万,万,万,万,万]（8个）",
+    "R1 P0 打牌 抵天雷罚 (天赋) 自动支付[雷,雷,雷]",
+    "R1 P0 抽牌：「雷楔」",
+    "R1 P0 技能 刻晴·云来剑法（造成2点物理伤害） 自动支付[万,岩]",
+    "R1 P0 调和 送你一程 自动支付[水]",
+    "R1 P1(NPC) 技能 愚人众·藏镜仕女·潑波绽破（造成3点水元素伤害） 自动支付[万,万,万]",
+    "R1 P1(NPC) 技能 愚人众·藏镜仕女·潑波绽破（造成3点水元素伤害） 自动支付[万,万,万]",
+    "R1 反应 超载 P0",
+    "R1 反应 蒸发 P1(NPC)",
+    "R2 我方骰子：[万,雷,雷,草]（4个）",
+    "R2 P0 打牌 飞叶迴斜 (天赋) 自动支付[草,草]",
+    "R2 P0 结束",
+]
+
+
+def test_parse_metrics_aggregates_all_seven_fields():
+    metrics = parse_metrics([_SYNTHETIC_TRACE])
+
+    assert metrics.games == 1
+    # R1: pool 8, then the reroll's 8-element new pool wins; R2: 4.
+    assert metrics.dice_available == 12
+    # P0 autopay: 3 (card) + 2 (skill) + 1 (tuning) + 2 (card) = 8.
+    assert metrics.dice_spent == 8
+    assert metrics.tuning == 1
+    assert metrics.cards_played == 2
+    # R0 opening hand 2 + R1 draw 1.
+    assert metrics.cards_drawn == 3
+    # P1's vaporize is not ours.
+    assert metrics.reactions == {"超载": 1}
+    # effect text and the paid-dice suffix are stripped; counted per use.
+    assert metrics.opponent_skills == {"愚人众·藏镜仕女·潑波绽破": 2}
+    assert metrics.as_text() == (
+        "本关量化（1 局）：骰子利用率 67%（可用 12 / 支付 8）；"
+        "调和 1 次；出牌 2 张；抽牌 3 张；"
+        "我方触发的反应：超载 1；"
+        "对方最常用：愚人众·藏镜仕女·潑波绽破 2。"
+    )
+
+
+def test_parse_metrics_honours_reroll_pool_and_coalesced_reactions():
+    """The post-reroll pool is the available dice; ` xK` means K reactions."""
+    trace = [
+        "R1 我方骰子：[雷,雷,水,水,水,水]（6个）",
+        "R1 P0 重掷 [雷,雷] → [雷,雷,雷,雷]（脚本策略）",
+        "R1 反应 燃烧 P0 x3",
+        "R1 反应 超载 P0",
+    ]
+    metrics = parse_metrics([trace])
+    assert metrics.dice_available == 4
+    assert metrics.reactions == {"燃烧": 3, "超载": 1}
+
+
+def test_parse_metrics_keeps_top_five_opponent_skills_and_ignores_malformed():
+    trace = [
+        "R1 P1(NPC) 技能 A（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 A（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 B（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 C（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 D（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 E（效果） 自动支付[万]",
+        "R1 P1(NPC) 技能 F（效果） 自动支付[万]",
+        "R1 反应 未知反应",
+        "不是一条回放行",
+        "R1 P0 技能 没有支付",
+        "R? 我方骰子：（无）",
+    ]
+    metrics = parse_metrics([trace, None or []])
+    assert metrics.opponent_skills == {"A": 2, "B": 1, "C": 1, "D": 1, "E": 1}
+    assert metrics.reactions == {}
+    assert metrics.dice_spent == 0
+
+
+def test_failure_profiles_attach_metrics_from_traces():
+    rows = [
+        _row("wagner", three_star=False, rounds=6, objectives={"win": False},
+             trace=_SYNTHETIC_TRACE),
+        # A row without a trace contributes statistics but not metrics evidence.
+        _row("wagner", three_star=True, rounds=4, objectives={"win": True}),
+    ]
+    profile = failure_profiles(rows)[0]
+    assert profile.n == 2
+    assert profile.metrics is not None
+    assert profile.metrics.games == 1          # only the traced game was scanned
+    assert profile.metrics.dice_spent == 8
+
+
+def test_metrics_block_sits_between_statistics_and_replay():
+    metrics = parse_metrics([_SYNTHETIC_TRACE])
+    profile = StageProfile(
+        "chefmao", 1, 0.0, 2.0, {"win": 1}, (),
+        replays=[ReplaySample(label="失败", seed=1, rounds=2,
+                              missing=("win",), lines=("R1 P0 技能",))],
+        metrics=metrics,
+    )
+    user = build_prompt(profile)[1]["content"]
+    assert "本关量化（1 局）" in user
+    assert user.index("三星率") < user.index("本关量化") < user.index("代表局 A")
+
+
+def test_build_prompt_without_metrics_is_unchanged():
+    profile = StageProfile("wagner", 10, 0.3, 6.0, {"win": 3}, ("胜利",))
+    user = build_prompt(profile)[1]["content"]
+    assert "本关量化" not in user
+    # An explicitly empty metrics object renders nothing either.
+    empty = StageProfile("wagner", 10, 0.3, 6.0, {"win": 3}, ("胜利",),
+                         metrics=StageMetrics())
+    assert build_prompt(empty)[1]["content"] == user
+
+
+def test_coach_role_demands_four_quantitative_analyses():
+    from skillloop.extract import COACH_ROLE
+
+    for needle in ("骰子利用率", "手牌利用率", "元素反应", "对方规律"):
+        assert needle in COACH_ROLE
+    # At least one candidate must quote a quantitative number.
+    assert "量化数字" in COACH_ROLE and "可用 8 骰只支付 3" in COACH_ROLE
 
 
 # -- parsing -----------------------------------------------------------------
