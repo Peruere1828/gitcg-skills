@@ -15,9 +15,11 @@ state):
 
 * dice are rendered as element symbols. On an action line they are the dice the
   engine *paid* for the action (``自动支付[雷,雷,万]``), which is not the same thing
-  as the dice a player chose to reroll (``重掷 [水,水]``); the two labels are kept
-  distinct so a reader cannot mistake an auto-selected cost for a live pool, and
-  every mechanical row says it came from the script policy, not the LLM (H10);
+  as the **discarded subset** a player chose to reroll
+  (``重掷 弃[水,水] → [新池]``); ``弃`` is the choice, ``→`` is the resulting
+  pool, and the labels are kept distinct so a reader cannot mistake an
+  auto-selected cost for a live pool. Each mechanical row says whether it came
+  from the script policy or the LLM (H10);
 * when the recorder captured ``DecisionRecord.player_view`` (``record_views=True``),
   every action line gets a bounded ``→ 此后场上：...`` suffix describing the
   public-state delta up to the *next* recorded decision. Games recorded without
@@ -355,7 +357,7 @@ def _dice_text(decision: Any) -> str:
     """Dice the engine *paid* for this action, as `` 自动支付[雷,雷,万]``.
 
     A reroll label also carries dice ids, but those are the dice a player chose
-    to discard (rendered separately as ``重掷 [...]``). Calling this suffix
+    to discard (rendered separately as ``重掷 弃[...]``). Calling this suffix
     ``自动支付`` states what it is: ``used_dice`` is the engine's auto-selected
     cost for the chosen action (the model picked the action, not the dice), at
     most :data:`_MAX_DICE` values in recorder order.
@@ -721,20 +723,38 @@ def _reroll_line(
     index: int,
     decisions: Sequence[Any],
 ) -> str:
-    """``R1 P0 重掷 [旧] → [新]``; a ``none`` reroll is omitted as pure noise."""
+    """``R1 P0 重掷 弃[水,水,岩] → [新池]``; ``none`` is omitted as pure noise.
+
+    ``弃[...]`` is the *subset chosen to reroll*, read from the decision's
+    ``chosen_label`` (``reroll:2,2,6`` -> ``[水,水,岩]``), never the old pool.
+    ``→ [...]`` is the pool after the reroll (the next same-seat view). A legacy
+    record without that subset keeps the old ``[旧池] → [新池]`` fallback so no
+    information is lost.
+    """
     tail = _label_tail(decision)
-    if not tail or tail.lower() == "none":
+    if tail.lower() == "none":
         return ""
-    old_dice = _dice_values(_view_dice(decision))
-    old_text = _dice_line(old_dice) if old_dice else _reroll_tail(tail)
-    if not old_text:
-        return ""
-    body = f"R{round_number} {_side(player)} 重掷 {old_text}"
+    discarded_text = _reroll_tail(tail)
     next_index = _next_same_seat_view(decisions, index, player)
+    new_text = ""
     if next_index is not None:
         new_dice = _dice_values(_view_dice(decisions[next_index]))
         if new_dice:
-            body += " → " + _dice_line(new_dice)
+            new_text = _dice_line(new_dice)
+    if discarded_text:
+        body = f"R{round_number} {_side(player)} 重掷 弃{discarded_text}"
+        if new_text:
+            body += " → " + new_text
+        return body
+    # Legacy record: the label carries no reroll subset, so fall back to the
+    # old pool -> new pool wording instead of dropping the row.
+    old_dice = _dice_values(_view_dice(decision))
+    old_text = _dice_line(old_dice) if old_dice else ""
+    if not old_text:
+        return ""
+    body = f"R{round_number} {_side(player)} 重掷 {old_text}"
+    if new_text:
+        body += " → " + new_text
     return body
 
 
@@ -873,9 +893,10 @@ def _preview_effect(decision: Any) -> str:
 def _reroll_tail(tail: str) -> str:
     """``2,2,7`` -> ``[水,水,草]``; ``none``/empty stays empty.
 
-    The reroll label carries the dice values the player chose to reroll. They are
-    the same element ids as ``used_dice``, so render them with the shared symbol
-    table and the same 8-die cap as action lines.
+    This is the **discarded subset** from the reroll label (the same element ids
+    as ``used_dice``), not the player's whole old pool. Rendering it as
+    ``弃[...]`` makes "which dice were rerolled" unambiguous; the pool itself is
+    shown by the round's dice row.
     """
     parts = [part.strip() for part in str(tail).split(",") if part.strip()]
     if not parts:
@@ -1487,9 +1508,10 @@ def compact_trace(
       ``reroll_dice`` line per player *per round*. Each row says who chose it:
       ``（LLM 决策）`` or ``（脚本策略）`` from ``DecisionRecord.decider``;
       rerolls are always script. A ``reroll:none`` row is omitted (no noise).
-      With recorded views a reroll row reads ``[旧池] → [新池]``; switch rows
-      name the discarded and gained cards, and choose-active rows name the
-      character;
+      A reroll row reads ``弃[本回合重掷的子集] → [新池]``; legacy records
+      without that subset fall back to ``[旧池] → [新池]`` so nothing is lost.
+      Switch rows name the discarded and gained cards, and choose-active rows
+      name the character;
     * one ``R{n} 我方/对方骰子：[...]（N个）`` row per player per round, taken from
       that player's own view (a real snapshot only; masked/absent views add
       nothing). It shows the *pool* the engine paid from;

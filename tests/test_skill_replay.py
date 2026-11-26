@@ -81,7 +81,7 @@ def test_compact_trace_orders_actions_reactions_and_scoreboard():
     assert len(trace) == 8
     # H10: reroll rows are script-policy rows, and the paid dice are the engine's
     # auto-selection; both are labelled as such.
-    assert trace[0] == "R1 P0 重掷 [?,水]（脚本策略）"
+    assert trace[0] == "R1 P0 重掷 弃[?,水]（脚本策略）"
     assert trace[1].startswith("R1 P0 技能 ")
     assert trace[1].endswith(" 自动支付[冰,水]")
     assert "#32031" not in trace[1]
@@ -173,9 +173,9 @@ def test_reroll_line_is_kept_once_per_player_per_round():
     rerolls = [line for line in trace if "重掷" in line]
     note = "（脚本策略）"
     assert rerolls == [
-        f"R1 P0 重掷 [冰]{note}",
-        f"R2 P0 重掷 [火]{note}",
-        f"R3 P0 重掷 [雷]{note}",
+        f"R1 P0 重掷 弃[冰]{note}",
+        f"R2 P0 重掷 弃[火]{note}",
+        f"R3 P0 重掷 弃[雷]{note}",
     ]
 
 
@@ -186,7 +186,7 @@ def test_payment_and_reroll_labels_are_distinct():
                   dice=(4, 4), round_number=1, subject=14031),
     ]
     trace = compact_trace(_row(), decisions, [])
-    assert trace[0] == "R1 P0 重掷 [水,火]（脚本策略）"
+    assert trace[0] == "R1 P0 重掷 弃[水,火]（脚本策略）"
     assert "自动支付[雷,雷]" in trace[1]
     assert all("骰[" not in line for line in trace)
 

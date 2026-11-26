@@ -680,7 +680,10 @@ class PolicyPlayer(Player):
             code = _fallback_code(built)
         if self.recorder is not None:
             labels = [spec.label for spec in built.context.legal_low_level_specs]
-            spec = self._spec_for(built, code)
+            # Prefer the spec built for this decision: the shared codebook's copy
+            # may carry a stale label/preview for codes whose semantic key
+            # collides across states (e.g. the positional reroll mask).
+            spec = built.spec_by_low_level_code.get(int(code)) or self._spec_for(built, code)
             payload = built.payload_by_low_level_code.get(int(code), {})
             subject_definition_id = int(getattr(spec, "subject_definition_id", 0))
             card_kind = None
@@ -702,7 +705,9 @@ class PolicyPlayer(Player):
                     step_index=self._step_index,
                     request_type=request_type.value,
                     chosen_action_code=int(code),
-                    chosen_label=getattr(spec, "label", None),
+                    chosen_label=built.label_by_low_level_code.get(
+                        int(code), getattr(spec, "label", None)
+                    ),
                     chosen_kind=getattr(getattr(spec, "kind", None), "value", None),
                     legal_action_codes=tuple(int(c) for c in built.context.legal_low_level_codes),
                     legal_labels=tuple(str(label) for label in labels),

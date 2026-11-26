@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from itertools import combinations
 from threading import RLock
 from typing import Any
@@ -56,6 +56,13 @@ class BuiltDecisionContext:
     payload_by_low_level_code: dict[int, dict[str, Any]]
     label_by_low_level_code: dict[int, str]
     low_to_high_code: dict[int, int]
+    # The spec as it existed for *this* decision, keyed by action code. The
+    # process-global codebook keys reroll specs by a positional bitmask, so two
+    # different dice pools with the same discarded positions share one code; the
+    # codebook's ``low_level_specs`` copy keeps the label of whichever pool
+    # registered it first. Consumers that need a label/preview for the chosen
+    # code (replay, decision records) must read this map instead.
+    spec_by_low_level_code: dict[int, LowLevelActionSpec] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -159,6 +166,7 @@ def build_decision_context(
         )
     payload_by_low_level_code: dict[int, dict[str, Any]] = {}
     label_by_low_level_code: dict[int, str] = {}
+    spec_by_low_level_code: dict[int, LowLevelActionSpec] = {}
     for spec, item in zip(materialized_specs, spec_payloads, strict=False):
         action_code = int(spec.action_code)
         payload = dict(item.payload)
@@ -174,8 +182,14 @@ def build_decision_context(
                     flush=True,
                 )
             continue
+        # ``materialized_specs`` comes from the shared codebook and may be stale
+        # for codes whose semantic key collides across states (notably
+        # ``reroll_dice_mask``, which is positional). ``item.spec`` is built from
+        # the current request, so its label/semantics describe this decision.
+        current_spec = replace(item.spec, action_code=action_code)
         payload_by_low_level_code[action_code] = payload
-        label_by_low_level_code[action_code] = str(spec.label)
+        label_by_low_level_code[action_code] = str(current_spec.label)
+        spec_by_low_level_code[action_code] = current_spec
     context = DecisionContext(
         acting_player=acting_player,
         request_type=request_type,
@@ -196,6 +210,7 @@ def build_decision_context(
         payload_by_low_level_code=payload_by_low_level_code,
         label_by_low_level_code=label_by_low_level_code,
         low_to_high_code=low_to_high_code,
+        spec_by_low_level_code=spec_by_low_level_code,
     )
 
 

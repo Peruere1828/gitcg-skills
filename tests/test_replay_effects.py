@@ -196,7 +196,7 @@ def _mechanical(label: str, request: str = "reroll_dice") -> DecisionRecord:
 
 def test_reroll_line_uses_element_symbols():
     trace = compact_trace(_row(), [_mechanical("reroll:2,2,4,5,5,6,6,7")], [])
-    assert trace[0] == "R1 P0 重掷 [水,水,雷,风,风,岩,岩,草]（脚本策略）"
+    assert trace[0] == "R1 P0 重掷 弃[水,水,雷,风,风,岩,岩,草]（脚本策略）"
     # Choosing not to reroll is a no-op: no empty "重掷" row.
     assert all("重掷" not in line for line in compact_trace(
         _row(), [_mechanical("reroll:none")], []
@@ -968,7 +968,32 @@ def test_switch_hands_gains_fall_back_to_card_move_events():
 # --------------------------------------------------------------------------- #
 # (h) reroll: old pool -> new pool, masked NPC pool, no "none" noise
 # --------------------------------------------------------------------------- #
-def test_reroll_shows_old_pool_arrow_new_pool():
+def test_reroll_shows_discarded_subset_arrow_new_pool():
+    # The old pool contains one kept die (雷=4); ``弃`` must name only the
+    # rerolled subset (2,2,7), never the whole pool.
+    before = _view(
+        _player((_char(1401),), dice=(2, 2, 4, 7)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    after = _view(
+        _player((_char(1401),), dice=(8, 8, 4)),
+        _player((_char(3301),)),
+        round_number=1,
+    )
+    decisions = [
+        _decision(0, 1, label="reroll:2,2,7", kind="reroll_dice",
+                  view=before, request="reroll_dice"),
+        _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
+                  view=after, subject=14031),
+    ]
+    trace = compact_trace(_row(), decisions, [])
+    assert "R1 P0 重掷 弃[水,水,草] → [万,万,雷]（脚本策略）" in trace
+    # The round's pool row is separate; the reroll row does not repeat it.
+    assert "R1 我方骰子：[水,水,雷,草]（4个）" in trace
+
+
+def test_reroll_without_a_subset_falls_back_to_old_pool():
     before = _view(
         _player((_char(1401),), dice=(2, 2, 7)),
         _player((_char(3301),)),
@@ -980,7 +1005,8 @@ def test_reroll_shows_old_pool_arrow_new_pool():
         round_number=1,
     )
     decisions = [
-        _decision(0, 1, label="reroll:2,2,7", kind="reroll_dice",
+        # Legacy record: no ``reroll:<dice>`` payload in the label.
+        _decision(0, 1, label="reroll_dice", kind="reroll_dice",
                   view=before, request="reroll_dice"),
         _decision(0, 2, label="use_skill:0:none", kind="action_use_skill",
                   view=after, subject=14031),
@@ -1012,7 +1038,7 @@ def test_masked_npc_reroll_has_no_arrow():
                          view=view, request="reroll_dice")
     trace = compact_trace(_row(), [decision], [])
     line = next(line for line in trace if "重掷" in line)
-    assert line == "R1 P1(NPC) 重掷 [火]（脚本策略）"
+    assert line == "R1 P1(NPC) 重掷 弃[火]（脚本策略）"
     assert "→" not in line
 
 
@@ -1072,7 +1098,7 @@ def test_mechanical_rows_label_llm_vs_script_and_reroll_is_always_script():
     )
     trace = compact_trace(_row(), [llm_pick, llm_reroll], [])
     assert "R1 P0 选人：刻晴（LLM 决策）" in trace
-    assert "R1 P0 重掷 [火]（脚本策略）" in trace
+    assert "R1 P0 重掷 弃[火]（脚本策略）" in trace
 
 
 def test_switch_hands_without_a_view_falls_back_to_entity_ids():
