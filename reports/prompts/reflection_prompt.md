@@ -6,7 +6,7 @@ fence 块是 `common/llm.py` 送进 client 的 `messages[k].content` 原文，�
 
 ## 元数据
 
-- 抽取命令：`GITCG_LLM_TRACE=/tmp/opencode/trace_reflect_v14.jsonl $PY -m scripts.extract_skills --rows data/runs/v12_static_s1_5.jsonl --base data/skills/static_v1 --out /tmp/opencode/reflect_v14 --dry-run`
+- 抽取命令：`GITCG_LLM_TRACE=/tmp/opencode/trace_reflect_v15.jsonl $PY -m scripts.extract_skills --rows data/runs/v12_static_s1_5.jsonl --base data/skills/static_v1 --out /tmp/opencode/reflect_v15 --dry-run`
 - rows 来源：`skillloop.run --group static`（真实 LLM 对局，stage `blanche, buyun, chefmao, ellin, irontonguetian, jifang, lan, liusu, marjorie, patton, shitou, swan, timaeus, timmie, uncletian, wagner`，seeds `1, 2, 3, 4, 5`，n=80 局）
 - 三星率 38/80 = 0.47
 - base 库 `data/skills/static_v1`（version 3）
@@ -14,9 +14,9 @@ fence 块是 `common/llm.py` 送进 client 的 `messages[k].content` 原文，�
 - 该关目标：赢得胜利；5回合内胜利；胜利时，角色被击倒次数小于2
 - 失败分布：`{"defeated_less_than": 5, "win": 3, "win_within_rounds": 3}`（全部关最大失败条目数 11）
 - model `deepseek-v4.1-flash` · temperature 0.0（`.env` 未设 `GITCG_LLM_TEMPERATURE`，client 默认 0.0） · max_tokens 32768 · reasoning_effort `high`（`scripts.extract_skills` 默认 `--effort high --max-tokens 32768`）
-- 调用次数 **12**（12 次成功调用（每关一次）；cost $0.113025）
-- usage 汇总：prompt 129079 · completion 70197（reasoning 63901） · cached 33792 · **cost $0.113025**
-- 首次真实可用性：finish_reason `stop`，回复 876 字符；`skillloop.extract.parse_skills` 解出 2 条候选（0 = 该次调用被丢弃/回退）
+- 调用次数 **12**（12 次成功调用（每关一次）；cost $0.086963）
+- usage 汇总：prompt 129031 · completion 55860（reasoning 49760） · cached 63872 · **cost $0.086963**
+- 首次真实可用性：finish_reason `stop`，回复 787 字符；`skillloop.extract.parse_skills` 解出 2 条候选（0 = 该次调用被丢弃/回退）
 - `redact()` 检查：0 条消息内容被改动（0 = trace 原文里不含疑似密钥）
 
 ## 该次抽取调用原文
@@ -270,7 +270,7 @@ defeated_less_than（少被击倒）的判定是「胜利时，我方被击倒�
 
 代表局回放（用于定位失误；不要复述单局操作）：
 
-说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。（更正：同步 runner 的换牌/选人为 LLM 决策，驻留 runner 才由脚本执行。）
+说明：重掷由脚本策略执行（只留万能与我方角色元素）；换牌/选人为 LLM 决策（驻留 runner 中三者均为脚本）；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。
 
 代表局 A（失败，4 回合，缺 defeated_less_than，seed=1）:
 R0 P0 抽牌：「卯师傅」、「白垩之术」、「换班时间」、「抵天雷罚」、「飞叶迴斜」、「莲花酥」
@@ -407,14 +407,14 @@ R4 反应 蒸发 P1(NPC)
 
 | step | stage | user 字符数 | system sha256[:12] |
 |---|---|---|---|
-| 1 | `blanche` | 7289 | `ffc5b744a32b` |
-| 2 | `buyun` | 7535 | `536f908ce5e2` |
-| 4 | `irontonguetian` | 7958 | `0e38b1acff77` |
-| 5 | `lan` | 7335 | `f4abb7b762e8` |
-| 6 | `liusu` | 7564 | `e6ebdd3999f5` |
-| 7 | `marjorie` | 7958 | `f0586c3265db` |
-| 8 | `shitou` | 7843 | `37e0bdf5761b` |
-| 9 | `timaeus` | 6956 | `8ca1a714e842` |
-| 10 | `timmie` | 6475 | `0950d61852be` |
-| 11 | `uncletian` | 6372 | `68452f37efcb` |
-| 12 | `wagner` | 5702 | `109b699a48a3` |
+| 1 | `blanche` | 7282 | `ffc5b744a32b` |
+| 2 | `buyun` | 7528 | `536f908ce5e2` |
+| 4 | `irontonguetian` | 7951 | `0e38b1acff77` |
+| 5 | `lan` | 7328 | `f4abb7b762e8` |
+| 6 | `liusu` | 7557 | `e6ebdd3999f5` |
+| 7 | `marjorie` | 7951 | `f0586c3265db` |
+| 8 | `shitou` | 7836 | `37e0bdf5761b` |
+| 9 | `timaeus` | 6949 | `8ca1a714e842` |
+| 10 | `timmie` | 6468 | `0950d61852be` |
+| 11 | `uncletian` | 6365 | `68452f37efcb` |
+| 12 | `wagner` | 5695 | `109b699a48a3` |

@@ -724,8 +724,8 @@ def build_prompt(
             # say which is which up front (see replay.py). The first sentence is
             # the historical wording kept for older prompts; the correction names
             # the sync runner's actual behaviour.
-            "说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。"
-            "（更正：同步 runner 的换牌/选人为 LLM 决策，驻留 runner 才由脚本执行。）",
+            "说明：重掷由脚本策略执行（只留万能与我方角色元素）；换牌/选人为 LLM 决策"
+            "（驻留 runner 中三者均为脚本）；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。",
         ]
         blocks.extend(
             replay.as_text(index) for index, replay in enumerate(profile.replays)

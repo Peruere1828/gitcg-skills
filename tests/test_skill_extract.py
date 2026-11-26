@@ -771,11 +771,12 @@ def test_replay_block_explains_script_policy_rows():
     profile = _profile_for_new_prompt()
     user = build_prompt(profile)[1]["content"]
     assert (
-        "说明：重掷/换牌/选人由脚本策略执行；自动支付为引擎选骰；其余 P0 行为为 LLM 决策。"
+        "说明：重掷由脚本策略执行（只留万能与我方角色元素）；换牌/选人为 LLM 决策"
         in user
     )
+    assert "自动支付为引擎选骰；其余 P0 行为为 LLM 决策。" in user
     header = user.index("代表局回放（用于定位失误；不要复述单局操作）：")
-    assert header < user.index("说明：重掷/换牌/选人") < user.index("代表局 A")
+    assert header < user.index("说明：重掷由脚本策略执行") < user.index("代表局 A")
 
 
 def test_extract_skills_script_rewrites_a_replaced_skill_in_place(tmp_path, monkeypatch):
